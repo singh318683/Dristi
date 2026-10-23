@@ -1,0 +1,1116 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Drishti: AI Vedic astrologer that reads your real birth chart. Kundli, life periods (dasha), compatibility and daily horoscope.">
+<meta name="theme-color" content="#FAF7F2" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#15130F" media="(prefers-color-scheme: dark)">
+<meta name="color-scheme" content="light dark">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Drishti">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/png" href="favicon.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<title>Drishti · AI Jyotish</title>
+<style>
+:root{
+  color-scheme:light;
+  --bg:#FAF7F2; --surface:#FFFFFF; --sunk:#F3EEE6; --line:#E8E1D6; --line-strong:#D9CFC0;
+  --ink:#1F1B16; --muted:#5F584F; --faint:#8A8178;
+  --primary:#B35A00; --on-primary:#FFFFFF; --primary-tint:#FDF1DE; --on-tint:#8F4700; --primary-line:#F1D3A8;
+  --accent:#4B4789;
+  --good:#2E7D4F; --good-tint:#E6F3EB; --bad:#B3261E; --bad-tint:#FBE9E7;
+  --chart-bg:#FFFFFF; --chart-line:#4B4789; --chart-lagna:#FDF1DE; --chart-sel:#F8E2BF; --chart-num:#8A8178; --chart-ink:#1F1B16;
+  --body:Arial,"Helvetica Neue",Helvetica,"Noto Sans Devanagari","Kohinoor Devanagari","Mangal",sans-serif;
+  --display:var(--body);
+  --shadow:0 1px 2px rgba(31,27,22,.05),0 4px 16px -8px rgba(31,27,22,.14);
+  --nav-h:68px; --r:16px;
+}
+@media (prefers-color-scheme:dark){:root{
+  color-scheme:dark;
+  --bg:#15130F; --surface:#1E1B17; --sunk:#26221D; --line:#332E27; --line-strong:#463F36;
+  --ink:#F3EDE4; --muted:#B5AB9C; --faint:#8F8578;
+  --primary:#F2A33A; --on-primary:#1F1B16; --primary-tint:#3A2A14; --on-tint:#F7C47A; --primary-line:#5A4020;
+  --accent:#A9A6E8;
+  --good:#7ACB9A; --good-tint:#1C2E23; --bad:#F2998F; --bad-tint:#3A1F1C;
+  --chart-bg:#1E1B17; --chart-line:#8E8AD0; --chart-lagna:#3A2A14; --chart-sel:#4E3818; --chart-num:#8F8578; --chart-ink:#F3EDE4;
+  --shadow:none;
+}}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--body);font-size:16px;line-height:1.5;-webkit-tap-highlight-color:transparent;-webkit-text-size-adjust:100%}
+html[lang=hi] body{line-height:1.62}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+a{color:var(--primary)}
+:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
+.dev{font-family:var(--body);font-weight:700}
+.app{max-width:560px;margin:0 auto;min-height:100dvh;padding-bottom:calc(var(--nav-h) + env(safe-area-inset-bottom) + 16px)}
+.top{position:sticky;top:0;z-index:20;background:var(--bg);border-bottom:1px solid var(--line);padding:calc(env(safe-area-inset-top) + 6px) 10px 6px 16px;display:flex;align-items:center;gap:4px;min-height:60px}
+.logo{display:flex;align-items:baseline;gap:7px;margin-right:auto;text-decoration:none;min-height:44px;align-items:center}
+.logo .dev{font-size:26px;line-height:1;color:var(--primary)}
+.logo small{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.iconbtn{min-width:44px;min-height:44px;border:0;background:none;border-radius:12px;display:inline-flex;align-items:center;justify-content:center;gap:6px;color:var(--ink);padding:0 8px;font-weight:600;font-size:14.5px}
+.iconbtn:hover{background:var(--sunk)}
+.avatar{width:32px;height:32px;border-radius:50%;background:var(--primary-tint);color:var(--on-tint);display:inline-grid;place-items:center;font-weight:700;font-size:14px;flex:none}
+.avatar.lg{width:44px;height:44px;font-size:17px}
+.who-btn{max-width:170px}
+.who-btn span.n{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.langbtn{font-size:14px;color:var(--muted);font-weight:600}
+.sheet-bg{position:fixed;inset:0;background:rgba(20,16,10,.32);z-index:60;display:flex;align-items:flex-start;justify-content:center;padding-top:calc(env(safe-area-inset-top) + 64px)}
+.sheet{background:var(--surface);border:1px solid var(--line);border-radius:18px;box-shadow:0 18px 50px -20px rgba(0,0,0,.45);width:min(92vw,380px);padding:8px}
+.sheet h4{margin:8px 10px 6px;font-size:12.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.opt{display:flex;align-items:center;gap:12px;width:100%;min-height:56px;border:0;background:none;border-radius:12px;padding:6px 10px;text-align:left}
+.opt:hover{background:var(--sunk)}
+.opt .meta{flex:1;line-height:1.25}
+.opt .meta small{display:block;color:var(--muted);font-size:13px}
+.opt.on{background:var(--primary-tint)}
+.opt .check{color:var(--primary)}
+.sheet hr{border:0;border-top:1px solid var(--line);margin:6px 4px}
+main{padding:16px}
+.h1{font-weight:700;font-size:26px;line-height:1.25;letter-spacing:-.01em;margin:4px 0 4px}
+.sub{color:var(--muted);font-size:14.5px;margin:0 0 16px}
+.sec{display:flex;align-items:baseline;gap:8px;margin:0 0 10px;flex-wrap:wrap}
+.sec h3{margin:0;font-size:16.5px;font-weight:700}
+.sec .sk{color:var(--muted);font-size:13px;font-weight:400}
+.muted{color:var(--muted)} .small{font-size:13.5px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:16px;margin-bottom:14px;box-shadow:var(--shadow)}
+.card.link{display:block;width:100%;text-align:left;cursor:pointer}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.spread{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:48px;border:0;border-radius:14px;padding:0 20px;font-weight:700;font-size:16px;background:var(--primary);color:var(--on-primary);text-decoration:none}
+.btn:active{transform:translateY(1px)}
+.btn.block{width:100%}
+.btn.sec2{background:var(--surface);color:var(--ink);border:1px solid var(--line-strong)}
+.btn.quiet{background:transparent;color:var(--primary);min-height:44px;padding:0 10px}
+.btn.sm{min-height:44px;font-size:15px;padding:0 14px;border-radius:12px}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{min-height:44px;border:1px solid var(--line-strong);background:var(--surface);border-radius:999px;padding:0 15px;font-size:15px;font-weight:400;color:var(--ink);display:inline-flex;gap:7px;align-items:center}
+.chip:hover{border-color:var(--primary)}
+.chip svg{color:var(--primary);flex:none}
+.chips.scroll{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none}
+.chips.scroll::-webkit-scrollbar{display:none}
+.chips.scroll .chip{white-space:nowrap;flex:none}
+.seg{display:inline-flex;background:var(--sunk);border-radius:12px;padding:2px;gap:2px}
+.seg button{min-height:44px;border:0;background:none;border-radius:10px;padding:0 14px;font-weight:400;font-size:14.5px;color:var(--muted)}
+.seg button[aria-pressed=true]{font-weight:700;background:var(--surface);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.12)}
+.seg.full{display:flex;width:100%} .seg.full button{flex:1;padding:0 8px}
+.tag{display:inline-flex;align-items:center;border-radius:999px;padding:1px 9px;font-size:12.5px;font-weight:600;background:var(--sunk);color:var(--muted);white-space:nowrap}
+.tag.good{background:var(--good-tint);color:var(--good)} .tag.warn{background:var(--primary-tint);color:var(--on-tint)}
+.bar{height:6px;border-radius:4px;background:var(--sunk);overflow:hidden}
+.bar i{display:block;height:100%;background:var(--primary);border-radius:4px}
+.notice{display:flex;gap:10px;align-items:flex-start;background:var(--primary-tint);color:var(--ink);border-radius:12px;padding:12px 14px;font-size:14.5px}
+.notice svg{color:var(--primary);flex:none;margin-top:2px}
+.skel{border-radius:10px;background:linear-gradient(90deg,var(--sunk) 25%,var(--line) 50%,var(--sunk) 75%);background-size:200% 100%;animation:sh 1.3s infinite linear}
+@keyframes sh{to{background-position:-200% 0}}
+.state{text-align:center;padding:24px 12px}
+.state .ic{width:56px;height:56px;border-radius:50%;background:var(--primary-tint);color:var(--primary);display:grid;place-items:center;margin:0 auto 12px}
+.state h4{margin:0 0 4px;font-size:17px}
+.state p{margin:0 0 14px;color:var(--muted);font-size:14.5px}
+label.f{display:block;font-size:14.5px;font-weight:600;color:var(--ink);margin:18px 0 6px}
+.help{font-size:13.5px;color:var(--muted);margin:8px 0 0}
+.input{width:100%;min-height:50px;border:1.5px solid var(--line-strong);border-radius:12px;padding:10px 14px;background:var(--surface);font-size:16px}
+.input:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 3px var(--primary-tint)}
+.input:disabled{background:var(--sunk);color:var(--faint)}
+select.input{appearance:none;-webkit-appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%238A8178' stroke-width='2'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center;padding-right:32px}
+.toggle{display:flex;gap:12px;align-items:center;min-height:52px;margin-top:12px;padding:8px 14px;border:1.5px solid var(--line-strong);border-radius:12px;cursor:pointer;background:var(--surface)}
+.toggle input{width:22px;height:22px;accent-color:var(--primary);flex:none}
+.toggle.on{border-color:var(--primary);background:var(--primary-tint)}
+.ac{position:relative}
+.ac ul{position:absolute;left:0;right:0;top:100%;margin:6px 0 0;padding:6px;list-style:none;background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:0 12px 30px -12px rgba(0,0,0,.3);z-index:20;max-height:300px;overflow:auto}
+.ac li{padding:8px 12px;border-radius:10px;cursor:pointer;min-height:48px}
+.ac li:hover,.ac li.on{background:var(--primary-tint)}
+.ac li small{display:block;color:var(--muted);font-size:13px}
+.ac li.empty{color:var(--muted);cursor:default}
+.resolved{display:flex;gap:10px;align-items:flex-start;margin-top:10px;font-size:13.5px;background:var(--sunk);color:var(--muted);border-radius:12px;padding:10px 12px}
+.resolved svg{color:var(--primary);flex:none;margin-top:2px}
+.resolved b{color:var(--ink);font-weight:600}
+.onb{max-width:560px;margin:0 auto;min-height:100dvh;padding:calc(env(safe-area-inset-top) + 8px) 20px 24px;display:flex;flex-direction:column}
+.onb .bar{margin:4px 0 6px}
+.onb .stepl{font-size:13.5px;color:var(--muted);font-weight:600}
+.onb h1{font-weight:700;font-size:26px;line-height:1.25;letter-spacing:-.01em;margin:20px 0 6px}
+.onb .lead{color:var(--muted);margin:0;font-size:16px}
+.onb .actions{margin-top:auto;padding-top:28px;display:flex;gap:10px}
+.onb .actions .btn{flex:1}
+.onb .actions .btn.sec2{flex:0 0 auto}
+.hero-art{display:flex;justify-content:center;margin:28px 0 6px}
+.benefits{list-style:none;padding:0;margin:22px 0 0;display:flex;flex-direction:column;gap:14px}
+.benefits li{display:flex;gap:12px;align-items:flex-start}
+.benefits .bi{width:42px;height:42px;border-radius:12px;background:var(--primary-tint);color:var(--primary);display:grid;place-items:center;flex:none}
+.benefits b{display:block}
+.benefits span{color:var(--muted);font-size:14.5px}
+.relgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.relgrid button{min-height:48px;border:1.5px solid var(--line-strong);background:var(--surface);border-radius:12px;font-weight:600;font-size:15px}
+.relgrid button[aria-pressed=true]{border-color:var(--primary);background:var(--primary-tint);color:var(--on-tint)}
+nav.bottom{position:fixed;left:0;right:0;bottom:0;z-index:30;background:var(--surface);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom)}
+nav.bottom .in{max-width:560px;margin:0 auto;display:grid;grid-template-columns:repeat(5,1fr);height:var(--nav-h)}
+nav.bottom button{background:none;border:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font-size:12px;font-weight:400;color:var(--muted);min-height:44px}
+nav.bottom .ico{width:56px;height:30px;border-radius:15px;display:grid;place-items:center}
+nav.bottom svg{width:24px;height:24px}
+nav.bottom button[aria-current=page]{color:var(--ink);font-weight:700}
+nav.bottom button[aria-current=page] .ico{background:var(--primary-tint);color:var(--primary)}
+.cta{background:var(--surface);border:1px solid var(--line);border-radius:20px;padding:18px;margin-bottom:14px;box-shadow:var(--shadow)}
+.cta p{margin:0 0 14px;color:var(--muted);font-size:15px}
+.cta .btn{margin-bottom:14px}
+.big{font-size:22px;font-weight:700;line-height:1.3;letter-spacing:-.005em}
+.facts{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}
+.facts div{background:var(--sunk);border-radius:12px;padding:9px 12px;font-size:13.5px;color:var(--muted)}
+.facts b{display:block;font-size:14.5px;color:var(--ink);font-weight:600}
+.horo p{margin:0 0 8px}
+.chartwrap{display:flex;justify-content:center;margin-top:14px}
+.chartwrap svg{width:100%;max-width:420px;height:auto;touch-action:manipulation}
+.chartwrap svg text{font-family:var(--body)}
+.ch-bg{fill:var(--chart-bg)} .ch-line{stroke:var(--chart-line);stroke-width:1.1;fill:none;opacity:.6}
+.ch-house{fill:transparent;cursor:pointer} .ch-house.lagna{fill:var(--chart-lagna)} .ch-house.sel{fill:var(--chart-sel)}
+.ch-num{fill:var(--chart-num);font-size:10px;font-weight:400}
+.ch-pl{fill:var(--chart-ink);font-size:13px;font-weight:700;cursor:pointer}
+.ch-pl .deg{fill:var(--chart-num);font-size:9px;font-weight:400}
+.ch-pl.sel{fill:var(--primary)} .ch-pl.sel .deg{fill:var(--primary)}
+.ch-asc{fill:var(--muted);font-size:10.5px;font-weight:700;letter-spacing:.02em}
+.ch-hit{fill:transparent;cursor:pointer}
+.ch-center{fill:var(--sunk)} .ch-title{fill:var(--muted);font-size:15px;font-weight:700}
+.info{margin-top:12px;border-radius:12px;background:var(--sunk);padding:12px 14px;min-height:68px;font-size:14.5px}
+.info b.t{display:block;font-size:15.5px;margin-bottom:2px}
+.info .m{color:var(--muted)}
+.legend{display:flex;flex-wrap:wrap;gap:4px 12px;margin-top:12px;font-size:13px;color:var(--muted)}
+.legend b{color:var(--ink);font-weight:700}
+.plist2{list-style:none;margin:0;padding:0}
+.plist2 li button{display:grid;grid-template-columns:44px 1fr auto;gap:12px;align-items:center;width:100%;min-height:60px;border:0;background:none;text-align:left;padding:6px 0;border-top:1px solid var(--line)}
+.plist2 li:first-child button{border-top:0}
+.plist2 .ab{width:42px;height:42px;border-radius:12px;background:var(--sunk);display:grid;place-items:center;font-weight:700;font-size:14px}
+.plist2 .nm{line-height:1.3}
+.plist2 .nm small{display:block;color:var(--muted);font-size:13px}
+.plist2 .h{color:var(--muted);font-size:13px;text-align:right;line-height:1.5}
+.plist2 li.sel .ab{background:var(--primary-tint);color:var(--on-tint)}
+.dasha{list-style:none;margin:0;padding:0}
+.dasha>li{border-top:1px solid var(--line)} .dasha>li:first-child{border-top:0}
+.dasha summary{list-style:none;display:flex;gap:8px;align-items:center;min-height:50px;cursor:pointer;font-weight:600}
+.dasha summary::-webkit-details-marker{display:none}
+.dasha summary::after{content:"";width:8px;height:8px;border-right:2px solid var(--faint);border-bottom:2px solid var(--faint);transform:rotate(45deg);margin:0 6px 4px 4px;flex:none}
+.dasha details[open] summary::after{transform:rotate(-135deg);margin-bottom:-4px}
+.dasha table{width:100%;border-collapse:collapse;font-size:14px;margin-bottom:10px}
+.dasha td{padding:8px 6px;border-top:1px solid var(--line)}
+.dasha tr.now td{color:var(--on-tint);background:var(--primary-tint);font-weight:600}
+.item{padding:12px 0;border-top:1px solid var(--line)} .item:first-of-type{border-top:0;padding-top:2px}
+.item .hd{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-weight:600}
+.item p{margin:3px 0 0;color:var(--muted);font-size:14px}
+table.t{width:100%;border-collapse:collapse;font-size:14.5px}
+table.t th{font-size:12.5px;color:var(--muted);font-weight:600;text-align:left;padding:6px 4px;border-bottom:1px solid var(--line)}
+table.t td{padding:9px 4px;border-bottom:1px solid var(--line)}
+table.t tr:last-child td{border-bottom:0}
+.chat{display:flex;flex-direction:column;height:calc(100dvh - var(--nav-h) - env(safe-area-inset-bottom))}
+.chat .top{position:static}
+.bot{width:40px;height:40px;border-radius:50%;background:var(--primary-tint);color:var(--primary);display:grid;place-items:center;flex:none;position:relative}
+.bot .dev{font-size:21px;line-height:1;margin-top:3px}
+.bot i{position:absolute;right:-1px;bottom:-1px;width:12px;height:12px;border-radius:50%;background:var(--faint);border:2px solid var(--bg)}
+.bot.on i{background:var(--good)}
+.chat .ttl{flex:1;min-width:0;line-height:1.25;margin-left:6px}
+.chat .ttl b{display:block}
+.chat .ttl small{display:block;color:var(--muted);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.credits{font-size:13.5px;color:var(--muted);font-weight:600;white-space:nowrap}
+.asking{display:flex;align-items:center;gap:8px;padding:4px 16px;border:0;border-bottom:1px solid var(--line);font-size:14px;color:var(--muted);background:var(--bg);width:100%;min-height:48px;text-align:left}
+.msgs{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px}
+.bub{max-width:88%;padding:11px 14px;border-radius:18px;font-size:15.5px;line-height:1.55;word-wrap:break-word}
+html[lang=hi] .bub{line-height:1.7}
+.bub.me{align-self:flex-end;background:var(--primary-tint);color:var(--ink);border-bottom-right-radius:6px}
+.bub.ai{align-self:flex-start;background:var(--surface);border:1px solid var(--line);border-bottom-left-radius:6px}
+.bub.err{align-self:flex-start;background:var(--surface);border:1px solid var(--line);border-left:4px solid var(--primary);border-radius:12px;color:var(--muted);font-size:14.5px}
+.bub.err b{display:block;margin-bottom:2px;color:var(--ink)}
+.bub p{margin:0 0 6px} .bub p:last-child{margin:0}
+.bub ul{margin:4px 0 6px;padding-left:20px} .bub li{margin:3px 0}
+.bub em{color:var(--muted)}
+.typing{display:inline-flex;gap:5px;padding:4px 0} .typing i{width:7px;height:7px;border-radius:50%;background:var(--faint);animation:b 1s infinite}
+.typing i:nth-child(2){animation-delay:.15s}.typing i:nth-child(3){animation-delay:.3s}
+@keyframes b{0%,80%,100%{opacity:.25}40%{opacity:1}}
+.welcome{text-align:center;padding:4px 0}
+.welcome .bot{width:60px;height:60px;margin:4px auto 10px}
+.welcome .bot .dev{font-size:30px}
+.welcome h4{margin:0 0 4px;font-size:19px}
+.welcome p{margin:0 auto 14px;color:var(--muted);font-size:14.5px;max-width:36ch}
+.qgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px;text-align:left}
+.qgrid button{min-height:54px;border:1px solid var(--line-strong);background:var(--surface);border-radius:14px;padding:8px 12px;font-weight:600;font-size:15px;display:flex;align-items:center;gap:9px;text-align:left}
+.qgrid button svg{color:var(--primary);flex:none}
+.composer{background:var(--surface);border-top:1px solid var(--line);padding:10px 12px}
+.composer .chips{margin-bottom:10px}
+.composer form{display:flex;gap:8px;align-items:flex-end}
+.composer textarea{flex:1;resize:none;min-height:48px;border:1.5px solid var(--line-strong);border-radius:24px;padding:11px 16px;max-height:120px;background:var(--bg);font-size:16px}
+.composer textarea:focus{outline:none;border-color:var(--primary)}
+.send{width:48px;height:48px;border-radius:50%;border:0;background:var(--primary);color:var(--on-primary);display:grid;place-items:center;flex:none}
+.quota{font-size:12.5px;color:var(--muted);text-align:center;margin-top:7px}
+.pair{display:grid;grid-template-columns:1fr 28px 1fr;gap:6px;align-items:center}
+.pick{border:1.5px solid var(--line-strong);border-radius:14px;padding:12px 10px;background:var(--surface);text-align:center;display:flex;flex-direction:column;align-items:center;gap:3px;min-width:0}
+.pick small{color:var(--muted);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.08em}
+.pick span.d{color:var(--muted);font-size:13px}
+.amp{display:grid;place-items:center;color:var(--primary)}
+.score{display:flex;align-items:center;gap:16px}
+.ring{--p:50;width:104px;height:104px;border-radius:50%;background:conic-gradient(var(--primary) calc(var(--p)*1%),var(--sunk) 0);display:grid;place-items:center;flex:none}
+.ring div{width:84px;height:84px;border-radius:50%;background:var(--surface);display:grid;place-items:center;text-align:center;line-height:1}
+.ring b{font-size:26px;font-weight:700}
+.ring small{font-size:12.5px;color:var(--muted)}
+.koota{display:grid;grid-template-columns:1fr 64px;gap:6px 12px;padding:11px 0;border-top:1px solid var(--line);align-items:center}
+.koota:first-of-type{border-top:0}
+.koota .n b{display:block;font-weight:600}
+.koota .n small{color:var(--muted);font-size:13px}
+.koota .s{text-align:right;font-weight:700}
+.koota .s span{color:var(--muted);font-weight:500}
+.koota .bar{grid-column:1/-1;height:5px}
+.plist{list-style:none;margin:0;padding:0}
+.plist li{display:flex;align-items:center;gap:8px;padding:8px 0;border-top:1px solid var(--line);min-height:64px}
+.plist li:first-child{border-top:0}
+.plist .nm{flex:1;line-height:1.3;min-width:0;margin-left:4px}
+.plist .nm small{display:block;color:var(--muted);font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.packs{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px}
+.pack{border:1px solid var(--line-strong);border-radius:14px;padding:12px 8px 10px;text-align:center;background:var(--surface);min-height:44px}
+.pack b{display:block;font-size:20px}
+.pack small{display:block;color:var(--muted);font-size:12.5px}
+.pack:hover{border-color:var(--primary)}
+.setrow{display:flex;justify-content:space-between;align-items:center;gap:10px;min-height:58px;border-top:1px solid var(--line)}
+.setrow:first-of-type{border-top:0}
+.toast{position:fixed;left:50%;bottom:calc(var(--nav-h) + 20px);transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:12px 18px;border-radius:12px;font-size:14.5px;z-index:80;max-width:90%}
+.avatar.sm{width:26px;height:26px;font-size:12px}
+.pick{position:relative;cursor:pointer}
+.pick select{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;font-size:16px}
+.pick .chg{color:var(--primary);font-size:13px;font-weight:700;display:inline-flex;align-items:center;gap:2px;margin-top:4px}
+.pick:focus-within{border-color:var(--primary)}
+.plist .opt{padding:6px 4px}
+.plist .nm small{white-space:normal;overflow:visible}
+/* ---- v3: interactive chart + motion ---- */
+:root{--hl-fill:rgba(179,90,0,.17);--asp-fill:rgba(179,90,0,.07);--glow:rgba(179,90,0,.55);--ease:cubic-bezier(.2,.7,.2,1)}
+@media (prefers-color-scheme:dark){:root{--hl-fill:rgba(242,163,58,.24);--asp-fill:rgba(242,163,58,.09);--glow:rgba(242,163,58,.65)}}
+.chartwrap svg{animation:chartIn .38s var(--ease) backwards;transition:opacity .15s}
+.chartwrap.swap svg{opacity:0}
+@keyframes chartIn{from{opacity:0;transform:scale(.975)}}
+.ch-g{transition:opacity .3s ease;animation:plIn .5s var(--ease) backwards;animation-delay:calc(var(--i,0) * 45ms + 140ms)}
+@keyframes plIn{from{opacity:0;transform:translateY(6px)}}
+.ch-house{transition:fill .35s ease}
+.ch-num,.ch-asc{transition:opacity .3s ease}
+svg.dim .ch-g:not(.hl),svg.dim .ch-num,svg.dim .ch-asc,svg.dim .ch-title{opacity:.35}
+svg.dim .ch-house.lagna:not(.hl){fill:transparent}
+.ch-house.aspd{fill:var(--asp-fill)}
+.ch-house.hl{fill:var(--hl-fill)}
+.ch-ring{fill:var(--surface);stroke:var(--primary);stroke-width:1.6;opacity:0;transition:opacity .25s;transform-box:fill-box;transform-origin:center;pointer-events:none}
+.ch-g.hl .ch-ring{opacity:1;filter:drop-shadow(0 0 3px var(--glow));animation:ring 1.8s ease-in-out infinite}
+.ch-g.hl .ch-pl,.ch-g.hl .ch-pl .deg{fill:var(--primary)}
+@keyframes ring{0%,100%{stroke-opacity:1;transform:scale(1)}50%{stroke-opacity:.5;transform:scale(1.09)}}
+.asp-l{stroke:var(--primary);stroke-width:1.3;stroke-linecap:round;stroke-dasharray:1;stroke-dashoffset:0;opacity:.85;animation:draw .7s var(--ease) backwards;pointer-events:none}
+.asp-d{fill:var(--primary);opacity:.9;animation:fadeTo .3s ease-out backwards;pointer-events:none}
+@keyframes draw{from{stroke-dashoffset:1}} @keyframes fadeTo{from{opacity:0}}
+.legend button{border:0;background:none;padding:0 6px;min-height:44px;color:var(--muted);font-size:13px;border-radius:10px;cursor:pointer}
+.legend button:hover,.legend button.hl-src{background:var(--primary-tint);color:var(--ink)}
+.legend span{display:inline-flex;align-items:center;min-height:44px;padding:0 6px} .legend .note{flex-basis:100%;min-height:0;padding:4px 6px 0}
+[data-hl]{cursor:pointer;transition:background-color .25s}
+#k .item[data-hl]{margin:0 -10px;padding-left:10px;padding-right:10px;border-radius:12px}
+#k .item[data-hl]:hover,#k table.t tr[data-hl]:hover,.hm:hover{background:var(--sunk)}
+#k .cur{border-radius:12px;padding:4px 8px;margin:0 -8px 12px}
+.hl-src{background:var(--primary-tint)!important;box-shadow:inset 3px 0 0 var(--primary)}
+.plist2 li button.hl-src{border-radius:12px}
+.flash{animation:flash 1.4s ease-out}
+@keyframes flash{0%,30%{box-shadow:0 0 0 3px var(--glow)}100%{box-shadow:0 0 0 0 transparent}}
+#k .dasha summary{padding:0 8px;margin:0 -8px;border-radius:10px}
+#chartCard{scroll-margin-top:76px}
+.hgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.hm{display:flex;flex-direction:column;align-items:flex-start;gap:2px;text-align:left;min-height:64px;border:1px solid var(--line);border-radius:12px;background:var(--surface);padding:9px 11px;font-size:13.5px;line-height:1.35;color:var(--muted)}
+.hm b{color:var(--ink);font-size:13px}
+.hm small{color:var(--on-tint);font-weight:700;font-size:12px;margin-top:2px}
+#k .plist2 li,#k .item,#k .dasha summary,#k .dasha tr,#k table.t tr,.hm{scroll-margin-top:220px}
+.dock{position:fixed;left:50%;top:64px;width:min(calc(100% - 20px),540px);z-index:19;background:var(--surface);border:1px solid var(--line);border-radius:16px;box-shadow:0 14px 34px -16px rgba(0,0,0,.4);display:flex;gap:10px;align-items:center;padding:6px 12px 6px 6px;transform:translate(-50%,-16px);opacity:0;pointer-events:none;transition:transform .35s var(--ease),opacity .25s}
+.dock.on{transform:translate(-50%,0);opacity:1;pointer-events:auto}
+.dock-chart{width:112px;height:112px;flex:none;border:0;background:none;padding:0;cursor:pointer}
+.dock-chart svg{width:100%;height:100%;display:block}
+.dock-t{flex:1;min-width:0;font-size:13px;line-height:1.4;color:var(--muted)}
+.dock-t b{display:block;color:var(--ink);font-size:14px;margin-bottom:2px}
+.dock-t span{display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden}
+svg.mini .ch-line{stroke-width:2}
+.info .clr{min-width:36px;min-height:36px;margin:-8px -8px 0 0;color:var(--muted)}
+.bar i{transform-origin:left center;animation:grow 1.1s var(--ease) .2s backwards}
+@keyframes grow{from{transform:scaleX(0)}}
+.reveal{opacity:0;transform:translateY(14px);transition:opacity .5s ease,transform .5s var(--ease)}
+.reveal.in{opacity:1;transform:none}
+.bub{animation:msgIn .32s var(--ease) backwards}
+@keyframes msgIn{from{opacity:0;transform:translateY(8px)}}
+.cite{display:inline;border:0;font:inherit;line-height:inherit;font-weight:700;color:var(--on-tint);background:var(--primary-tint);padding:1px 7px 1px 6px;border-radius:7px;cursor:pointer;box-decoration-break:clone;-webkit-box-decoration-break:clone}
+.cite::before{content:"";display:inline-block;width:8px;height:8px;margin-right:5px;border:1.5px solid currentColor;transform:rotate(45deg) translateY(-1px)}
+.cite:hover{background:var(--hl-fill)}
+.cite-sheet .chartwrap{margin-top:4px}
+.cite-sheet .chartwrap svg{max-width:300px}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.001ms!important;animation-delay:0s!important;animation-iteration-count:1!important;transition-duration:.001ms!important;scroll-behavior:auto!important}.reveal{opacity:1;transform:none}}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<div id="sheet" class="sheet-bg" hidden></div>
+<div id="toast" class="toast" role="status" hidden></div>
+<script>
+'use strict';
+// ------------------------------------------------------------------ config
+const API = window.DRISHTI_API || (location.protocol.startsWith('http') ? '' : 'https://api.drishti.app'); // native wrappers set DRISHTI_API
+const $ = s => document.querySelector(s), $$ = s => document.querySelectorAll(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const store = {
+  get(k, d) { try { const v = localStorage.getItem('dr-' + k); return v == null ? d : JSON.parse(v); } catch { return d; } },
+  set(k, v) { localStorage.setItem('dr-' + k, JSON.stringify(v)); }
+};
+const uid = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2));
+const DEVICE = store.get('device') || (() => { const d = uid(); store.set('device', d); return d; })();
+const S = {
+  tab: 'home', lang: store.get('lang', 'en'), style: store.get('style', 'north'), div: 'd1', sel: null,
+  profiles: store.get('profiles', []), active: store.get('active', null),
+  charts: {}, status: null, wallet: null, onb: null, match: {girl: null, boy: null, result: null}, streaming: false,
+};
+const hi = () => S.lang === 'hi';
+const tr = (en, h) => hi() ? h : en;
+const SIGNS = ["Aries","Taurus","Gemini","Cancer","Leo","Virgo","Libra","Scorpio","Sagittarius","Capricorn","Aquarius","Pisces"];
+const SIGNS_HI = ["मेष","वृषभ","मिथुन","कर्क","सिंह","कन्या","तुला","वृश्चिक","धनु","मकर","कुंभ","मीन"];
+const AB = {Sun:'Su',Moon:'Mo',Mars:'Ma',Mercury:'Me',Jupiter:'Ju',Venus:'Ve',Saturn:'Sa',Rahu:'Ra',Ketu:'Ke'};
+const AB_HI = {Sun:'सू',Moon:'चं',Mars:'मं',Mercury:'बु',Jupiter:'गु',Venus:'शु',Saturn:'श',Rahu:'रा',Ketu:'के'};
+const PL_HI = {Sun:'सूर्य',Moon:'चंद्र',Mars:'मंगल',Mercury:'बुध',Jupiter:'गुरु',Venus:'शुक्र',Saturn:'शनि',Rahu:'राहु',Ketu:'केतु'};
+const PL_MEAN = {
+  Sun: ['your core self, confidence, father and authority', 'आत्मा, आत्मविश्वास, पिता और अधिकार'],
+  Moon: ['your mind, emotions, mother and inner comfort', 'मन, भावनाएँ, माता और सुख'],
+  Mars: ['energy, courage, drive, siblings and property', 'ऊर्जा, साहस, भाई-बहन और भूमि'],
+  Mercury: ['thinking, speech, learning and business sense', 'बुद्धि, वाणी, शिक्षा और व्यापार'],
+  Jupiter: ['wisdom, teachers, children, luck and growth', 'ज्ञान, गुरु, संतान, भाग्य और विकास'],
+  Venus: ['love, marriage, beauty, art and comforts', 'प्रेम, विवाह, सौंदर्य, कला और सुख-सुविधा'],
+  Saturn: ['discipline, hard work, patience and long-term results', 'अनुशासन, परिश्रम, धैर्य और दीर्घकालिक फल'],
+  Rahu: ['ambition, foreign links, the new and unconventional', 'महत्वाकांक्षा, विदेश, नवीनता और असामान्य राहें'],
+  Ketu: ['detachment, spirituality, intuition and past karma', 'वैराग्य, आध्यात्म, अंतर्ज्ञान और पूर्व कर्म'],
+};
+const HOUSE_MEAN = [null,
+  ['Self, body and personality', 'स्वयं, शरीर और व्यक्तित्व'], ['Money, family and speech', 'धन, परिवार और वाणी'],
+  ['Courage, siblings and effort', 'साहस, भाई-बहन और प्रयास'], ['Home, mother and comforts', 'घर, माता और सुख'],
+  ['Children, intelligence and romance', 'संतान, बुद्धि और प्रेम'], ['Health routines, work and obstacles', 'स्वास्थ्य, सेवा और बाधाएँ'],
+  ['Marriage and partnerships', 'विवाह और साझेदारी'], ['Change, secrets and longevity', 'परिवर्तन, रहस्य और आयु'],
+  ['Luck, faith, father and higher learning', 'भाग्य, धर्म, पिता और उच्च शिक्षा'], ['Career, status and reputation', 'करियर, पद और प्रतिष्ठा'],
+  ['Income, gains and friends', 'आय, लाभ और मित्र'], ['Expenses, travel abroad and inner peace', 'व्यय, विदेश यात्रा और मोक्ष']];
+const DIGN = {
+  'exalted': ['exalted, very strong here', 'उच्च, यहाँ बहुत बलवान'], 'moolatrikona': ['in its favourite sign, strong', 'मूलत्रिकोण, बलवान'],
+  'own sign': ['in its own sign, comfortable and strong', 'स्वराशि, सहज और बलवान'], 'friendly sign': ['in a friendly sign', 'मित्र राशि में'],
+  'neutral sign': ['in a neutral sign', 'सम राशि में'], 'enemy sign': ['in a less comfortable sign', 'शत्रु राशि में'],
+  'debilitated': ['debilitated, gives its best with conscious effort', 'नीच, सचेत प्रयास से अच्छा फल'],
+};
+const signName = s => hi() ? SIGNS_HI[SIGNS.indexOf(s)] : s;
+const plName = p => hi() ? PL_HI[p] : p;
+const loc = () => hi() ? 'hi-IN' : 'en-GB';
+const fmtDate = iso => iso ? new Date(iso.slice(0, 10) + 'T00:00:00').toLocaleDateString(loc(), {day: 'numeric', month: 'short', year: 'numeric'}) : '';
+const monYr = iso => new Date(iso.slice(0, 10) + 'T00:00:00').toLocaleDateString(loc(), {month: 'short', year: 'numeric'});
+const ord = n => hi() ? 'वें' : ((n % 100 >= 11 && n % 100 <= 13) ? 'th' : ({1: 'st', 2: 'nd', 3: 'rd'}[n % 10] || 'th'));
+const fmtTime = t => { if (!t) return tr('time unknown', 'समय अज्ञात'); const [h, m] = t.split(':').map(Number); return new Date(2000, 0, 1, h, m).toLocaleTimeString(loc(), {hour: 'numeric', minute: '2-digit'}); };
+function toast(m) { const e = $('#toast'); e.textContent = m; e.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => e.hidden = true, 2600); }
+async function api(path, body) {
+  const r = await fetch(API + path, body ? {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)} : {});
+  if (!r.ok) throw new Error((await r.text()).slice(0, 200) || ('HTTP ' + r.status));
+  return r.json();
+}
+const activeProfile = () => S.profiles.find(p => p.id === S.active) || S.profiles[0];
+const profileBody = p => ({name: p.name, gender: p.gender || null, date: p.date, time: p.time || null, place: p.place, offset: p.offset ?? null});
+async function chartOf(p) {
+  const key = p.id + '|' + new Date().toISOString().slice(0, 10);
+  if (!S.charts[key]) S.charts[key] = await api('/api/chart', profileBody(p));
+  return S.charts[key];
+}
+const initial = n => esc(((n || '?').trim()[0] || '?').toUpperCase());
+// ------------------------------------------------------------------ icons
+const ic = (d, s = 24, w = 1.8) => `<svg viewBox="0 0 24 24" width="${s}" height="${s}" fill="none" stroke="currentColor" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
+const I = {
+  home: s => ic('<path d="M4 10.5L12 4l8 6.5V20a1 1 0 0 1-1 1h-4.5v-6h-5v6H5a1 1 0 0 1-1-1z"/>', s),
+  chart: s => ic('<rect x="3.5" y="3.5" width="17" height="17" rx="2"/><path d="M12 3.5L20.5 12 12 20.5 3.5 12z"/><path d="M3.5 3.5l17 17M20.5 3.5l-17 17" opacity=".45"/>', s),
+  ask: s => ic('<path d="M20 12.5a7.5 7.5 0 0 1-11 6.6L4 20.5l1.4-4.6A7.5 7.5 0 1 1 20 12.5z"/><path d="M12.5 8.5l.8 1.9 2 .2-1.5 1.3.5 2-1.8-1.1-1.8 1.1.5-2-1.5-1.3 2-.2z" fill="currentColor" stroke="none"/>', s),
+  match: s => ic('<path d="M12 20s-7-4.4-7-9.6A4 4 0 0 1 12 8a4 4 0 0 1 7 2.4C19 15.6 12 20 12 20z"/>', s),
+  me: s => ic('<circle cx="12" cy="8.5" r="3.8"/><path d="M4.5 20.5c1.3-3.6 4.2-5.5 7.5-5.5s6.2 1.9 7.5 5.5"/>', s),
+  chev: s => ic('<path d="M7 10l5 5 5-5"/>', s || 18, 2),
+  send: () => '<svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true"><path d="M3.4 20.4l17.4-7.5a1 1 0 0 0 0-1.8L3.4 3.6a.7.7 0 0 0-1 .8L4.5 11 13 12l-8.5 1-2.1 6.6a.7.7 0 0 0 1 .8z"/></svg>',
+  pin: s => ic('<path d="M12 21s7-6.2 7-11.5a7 7 0 0 0-14 0C5 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/>', s || 18),
+  info: s => ic('<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 7.5v.5"/>', s || 20, 2),
+  check: s => ic('<path d="M5 12.5l4.5 4.5L19 7.5"/>', s || 20, 2.2),
+  plus: s => ic('<path d="M12 5v14M5 12h14"/>', s || 20, 2),
+  briefcase: s => ic('<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M3 13h18"/>', s || 20),
+  rings: s => ic('<circle cx="9" cy="14" r="5"/><circle cx="15" cy="14" r="5"/><path d="M10 4h4l-2 3z"/>', s || 20),
+  heart: s => ic('<path d="M12 20s-7-4.4-7-9.6A4 4 0 0 1 12 8a4 4 0 0 1 7 2.4C19 15.6 12 20 12 20z"/><path d="M8 12h2l1-2 2 4 1-2h2"/>', s || 20),
+  coins: s => ic('<ellipse cx="12" cy="6.5" rx="7" ry="3"/><path d="M5 6.5v5c0 1.7 3.1 3 7 3s7-1.3 7-3v-5M5 11.5v5c0 1.7 3.1 3 7 3s7-1.3 7-3v-5"/>', s || 20),
+  book: s => ic('<path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z"/><path d="M4 19V5M8 7h7"/>', s || 20),
+  spark: s => ic('<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/><path d="M19 16l.8 2.2L22 19l-2.2.8L19 22l-.8-2.2L16 19l2.2-.8z"/>', s || 20),
+  alert: s => ic('<path d="M12 4l9 16H3z"/><path d="M12 10v4M12 17v.5"/>', s || 22, 2),
+  edit: s => ic('<path d="M4 20h4L19 9l-4-4L4 16z"/>', s || 18),
+  trash: s => ic('<path d="M5 7h14M10 7V4h4v3M7 7l1 13h8l1-13"/>', s || 18),
+  x: s => ic('<path d="M6 6l12 12M18 6L6 18"/>', s || 18, 2),
+  users: s => ic('<circle cx="9" cy="8.5" r="3.5"/><path d="M2.5 20c1-3.3 3.6-5 6.5-5s5.5 1.7 6.5 5"/><path d="M16 5.2a3.5 3.5 0 0 1 0 6.6M18 15.3c1.7.8 2.9 2.4 3.5 4.7"/>', s || 22),
+};
+const CHIPS = () => [
+  [I.briefcase(18), tr('Career', 'करियर'), tr('How will my career progress, and when is a good period for growth or a job change?', 'मेरा करियर कैसा रहेगा? नौकरी या व्यवसाय में कब तरक्की होगी?')],
+  [I.rings(18), tr('Marriage', 'विवाह'), tr('When is marriage likely for me, and what will my partner be like?', 'मेरी शादी कब होगी और जीवनसाथी कैसा होगा?')],
+  [I.heart(18), tr('Health', 'स्वास्थ्य'), tr('What does my chart suggest about my health and what should I take care of?', 'मेरी कुंडली के अनुसार स्वास्थ्य के लिए किन बातों का ध्यान रखूँ?')],
+  [I.coins(18), tr('Money', 'धन'), tr('How do my finances look, and when are good periods for wealth?', 'मेरी आर्थिक स्थिति कैसी रहेगी? धन लाभ के योग कब हैं?')],
+  [I.book(18), tr('Education', 'शिक्षा'), tr('What does my chart say about my education and studies?', 'मेरी पढ़ाई और उच्च शिक्षा के लिए कुंडली क्या कहती है?')],
+  [I.spark(18), tr('This year', 'यह साल'), tr('What does this year hold for me?', 'यह साल मेरे लिए कैसा रहेगा?')],
+];
+const chipsHtml = (cls = 'chip') => CHIPS().map(q => `<button class="${cls}" data-q="${esc(q[2])}">${q[0]}${q[1]}</button>`).join('');
+// ------------------------------------------------------------------ shell
+function render() {
+  document.documentElement.lang = S.lang;
+  closeSheet();
+  const root = $('#root');
+  if (!S.profiles.length || S.onb) { root.innerHTML = onboarding(); bindOnb(); return; }
+  const tabs = {home: pageHome, kundli: pageKundli, ask: pageAsk, match: pageMatch, me: pageMe};
+  root.innerHTML = `<div class="app" id="app"></div>${nav()}`;
+  tabs[S.tab]();
+  $$('nav.bottom button').forEach(b => b.onclick = () => go(b.dataset.t));
+}
+function go(tab) { S.tab = tab; render(); window.scrollTo(0, 0); }
+function nav() {
+  const items = [['home', I.home(), tr('Home', 'होम')], ['kundli', I.chart(), tr('Chart', 'कुंडली')], ['ask', I.ask(), tr('Ask', 'पूछें')], ['match', I.match(), tr('Match', 'मिलान')], ['me', I.me(), tr('Profile', 'प्रोफ़ाइल')]];
+  return `<nav class="bottom" aria-label="Main"><div class="in">${items.map(([k, i, l]) => `<button data-t="${k}" ${S.tab === k ? 'aria-current="page"' : ''}><span class="ico">${i}</span>${l}</button>`).join('')}</div></nav>`;
+}
+function header() {
+  const p = activeProfile();
+  return `<header class="top"><a class="logo" href="#" id="logo" aria-label="Drishti home"><span class="dev">दृष्टि</span><small>Drishti</small></a>
+    <button class="iconbtn langbtn" id="langBtn" aria-label="${tr('Switch to Hindi', 'Switch to English')}">${hi() ? 'English' : 'हिंदी'}</button>
+    <button class="iconbtn who-btn" id="whoBtn" aria-haspopup="dialog" aria-label="${tr('Switch person', 'व्यक्ति बदलें')}"><span class="avatar">${initial(p.name)}</span><span class="n">${esc(p.name)}</span>${I.chev()}</button></header>`;
+}
+function bindHeader() {
+  const l = $('#langBtn'); if (l) l.onclick = () => { S.lang = hi() ? 'en' : 'hi'; store.set('lang', S.lang); render(); };
+  const w = $('#whoBtn'); if (w) w.onclick = openSwitcher;
+  const g = $('#logo'); if (g) g.onclick = e => { e.preventDefault(); go('home'); };
+}
+const REL = {Self: 'स्वयं', Spouse: 'जीवनसाथी', Child: 'संतान', Parent: 'माता-पिता', Family: 'परिवार', Friend: 'मित्र'};
+const relName = r => hi() ? (REL[r] || r || '') : (r || '');
+function openSwitcher() {
+  const sh = $('#sheet'), cur = activeProfile();
+  sh.innerHTML = `<div class="sheet" role="dialog" aria-label="${tr('Choose person', 'व्यक्ति चुनें')}"><h4>${tr('Whose chart?', 'किसकी कुंडली?')}</h4>
+    ${S.profiles.map(p => `<button class="opt ${p.id === cur.id ? 'on' : ''}" data-pid="${p.id}"><span class="avatar lg">${initial(p.name)}</span><span class="meta"><b>${esc(p.name)}</b><small>${esc(relName(p.relation))} · ${fmtDate(p.date)}</small></span>${p.id === cur.id ? `<span class="check">${I.check()}</span>` : ''}</button>`).join('')}
+    <hr><button class="opt" id="shAdd"><span class="avatar lg">${I.plus()}</span><span class="meta"><b>${tr('Add a person', 'व्यक्ति जोड़ें')}</b><small>${tr('Family member or friend', 'परिवार या मित्र')}</small></span></button>
+    <button class="opt" id="shManage"><span class="avatar lg">${I.users(20)}</span><span class="meta"><b>${tr('Manage people', 'लोग प्रबंधित करें')}</b></span></button></div>`;
+  sh.hidden = false;
+  sh.onclick = e => { if (e.target === sh) closeSheet(); };
+  sh.querySelectorAll('[data-pid]').forEach(b => b.onclick = () => { S.active = b.dataset.pid; store.set('active', S.active); S.sel = null; render(); });
+  $('#shAdd').onclick = () => startOnb();
+  $('#shManage').onclick = () => go('me');
+  document.addEventListener('keydown', escClose);
+  sh.querySelector('.opt').focus();
+}
+function escClose(e) { if (e.key === 'Escape') closeSheet(); }
+function closeSheet() { const sh = $('#sheet'); if (sh) { sh.hidden = true; sh.innerHTML = ''; } document.removeEventListener('keydown', escClose); }
+const skel = (h, w = '100%', mb = 10) => `<div class="skel" style="height:${h}px;width:${w};margin-bottom:${mb}px"></div>`;
+const errState = (msg, id) => `<div class="card"><div class="state"><div class="ic">${I.alert()}</div><h4>${tr("Couldn't load this", 'लोड नहीं हो सका')}</h4><p>${esc(msg)}</p><button class="btn sm" id="${id}">${tr('Try again', 'फिर से कोशिश करें')}</button></div></div>`;
+// ------------------------------------------------------------------ onboarding
+function startOnb(edit) {
+  S.onb = edit ? {...edit, step: 1, edit: true, unknown: !edit.time} : {step: S.profiles.length ? 1 : 0, relation: S.profiles.length ? 'Family' : 'Self', unknown: false};
+  render(); window.scrollTo(0, 0);
+}
+function artSVG() {
+  const rays = Array.from({length: 12}, (_, i) => { const a = i * Math.PI / 6; return `<line x1="${(80 + Math.cos(a) * 46).toFixed(1)}" y1="${(80 + Math.sin(a) * 46).toFixed(1)}" x2="${(80 + Math.cos(a) * 62).toFixed(1)}" y2="${(80 + Math.sin(a) * 62).toFixed(1)}"/>`; }).join('');
+  return `<svg width="140" height="140" viewBox="0 0 160 160" aria-hidden="true"><circle cx="80" cy="80" r="76" fill="var(--primary-tint)"/>
+    <g stroke="var(--primary)" stroke-width="2.5" stroke-linecap="round" opacity=".75">${rays}</g>
+    <circle cx="80" cy="80" r="34" fill="var(--surface)" stroke="var(--primary)" stroke-width="2.5"/>
+    <path d="M80 52l28 28-28 28-28-28z" fill="none" stroke="var(--accent)" stroke-width="1.6" opacity=".7"/>
+    <circle cx="80" cy="80" r="6" fill="var(--primary)"/></svg>`;
+}
+function onboarding() {
+  const o = S.onb || (S.onb = {step: 0, relation: 'Self', unknown: false});
+  if (o.step === 0) return `<div class="onb">
+    <div class="spread"><span></span><button class="btn quiet" id="langOnb">${hi() ? 'English' : 'हिंदी'}</button></div>
+    <div class="hero-art">${artSVG()}</div>
+    <div style="text-align:center"><div class="dev" style="font-size:40px;color:var(--primary);line-height:1.2">दृष्टि</div>
+    <h1 style="margin-top:4px">${tr('Your birth chart, explained simply', 'आपकी कुंडली, सरल भाषा में')}</h1>
+    <p class="lead">${tr('Ask an AI astrologer anything. Every answer is read from your real Vedic chart.', 'AI ज्योतिषी से कुछ भी पूछें। हर उत्तर आपकी असली वैदिक कुंडली से।')}</p></div>
+    <ul class="benefits">
+      <li><span class="bi">${I.chart(22)}</span><div><b>${tr('Accurate birth chart (Kundli)', 'सटीक जन्म कुंडली')}</b><span>${tr('Calculated with Swiss Ephemeris, Lahiri ayanamsa', 'स्विस एफेमेरिस और लाहिरी अयनांश से गणना')}</span></div></li>
+      <li><span class="bi">${I.ask(22)}</span><div><b>${tr('Answers in plain words', 'सरल भाषा में उत्तर')}</b><span>${tr('Career, marriage, money and health, in English or Hindi', 'करियर, विवाह, धन, स्वास्थ्य, हिंदी या अंग्रेज़ी में')}</span></div></li>
+      <li><span class="bi">${I.match(22)}</span><div><b>${tr('Compatibility and daily horoscope', 'कुंडली मिलान और दैनिक राशिफल')}</b><span>${tr('36-guna matching for the whole family', 'पूरे परिवार के लिए 36 गुण मिलान')}</span></div></li></ul>
+    <div class="actions" style="flex-direction:column"><button class="btn block" id="go1">${tr('Get started', 'शुरू करें')}</button>
+      <p class="small muted" style="text-align:center;margin:6px 0 0">${tr('3 quick steps. Your details stay on this phone.', '3 छोटे चरण। आपकी जानकारी इसी फ़ोन पर रहती है।')} <a href="privacy.html">${tr('Privacy', 'गोपनीयता')}</a></p></div></div>`;
+  const head = n => `<div class="spread" style="min-height:44px"><span class="stepl">${tr(`Step ${n} of 3`, `चरण ${n} / 3`)} · ${[tr('About', 'परिचय'), tr('Birth date & time', 'जन्म तिथि और समय'), tr('Birth place', 'जन्म स्थान')][n - 1]}</span>${S.profiles.length ? `<button class="btn quiet" id="cancel">${tr('Cancel', 'रद्द करें')}</button>` : ''}</div><div class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="3" aria-valuenow="${n}"><i style="width:${n / 3 * 100}%"></i></div>`;
+  if (o.step === 1) return `<div class="onb">${head(1)}
+    <h1>${o.edit ? tr('Edit details', 'विवरण बदलें') : S.profiles.length ? tr('Who is this chart for?', 'यह कुंडली किसकी है?') : tr("Let's start with you", 'पहले आपके बारे में')}</h1>
+    <p class="lead">${tr('A first name is enough. The astrologer uses it to greet you.', 'केवल पहला नाम काफ़ी है।')}</p>
+    <label class="f" for="nm">${tr('Name', 'नाम')}</label><input class="input" id="nm" autocomplete="given-name" value="${esc(o.name || '')}" placeholder="${tr('e.g. Ananya', 'जैसे अनन्या')}">
+    <label class="f">${tr('Relation to you', 'आपसे संबंध')}</label><div class="relgrid" id="rel">${Object.keys(REL).map(r => `<button type="button" data-v="${r}" aria-pressed="${o.relation === r}">${relName(r)}</button>`).join('')}</div>
+    <label class="f">${tr('Gender', 'लिंग')} <span class="muted" style="font-weight:400">${tr('(optional)', '(वैकल्पिक)')}</span></label>
+    <div class="relgrid" id="gen">${[['Female', 'महिला'], ['Male', 'पुरुष'], ['Other', 'अन्य']].map(([g, h]) => `<button type="button" data-v="${g}" aria-pressed="${o.gender === g}">${tr(g, h)}</button>`).join('')}</div>
+    <p class="help">${tr('Only used for traditional bride/groom matching.', 'केवल पारंपरिक वर-वधू मिलान के लिए।')}</p>
+    <div class="actions"><button class="btn block" id="go2">${tr('Continue', 'आगे बढ़ें')}</button></div></div>`;
+  if (o.step === 2) return `<div class="onb">${head(2)}
+    <h1>${tr(`When was ${esc(o.name)} born?`, `${esc(o.name)} का जन्म कब हुआ?`)}</h1>
+    <p class="lead">${tr('The exact time sets the rising sign (Lagna). A birth certificate is the best source.', 'सटीक समय से लग्न तय होता है। जन्म प्रमाणपत्र सबसे अच्छा स्रोत है।')}</p>
+    <label class="f" for="dob">${tr('Date of birth', 'जन्म तिथि')}</label><input class="input" type="date" id="dob" value="${o.date || ''}" max="${new Date().toISOString().slice(0, 10)}" min="1800-01-01">
+    <label class="f" for="tob">${tr('Time of birth', 'जन्म समय')}</label><input class="input" type="time" step="60" id="tob" value="${o.unknown ? '' : (o.time || '')}" ${o.unknown ? 'disabled' : ''}>
+    <label class="toggle ${o.unknown ? 'on' : ''}"><input type="checkbox" id="unk" ${o.unknown ? 'checked' : ''}><span>${tr("I don't know the birth time", 'मुझे जन्म का समय नहीं पता')}</span></label>
+    ${o.unknown ? `<div class="notice" style="margin-top:10px">${I.info()}<div><b>${tr("That's okay, many people don't know it.", 'कोई बात नहीं, बहुत लोगों को नहीं पता होता।')}</b><br>${tr("We'll read the chart from the Moon sign (Chandra kundli). It still gives good answers on timing and life themes; only house-based details are less precise. You can add the time later.", 'हम चंद्र कुंडली से पढ़ेंगे। समय और मुख्य विषयों पर अच्छे उत्तर मिलेंगे; केवल भाव संबंधी बातें कम सटीक होंगी। समय बाद में जोड़ सकते हैं।')}</div></div>` : `<p class="help">${tr('Not sure of the minute? The nearest 15 minutes still helps.', 'मिनट पता नहीं? लगभग 15 मिनट तक का समय भी मदद करता है।')}</p>`}
+    <div class="actions"><button class="btn sec2" id="back">${tr('Back', 'पीछे')}</button><button class="btn" id="go3">${tr('Continue', 'आगे बढ़ें')}</button></div></div>`;
+  return `<div class="onb">${head(3)}
+    <h1>${tr('Where was ' + esc(o.name) + ' born?', esc(o.name) + ' का जन्म स्थान?')}</h1>
+    <p class="lead">${tr('Type the town or city. We find its coordinates and the time zone used on that date.', 'शहर का नाम लिखें। हम उसके निर्देशांक और उस दिन का समय क्षेत्र ढूँढ लेंगे।')}</p>
+    <label class="f" for="pl">${tr('Place of birth', 'जन्म स्थान')}</label>
+    <div class="ac"><input class="input" id="pl" autocomplete="off" role="combobox" aria-expanded="false" aria-controls="plist" placeholder="${tr('e.g. Varanasi', 'जैसे Varanasi (अंग्रेज़ी में)')}" value="${esc(o.place ? o.place.name : '')}"><ul id="plist" role="listbox" hidden></ul></div>
+    <div id="resolved">${o.place ? resolvedHtml(o) : ''}</div>
+    <p class="help">${tr("Born in a village? Pick the nearest town; that's accurate enough.", 'गाँव में जन्म? पास का शहर चुनें, यह पर्याप्त सटीक है।')}</p>
+    <details style="margin-top:8px"><summary class="small muted" style="min-height:44px;display:flex;align-items:center;cursor:pointer">${tr('Advanced: set the UTC offset yourself', 'उन्नत: UTC ऑफ़सेट स्वयं डालें')}</summary>
+      <input class="input" id="off" inputmode="decimal" placeholder="${tr('e.g. 5.5 (blank = automatic)', 'जैसे 5.5 (खाली = स्वचालित)')}" value="${o.offset ?? ''}">
+      <p class="help">${tr('Only needed if your family astrologer used a different zone, e.g. ignoring 1942–45 war time.', 'केवल तब, जब आपके ज्योतिषी ने अलग समय क्षेत्र लिया हो (जैसे 1942–45 युद्ध समय)।')}</p></details>
+    <div class="actions"><button class="btn sec2" id="back">${tr('Back', 'पीछे')}</button><button class="btn" id="save">${o.edit ? tr('Save', 'सहेजें') : tr('Create my chart', 'कुंडली बनाएँ')}</button></div></div>`;
+}
+function resolvedHtml(o) {
+  const p = o.place; if (!p) return '';
+  const off = o.offInfo ? `<br>${tr('Time zone on that date', 'उस दिन का समय क्षेत्र')}: UTC${o.offInfo.offset_hours >= 0 ? '+' : ''}${fmtOff(o.offInfo.offset_hours)} (${esc(o.offInfo.source)})` : '';
+  return `<div class="resolved">${I.pin(18)}<div><b>${esc(p.name)}</b><br>${p.lat.toFixed(3)}°, ${p.lon.toFixed(3)}° · ${esc(p.tz)}${off}</div></div>`;
+}
+const fmtOff = h => { const s = Math.abs(h), hh = Math.floor(s), mm = Math.round((s - hh) * 60); return `${h < 0 ? '-' : ''}${hh}:${String(mm).padStart(2, '0')}`; };
+async function refreshOffset() {
+  const o = S.onb; if (!o || !o.place || !o.date) return;
+  try { o.offInfo = await api(`/api/offset?date=${o.date}&tz=${encodeURIComponent(o.place.tz)}&lon=${o.place.lon}${o.time && !o.unknown ? '&time=' + o.time : ''}`); } catch { o.offInfo = null; }
+  const r = $('#resolved'); if (r) r.innerHTML = resolvedHtml(o);
+}
+function bindOnb() {
+  const o = S.onb, on = (id, f) => { const e = $('#' + id); if (e) e.onclick = f; };
+  const step = n => { o.step = n; render(); window.scrollTo(0, 0); };
+  on('go1', () => step(1));
+  on('langOnb', () => { S.lang = hi() ? 'en' : 'hi'; store.set('lang', S.lang); render(); });
+  on('cancel', () => { S.onb = null; render(); });
+  $$('#rel button').forEach(b => b.onclick = () => { o.relation = b.dataset.v; $$('#rel button').forEach(x => x.setAttribute('aria-pressed', x === b)); });
+  $$('#gen button').forEach(b => b.onclick = () => { o.gender = o.gender === b.dataset.v ? null : b.dataset.v; $$('#gen button').forEach(x => x.setAttribute('aria-pressed', x.dataset.v === o.gender)); });
+  on('go2', () => { const n = $('#nm').value.trim(); if (!n) { toast(tr('Please enter a name', 'कृपया नाम लिखें')); $('#nm').focus(); return; } o.name = n; step(2); });
+  const dob = $('#dob'), tob = $('#tob'), unk = $('#unk');
+  if (dob) {
+    dob.onchange = () => { o.date = dob.value; };
+    tob.onchange = () => { o.time = tob.value; };
+    unk.onchange = () => { o.unknown = unk.checked; o.date = dob.value; if (!o.unknown) o.time = tob.value; render(); };
+    on('back', () => step(1));
+    on('go3', () => {
+      o.date = dob.value; if (!o.unknown) o.time = tob.value;
+      if (!o.date) { toast(tr('Please choose the date of birth', 'कृपया जन्म तिथि चुनें')); return; }
+      if (!o.unknown && !o.time) { toast(tr('Add the time, or tick "I don\'t know"', 'समय डालें या "नहीं पता" चुनें')); return; }
+      step(3);
+    });
+  }
+  const pl = $('#pl'), list = $('#plist');
+  if (pl) {
+    on('back', () => step(2));
+    let tm, items = [], sel = -1, searched = false;
+    const show = () => {
+      const open = items.length || (searched && pl.value.trim().length >= 2);
+      list.hidden = !open; pl.setAttribute('aria-expanded', !!open);
+      list.innerHTML = items.length ? items.map((c, i) => `<li role="option" data-i="${i}" class="${i === sel ? 'on' : ''}">${esc(c.name)}<small>${esc([c.admin, c.country].filter(Boolean).join(', '))}</small></li>`).join('')
+        : `<li class="empty">${tr('No match. Try the nearest bigger town, in English.', 'नहीं मिला। पास का बड़ा शहर अंग्रेज़ी में लिखें।')}</li>`;
+    };
+    const pick = c => { o.place = {name: `${c.name}${c.admin ? ', ' + c.admin : ''}, ${c.country}`, lat: c.lat, lon: c.lon, tz: c.tz}; pl.value = o.place.name; items = []; searched = false; show(); refreshOffset(); };
+    pl.oninput = () => { o.place = null; $('#resolved').innerHTML = ''; clearTimeout(tm); tm = setTimeout(async () => { if (pl.value.trim().length < 2) { items = []; searched = false; } else { try { items = await api('/api/cities?q=' + encodeURIComponent(pl.value)); } catch { items = []; } searched = true; } sel = -1; show(); }, 160); };
+    pl.onkeydown = e => { if (e.key === 'ArrowDown') { sel = Math.min(items.length - 1, sel + 1); show(); e.preventDefault(); } else if (e.key === 'ArrowUp') { sel = Math.max(0, sel - 1); show(); e.preventDefault(); } else if (e.key === 'Enter' && items[sel]) { pick(items[sel]); e.preventDefault(); } };
+    list.onmousedown = e => { const li = e.target.closest('li[data-i]'); if (li) pick(items[+li.dataset.i]); };
+    if (o.place && o.date) refreshOffset();
+    on('save', () => {
+      const off = $('#off').value.trim();
+      if (!o.place) { toast(tr('Pick the birth place from the list', 'सूची से जन्म स्थान चुनें')); pl.focus(); return; }
+      const p = {id: o.id || uid(), name: o.name, relation: o.relation, gender: o.gender || null, date: o.date, time: o.unknown ? null : o.time, place: o.place, offset: off === '' ? null : parseFloat(off)};
+      const i = S.profiles.findIndex(x => x.id === p.id);
+      if (i >= 0) S.profiles[i] = p; else S.profiles.push(p);
+      store.set('profiles', S.profiles); S.active = p.id; store.set('active', p.id);
+      Object.keys(S.charts).forEach(k => k.startsWith(p.id) && delete S.charts[k]);
+      S.onb = null; S.tab = 'home'; S.sel = null; render(); window.scrollTo(0, 0);
+    });
+  }
+}
+// ------------------------------------------------------------------ home
+async function pageHome() {
+  const p = activeProfile();
+  $('#app').innerHTML = header() + `<main>
+    <div class="h1">${tr('Namaste', 'नमस्ते')}, ${esc(p.name)}</div><p class="sub" id="gsub">${new Date().toLocaleDateString(loc(), {weekday: 'long', day: 'numeric', month: 'long'})}</p>
+    <section class="cta"><div class="sec"><h3>${tr('What would you like to know?', 'आप क्या जानना चाहेंगे?')}</h3></div>
+      <p>${tr('Your AI astrologer reads your birth chart and today’s planets before answering.', 'आपका AI ज्योतिषी उत्तर देने से पहले आपकी कुंडली और आज के ग्रह पढ़ता है।')}</p>
+      <button class="btn block" id="askBtn">${I.ask(20)} ${tr('Ask about your chart', 'अपनी कुंडली के बारे में पूछें')}</button>
+      <div class="chips">${chipsHtml()}</div></section>
+    <div id="hDasha"><div class="card">${skel(18, '45%')}${skel(30, '70%')}${skel(8, '100%', 0)}</div></div>
+    <div id="hHoro"><div class="card">${skel(18, '55%')}${skel(14)}${skel(14)}${skel(14, '80%', 0)}</div></div>
+    <div id="hNow"></div></main>`;
+  bindHeader();
+  $('#askBtn').onclick = () => go('ask');
+  $$('main [data-q]').forEach(b => b.onclick = () => { S.pendingQ = b.dataset.q; go('ask'); });
+  let c;
+  try { c = await chartOf(p); } catch (e) { $('#hDasha').innerHTML = errState(e.message, 'retryH'); $('#hHoro').innerHTML = ''; $('#retryH').onclick = () => render(); return; }
+  if (S.tab !== 'home') return;
+  $('#gsub').innerHTML += ` · ${signName(c.moon_sign)} ${tr('Moon', 'राशि')} · ${esc(c.janma_nakshatra)}`;
+  const cur = c.dasha.current;
+  $('#hDasha').innerHTML = cur.mahadasha ? `<button class="card link" id="dashaCard" aria-label="${tr('Open life periods', 'दशा देखें')}">
+    <div class="sec"><h3>${tr('Your current life period', 'आपकी वर्तमान दशा')}</h3><span class="sk">${tr('Dasha', 'विंशोत्तरी')}</span></div>
+    <div class="big">${plName(cur.mahadasha.lord)} · ${plName(cur.antardasha.lord)}</div>
+    <p class="small muted" style="margin:4px 0 12px">${tr(`${plName(cur.mahadasha.lord)} sets the main theme until ${monYr(cur.mahadasha.end)}; the ${plName(cur.antardasha.lord)} sub-period runs until ${monYr(cur.antardasha.end)}.`, `${plName(cur.mahadasha.lord)} महादशा ${monYr(cur.mahadasha.end)} तक; ${plName(cur.antardasha.lord)} अंतर्दशा ${monYr(cur.antardasha.end)} तक।`)}</p>
+    <div class="bar"><i style="width:${pct(cur.mahadasha)}%"></i></div>
+    <div class="spread small muted" style="margin-top:6px"><span>${monYr(cur.mahadasha.start)}</span><span>${pct(cur.mahadasha)}% ${tr('through', 'पूर्ण')}</span><span>${monYr(cur.mahadasha.end)}</span></div></button>` : '';
+  const dc = $('#dashaCard'); if (dc) dc.onclick = () => { S.scrollTo = 'dashaSec'; go('kundli'); };
+  const ss = c.doshas.find(d => d.name.startsWith('Sade')), J = c.transits.planets.Jupiter;
+  $('#hNow').innerHTML = `<div class="card"><div class="sec"><h3>${tr('Big planets right now', 'अभी के बड़े ग्रह')}</h3><span class="sk">${tr('Gochar', 'गोचर')}</span></div>
+    <div class="item"><div class="hd">${tr("Saturn's 7½ years", 'साढ़े साती')} <span class="muted" style="font-weight:500;font-size:13.5px">${tr('Sade Sati', 'शनि')}</span> ${ss.active ? `<span class="tag warn">${tr('Active', 'चल रही है')}</span>` : `<span class="tag good">${tr('Not active', 'नहीं')}</span>`}</div>
+      <p>${ss.active ? tr(`A slower, character-building phase that rewards patience. Ends around ${monYr(ss.current_window.end)}.`, `धैर्य और परिश्रम का समय। लगभग ${monYr(ss.current_window.end)} तक।`) : ss.next_window ? tr(`Next one begins around ${monYr(ss.next_window.start)}.`, `अगली लगभग ${monYr(ss.next_window.start)} से।`) : ''}</p></div>
+    <div class="item"><div class="hd">${tr('Jupiter', 'गुरु')} ${tr('in', '')} ${signName(J.sign)}</div><p>${tr(`Moving through your ${J.house_from_moon}${ord(J.house_from_moon)} house from the Moon: ${HOUSE_MEAN[J.house_from_moon][0].toLowerCase()}.`, `चंद्र से ${J.house_from_moon}वें भाव में: ${HOUSE_MEAN[J.house_from_moon][1]}।`)}</p></div></div>`;
+  loadHoroscope(c.moon_sign);
+}
+async function loadHoroscope(sign) {
+  const box = $('#hHoro'); if (!box) return;
+  try {
+    const h = await api(`/api/horoscope?sign=${sign}&lang=${S.lang}`);
+    if (!$('#hHoro')) return;
+    const T = h.transits;
+    const facts = ['Moon', 'Sun', 'Venus', 'Mars'].map(p => `<div><b>${plName(p)} · ${signName(T[p].sign)}</b>${tr(HOUSE_MEAN[T[p].house_from_rashi][0], HOUSE_MEAN[T[p].house_from_rashi][1])}</div>`).join('');
+    box.innerHTML = `<div class="card horo"><div class="sec"><h3>${tr("Today's horoscope", 'आज का राशिफल')}</h3><span class="sk">${signName(sign)} ${tr('Moon sign · Rashifal', 'राशि')}</span></div>` +
+      (h.ai ? md(h.text) : `<div class="notice">${I.info()}<div>${tr('Your AI-written reading will appear here once the astrologer is switched on. Meanwhile, the areas of life today’s faster planets are lighting up for you:', 'AI ज्योतिषी चालू होते ही यहाँ आपका राशिफल दिखेगा। तब तक, आज तेज़ ग्रह जीवन के इन क्षेत्रों को छू रहे हैं:')}</div></div><div class="facts">${facts}</div>`) + `</div>`;
+  } catch (e) { box.innerHTML = errState(e.message, 'retryHoro'); $('#retryHoro').onclick = () => loadHoroscope(sign); }
+}
+// ------------------------------------------------------------------ kundli
+// ------------------------------------------------------------------ kundli: highlight model
+const RM = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+const PL_RE = /\b(Sun|Moon|Mars|Mercury|Jupiter|Venus|Saturn|Rahu|Ketu)\b/g;
+const hlAttr = o => `data-hl="${esc(JSON.stringify(o))}" tabindex="0" role="button"`;
+const ruledBy = (c, p) => c.houses.filter(h => h.lord === p).map(h => h.house);
+const wrapH = n => ((n - 1) % 12 + 12) % 12 + 1;
+const hMean = h => HOUSE_MEAN[h][hi() ? 1 : 0];
+function hlFromText(c, txt, extra) {
+  const t = String(txt || ''), ps = [...new Set(t.match(PL_RE) || [])], hs = new Set(ps.map(p => c.planets[p].house));
+  for (const m of t.matchAll(/\b(?:houses?|lord of)\s+((?:\d{1,2}\s*(?:,|and)?\s*)+)/g)) m[1].split(/\D+/).filter(Boolean).forEach(n => { n = +n; if (n >= 1 && n <= 12) hs.add(n); });
+  return {p: ps, h: [...hs], ...extra};
+}
+function planetHL(c, p) {
+  const r = c.planets[p], i = hi() ? 1 : 0, rules = ruledBy(c, p);
+  const m = `${tr('Represents', 'प्रतीक:')} ${PL_MEAN[p][i]}. ` + tr(`In house ${r.house} it colours your ${HOUSE_MEAN[r.house][0].toLowerCase()}.`, `${r.house}वें भाव में यह आपके ${HOUSE_MEAN[r.house][1]} को प्रभावित करता है।`) +
+    ` ${tr('Here it is', 'स्थिति:')} ${DIGN[r.dignity][i]}${r.retrograde && !['Rahu', 'Ketu'].includes(p) ? tr(', retrograde', ', वक्री') : ''}${r.combust ? tr(', combust', ', अस्त') : ''}.` +
+    (rules.length ? ' ' + tr(`Rules house ${rules.join(' & ')}.`, `${rules.join(' व ')} भाव का स्वामी।`) : '') +
+    (r.aspects_houses && r.aspects_houses.length ? ' ' + tr(`Aspects (drishti) house ${r.aspects_houses.join(', ')}.`, `दृष्टि: ${r.aspects_houses.join(', ')} भाव।`) : '');
+  return {p: [p], h: [r.house], asp: p, t: tr(`${plName(p)} in ${signName(r.sign)}, house ${r.house}`, `${plName(p)} ${signName(r.sign)} में, ${r.house}वाँ भाव`), m, row: 'pr-' + p};
+}
+function houseHL(c, h) {
+  const hd = c.houses[h - 1], occ = hd.occupants || [];
+  return {p: occ, h: [h], t: tr(`House ${h}: ${HOUSE_MEAN[h][0]}`, `${h}वाँ भाव: ${HOUSE_MEAN[h][1]}`), row: 'hm-' + h,
+    m: `${signName(hd.sign)}, ${tr(`ruled by ${plName(hd.lord)} (in house ${hd.lord_in_house})`, `स्वामी ${plName(hd.lord)} (${hd.lord_in_house}वें भाव में)`)}. ` + (occ.length ? tr('Planets here: ', 'यहाँ ग्रह: ') + occ.map(plName).join(', ') + '.' : tr('No planets here, which is perfectly normal.', 'यहाँ कोई ग्रह नहीं, यह सामान्य है।'))};
+}
+function dashaHL(c, lord, sub, label) {
+  const ps = sub && sub !== lord ? [lord, sub] : [lord], hs = new Set();
+  ps.forEach(p => { hs.add(c.planets[p].house); ruledBy(c, p).forEach(h => hs.add(h)); });
+  const desc = p => { const r = ruledBy(c, p); return tr(`${plName(p)} sits in house ${c.planets[p].house}${r.length ? ' and rules ' + r.join(' & ') : ''}`, `${plName(p)} ${c.planets[p].house}वें भाव में${r.length ? ', स्वामी ' + r.join(' व ') : ''}`); };
+  return {p: ps, h: [...hs], t: label, m: ps.map(desc).join('; ') + '. ' + tr('These are the areas this period activates.', 'यह दशा इन्हीं क्षेत्रों को सक्रिय करती है।')};
+}
+function doshaHL(c, d) {
+  const t = d.name, m = doshaLine(d);
+  if (d.name.startsWith('Manglik')) return {p: ['Mars'], h: [c.planets.Mars.house], t, m};
+  if (d.name.startsWith('Sade')) { const mh = c.planets.Moon.house; return {p: ['Moon'], h: [wrapH(mh - 1), mh, wrapH(mh + 1)], t, m: m + ' ' + tr('Highlighted: your Moon and the houses on either side, which Saturn crosses.', 'चिह्नित: चंद्र और उसके दोनों ओर के भाव।')}; }
+  if (d.name.startsWith('Kaal')) { const o = hlFromText(c, d.basis, {t, m}); ['Rahu', 'Ketu'].forEach(p => { if (!o.p.includes(p)) o.p.push(p); o.h.push(c.planets[p].house); }); o.h = [...new Set(o.h)]; return o; }
+  return hlFromText(c, d.basis, {t, m});
+}
+const K = {c: null, io: null};
+function setHL(o, src) {
+  S.hl = o; S.hlFor = activeProfile().id;
+  $$('.hl-src').forEach(e => e.classList.remove('hl-src'));
+  if (src) src.classList.add('hl-src');
+  if (!K.c) return;
+  applyHL($('#chartsvg svg'), K.c, o); applyHL($('#mini svg'), K.c, o); renderInfo();
+}
+function renderInfo() {
+  const o = S.hl, box = $('#info'), dt = $('#dockT'), dm = $('#dockM');
+  const t = o ? esc(o.t) : tr('Tap any planet, house or explanation', 'किसी ग्रह, भाव या विवरण पर टैप करें');
+  const m = o ? esc(o.m || '') : tr('The chart lights up what it refers to, in plain words.', 'कुंडली में संबंधित भाग चमक उठेगा।');
+  if (box) box.innerHTML = `<div class="spread" style="align-items:flex-start"><b class="t">${t}</b>${o ? `<button class="iconbtn clr" id="hlClr" aria-label="${tr('Clear highlight', 'हाइलाइट हटाएँ')}">${I.x()}</button>` : ''}</div><span class="m">${m}</span>`;
+  if (dt) { dt.innerHTML = t; dm.innerHTML = m; }
+  const x = $('#hlClr'); if (x) x.onclick = () => setHL(null);
+}
+function applyHL(svg, c, o) {
+  if (!svg) return;
+  const div = svg.dataset.div, L = SIGNS.indexOf(c[div].lagna_sign), ps = o ? o.p || [] : [];
+  let hs = o ? o.h || [] : [];
+  if (o && div === 'd9') hs = ps.map(p => (SIGNS.indexOf(c.planets[p].navamsa_sign) - L + 12) % 12 + 1);
+  const asp = o && o.asp && div === 'd1' ? c.planets[o.asp].aspects_houses || [] : [];
+  svg.classList.toggle('dim', !!o);
+  svg.querySelectorAll('[data-p]').forEach(g => g.classList.toggle('hl', ps.includes(g.dataset.p)));
+  svg.querySelectorAll('[data-h]').forEach(e => { e.classList.toggle('hl', hs.includes(+e.dataset.h)); e.classList.toggle('aspd', asp.includes(+e.dataset.h) && !hs.includes(+e.dataset.h)); });
+  svg.querySelectorAll('.asp').forEach(e => e.remove());
+  if (!asp.length) return;
+  const g = svg.querySelector(`[data-p="${o.asp}"]`); if (!g) return;
+  const x1 = +g.dataset.x, y1 = +g.dataset.y, ns = 'http://www.w3.org/2000/svg', grp = document.createElementNS(ns, 'g');
+  grp.setAttribute('class', 'asp');
+  grp.innerHTML = asp.map((h, i) => { const [x2, y2] = houseXY(svg.dataset.style, h, L); return `<line class="asp-l" pathLength="1" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" style="animation-delay:${i * 110}ms"/><circle class="asp-d" cx="${x2}" cy="${y2}" r="3.2" style="animation-delay:${i * 110 + 520}ms"/>`; }).join('');
+  const first = svg.querySelector('[data-p]'); svg.insertBefore(grp, first);
+}
+async function pageKundli() {
+  const p = activeProfile();
+  if (K.io) { K.io.disconnect(); K.io = null; } K.c = null;
+  if (S.hlFor !== p.id) S.hl = null;
+  $('#app').innerHTML = header() + `<main id="k"><div class="h1">${tr('Birth chart', 'जन्म कुंडली')}</div><p class="sub">${hi() ? '' : 'Kundli · '}${esc(p.name)}</p><div class="card">${skel(44, '70%')}${skel(320, '100%', 0)}</div><div class="card">${skel(18, '40%')}${skel(52)}${skel(52, '100%', 0)}</div></main>`;
+  bindHeader();
+  let c; try { c = await chartOf(p); } catch (e) { $('#k').innerHTML = errState(e.message, 'retryK'); $('#retryK').onclick = () => render(); return; }
+  if (S.tab !== 'kundli') return;
+  K.c = c;
+  const cur = c.dasha.current, tz = c.timezone, ab = hi() ? AB_HI : AB;
+  const mdLabel = l => tr(`${plName(l)} period (Mahadasha)`, `${plName(l)} महादशा`);
+  $('#k').innerHTML = `
+    <div class="h1">${tr('Birth chart', 'जन्म कुंडली')}</div>
+    <p class="sub">${hi() ? '' : 'Kundli · '}${esc(p.name)} · ${fmtDate(p.date)}, ${fmtTime(p.time)}, ${esc(p.place.name.split(',')[0])}</p>
+    ${!c.time_known ? `<div class="notice" style="margin-bottom:14px">${I.info()}<div>${tr('Birth time unknown, so this is the Moon chart (Chandra kundli): houses are counted from the Moon.', 'जन्म समय अज्ञात: यह चंद्र कुंडली है, भाव चंद्रमा से गिने गए हैं।')}</div></div>` : ''}
+    <section class="card" id="chartCard">
+      <div class="seg full" id="div" role="group" aria-label="${tr('Chart', 'कुंडली')}"><button data-v="d1" aria-pressed="${S.div === 'd1'}">${tr('Birth chart', 'लग्न कुंडली')} · D1</button><button data-v="d9" aria-pressed="${S.div === 'd9'}">${tr('Navamsa', 'नवांश')} · D9</button></div>
+      <div class="chartwrap" id="chartsvg"></div>
+      <div class="info" id="info" aria-live="polite"></div>
+      <div class="legend" id="legend"></div>
+      <div class="setrow" style="border-top:1px solid var(--line);margin-top:12px"><span class="small muted">${tr('Chart style', 'कुंडली शैली')}</span><div class="seg" id="sty" role="group" aria-label="${tr('Chart style', 'कुंडली शैली')}"><button data-v="north" aria-pressed="${S.style === 'north'}">${tr('North Indian', 'उत्तर भारतीय')}</button><button data-v="south" aria-pressed="${S.style === 'south'}">${tr('South Indian', 'दक्षिण भारतीय')}</button></div></div></section>
+    <section class="card"><div class="sec"><h3>${tr('Planets', 'ग्रह')}</h3><span class="sk">Graha · ${tr('tap to see it on the chart', 'कुंडली में देखने के लिए टैप करें')}</span></div><ul class="plist2" id="plist2">
+      ${Object.entries(c.planets).map(([n, r]) => `<li id="pr-${n}"><button ${hlAttr(planetHL(c, n))}><span class="ab">${ab[n]}</span><span class="nm"><b>${plName(n)}</b>${r.retrograde && !['Rahu', 'Ketu'].includes(n) ? ' <span class="muted">℞</span>' : ''}<small>${signName(r.sign)} ${r.degree_dms} · ${esc(r.nakshatra)} ${r.pada}</small></span><span class="h">${tr('House', 'भाव')} ${r.house}<br>${dignTag(r.dignity)}</span></button></li>`).join('')}</ul></section>
+    <section class="card" id="houseSec"><div class="sec"><h3>${tr('What each house means', 'हर भाव का अर्थ')}</h3><span class="sk">Bhava</span></div><div class="hgrid">
+      ${Array.from({length: 12}, (_, i) => i + 1).map(h => { const occ = c.houses[h - 1].occupants || []; return `<button class="hm" id="hm-${h}" ${hlAttr(houseHL(c, h))}><b>${tr('House', 'भाव')} ${h} · ${signName(c.houses[h - 1].sign)}</b><span>${hMean(h)}</span>${occ.length ? `<small>${occ.map(x => ab[x]).join(' ')}</small>` : ''}</button>`; }).join('')}</div></section>
+    <section class="card" id="dashaSec"><div class="sec"><h3>${tr('Life periods', 'जीवन की दशाएँ')}</h3><span class="sk">Vimshottari Dasha</span></div>
+      ${cur.mahadasha ? `<div class="cur" ${hlAttr(dashaHL(c, cur.mahadasha.lord, cur.antardasha.lord, tr(`Now: ${plName(cur.mahadasha.lord)} › ${plName(cur.antardasha.lord)}`, `अभी: ${plName(cur.mahadasha.lord)} › ${plName(cur.antardasha.lord)}`)))}><div class="big">${plName(cur.mahadasha.lord)} › ${plName(cur.antardasha.lord)} › ${plName(cur.pratyantardasha.lord)}</div>
+        <p class="small muted" style="margin:2px 0 10px">${tr('Main period › sub-period › short period', 'महादशा › अंतर्दशा › प्रत्यंतर')}. ${tr('Next sub-period', 'अगली अंतर्दशा')}: ${plName(cur.next_antardasha.lord)}, ${fmtDate(cur.next_antardasha.start)}</p>
+        <div class="bar"><i style="width:${pct(cur.mahadasha)}%"></i></div></div>` : ''}
+      <ul class="dasha">${c.dasha.mahadashas.map(m => { const now = cur.mahadasha && m.start === cur.mahadasha.start; return `<li><details ${now ? 'open' : ''}><summary ${hlAttr(dashaHL(c, m.lord, null, mdLabel(m.lord)))}><span>${plName(m.lord)}</span>${now ? `<span class="tag warn">${tr('now', 'अभी')}</span>` : ''}<span class="small muted" style="margin-left:auto">${monYr(m.start)} – ${monYr(m.end)}</span></summary>
+        <table>${m.antardashas.map(a => `<tr class="${cur.antardasha && a.start === cur.antardasha.start ? 'now' : ''}" ${hlAttr(dashaHL(c, m.lord, a.lord, `${plName(m.lord)} › ${plName(a.lord)} · ${fmtDate(a.start)} – ${fmtDate(a.end)}`))}><td>${plName(m.lord)} · ${plName(a.lord)}</td><td>${fmtDate(a.start)}</td><td>${fmtDate(a.end)}</td></tr>`).join('')}</table></details></li>`; }).join('')}</ul>
+      <p class="small muted" style="margin:8px 0 0">${tr('Balance at birth', 'जन्म के समय शेष')}: ${esc(c.dasha.balance_at_birth)}</p></section>
+    <section class="card"><div class="sec"><h3>${tr('Special combinations', 'विशेष योग')}</h3><span class="sk">Yoga</span></div>
+      ${c.yogas.filter(y => y.present !== false).length ? c.yogas.filter(y => y.present !== false).map(y => `<div class="item" ${hlAttr(hlFromText(c, y.basis, {t: y.name, m: cap(y.basis) + '.'}))}><div class="hd">${esc(y.name)} ${y.strength && !['normal', 'strong'].includes(y.strength) ? `<span class="tag">${esc(y.strength)}</span>` : ''}</div><p>${esc(cap(y.basis))}</p></div>`).join('') : `<p class="muted" style="margin:0">${tr('None of the classical yogas we check are formed. That is common and not a bad sign.', 'जाँचे गए शास्त्रीय योग नहीं बने। यह सामान्य है।')}</p>`}</section>
+    <section class="card"><div class="sec"><h3>${tr('Things to be aware of', 'ध्यान देने योग्य')}</h3><span class="sk">Dosha</span></div>
+      ${c.doshas.map(d => `<div class="item" ${hlAttr(doshaHL(c, d))}><div class="hd">${esc(d.name)} ${doshaTag(d)}</div><p>${esc(doshaLine(d))}</p></div>`).join('')}</section>
+    <section class="card"><div class="sec"><h3>${tr('Planets today', 'आज के ग्रह')}</h3><span class="sk">Gochar · ${tr('tap a row', 'पंक्ति पर टैप करें')}</span></div>
+      <table class="t"><thead><tr><th>${tr('Planet', 'ग्रह')}</th><th>${tr('Sign', 'राशि')}</th><th>${tr('House from Lagna', 'लग्न से भाव')}</th><th>${tr('from Moon', 'चंद्र से')}</th></tr></thead><tbody>
+      ${Object.entries(c.transits.planets).map(([n, r]) => `<tr ${hlAttr({p: [], h: [r.house_from_lagna], t: tr(`${plName(n)} today: ${signName(r.sign)}`, `आज ${plName(n)}: ${signName(r.sign)}`), m: tr(`Passing through your house ${r.house_from_lagna} (${HOUSE_MEAN[r.house_from_lagna][0].toLowerCase()}), ${r.house_from_moon}${ord(r.house_from_moon)} from your Moon.`, `आपके ${r.house_from_lagna}वें भाव (${HOUSE_MEAN[r.house_from_lagna][1]}) से गोचर, चंद्र से ${r.house_from_moon}वाँ।`)})}><td><b>${plName(n)}</b>${r.retrograde && !['Rahu', 'Ketu'].includes(n) ? ' <span class="muted">℞</span>' : ''}</td><td>${signName(r.sign)}</td><td>${r.house_from_lagna}</td><td>${r.house_from_moon}</td></tr>`).join('')}</tbody></table>
+      <p class="small muted" style="margin:10px 0 0">${esc(p.place.tz)} UTC${tz.offset_hours >= 0 ? '+' : ''}${fmtOff(tz.offset_hours)} (${esc(tz.source)}) · Lahiri ${c.ayanamsa.value.toFixed(3)}° · ${tr('whole-sign houses', 'पूर्ण राशि भाव')}</p></section>
+    <button class="btn block" id="askK">${I.ask(20)} ${tr('Ask about this chart', 'इस कुंडली के बारे में पूछें')}</button>
+    <div class="dock" id="dock"><button class="dock-chart" id="mini" aria-label="${tr('Back to the chart', 'कुंडली पर वापस')}"></button><div class="dock-t"><b id="dockT"></b><span id="dockM"></span></div></div>`;
+  $('#askK').onclick = () => go('ask');
+  const wrap = $('#chartsvg');
+  const draw = () => {
+    wrap.innerHTML = chartSVG(c, S.div, S.style);
+    $('#mini').innerHTML = chartSVG(c, S.div, S.style, true);
+    $('#legend').innerHTML = legend(c);
+    applyHL($('#chartsvg svg'), c, S.hl); applyHL($('#mini svg'), c, S.hl); renderInfo();
+  };
+  const swap = () => { if (RM()) return draw(); wrap.classList.add('swap'); setTimeout(() => { draw(); wrap.classList.remove('swap'); }, 150); };
+  draw();
+  const scrollToRow = id => { const el = id && $('#' + id); if (!el) return; el.scrollIntoView({behavior: RM() ? 'auto' : 'smooth', block: 'center'}); el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash'); };
+  // chart -> explanation
+  wrap.addEventListener('click', e => {
+    const g = e.target.closest('[data-p]'), h = e.target.closest('[data-h]');
+    if (g) { const o = planetHL(c, g.dataset.p); setHL(o, $('#' + o.row + ' button')); setTimeout(() => scrollToRow(o.row), RM() ? 0 : 900); }
+    else if (h) { const o = houseHL(c, +h.dataset.h); setHL(o, $('#' + o.row)); setTimeout(() => scrollToRow(o.row), RM() ? 0 : 900); }
+  });
+  // explanation -> chart
+  const fromDef = el => { const o = JSON.parse(el.dataset.hl); setHL(o, el); const d = $('#dock'); if (d && !d.classList.contains('on')) { /* chart visible: nothing else */ } };
+  $('#k').addEventListener('click', e => { const el = e.target.closest('[data-hl]'); if (el && !el.closest('#chartsvg')) fromDef(el); });
+  $('#k').addEventListener('keydown', e => { const el = e.target.closest('[data-hl]'); if (el && (e.key === 'Enter' || e.key === ' ') && el.tagName !== 'BUTTON' && el.tagName !== 'SUMMARY') { e.preventDefault(); fromDef(el); } });
+  $('#legend').addEventListener('click', e => { const b = e.target.closest('[data-hl]'); if (b) fromDef(b); });
+  $('#mini').onclick = () => $('#chartCard').scrollIntoView({behavior: RM() ? 'auto' : 'smooth', block: 'start'});
+  // mini dock while scrolling the explanations
+  const dock = $('#dock'), hdr = $('.top'); dock.style.top = (hdr ? hdr.getBoundingClientRect().height : 60) + 8 + 'px';
+  if ('IntersectionObserver' in window) { K.io = new IntersectionObserver(es => es.forEach(en => { const d = $('#dock'); if (d) d.classList.toggle('on', !en.isIntersecting && en.boundingClientRect.top < 0); }), {threshold: 0, rootMargin: '-120px 0px 0px 0px'}); K.io.observe(wrap); }
+  $$('#div button').forEach(b => b.onclick = () => { S.div = b.dataset.v; $$('#div button').forEach(x => x.setAttribute('aria-pressed', x === b)); swap(); });
+  $$('#sty button').forEach(b => b.onclick = () => { S.style = b.dataset.v; store.set('style', S.style); $$('#sty button').forEach(x => x.setAttribute('aria-pressed', x === b)); swap(); });
+  if (S.scrollTo) { const el = $('#' + S.scrollTo); S.scrollTo = null; if (el) el.scrollIntoView({block: 'start'}); }
+}
+const dignTag = d => {
+  const good = ['exalted', 'own sign', 'moolatrikona'].includes(d), weak = d === 'debilitated';
+  const label = hi() ? DIGN[d][1].split(',')[0] : ({'own sign': 'own sign', 'friendly sign': 'friendly', 'neutral sign': 'neutral', 'enemy sign': 'uneasy'}[d] || d);
+  return good ? `<span class="tag good">${esc(label)}</span>` : weak ? `<span class="tag warn">${esc(label)}</span>` : `<span>${esc(label)}</span>`;
+};
+function doshaTag(d) {
+  if (!d.present) return `<span class="tag good">${tr('Not present', 'नहीं')}</span>`;
+  if (d.name.startsWith('Sade')) return `<span class="tag warn">${tr('Active', 'चल रही')}${d.phase ? ' · ' + esc(d.phase.split(' (')[0]) : ''}</span>`;
+  if (d.level && (d.level.startsWith('mild') || d.level.startsWith('partial'))) return `<span class="tag warn">${esc(cap(d.level.split(' (')[0]))}</span>`;
+  return `<span class="tag warn">${tr('Present', 'है')}</span>`;
+}
+function doshaLine(d) {
+  if (d.name.startsWith('Manglik')) return (d.from.length ? 'Mars from ' + d.from.join(', ') : 'Mars is not in houses 1, 2, 4, 7, 8 or 12') + (d.mitigations.length ? '. Softened: ' + d.mitigations.join('; ') : '') + '.';
+  if (d.name.startsWith('Sade')) return `Saturn is in ${d.saturn_transit_sign}, ${d.saturn_house_from_moon}${ord(d.saturn_house_from_moon)} from your Moon` + (d.current_window ? `. Ends around ${monYr(d.current_window.end)}` : d.next_window ? `. Next: ${monYr(d.next_window.start)} – ${monYr(d.next_window.end)}` : '') + (d.small_panoti_dhaiya ? `. ${d.small_panoti_dhaiya}` : '') + '.';
+  return (d.basis || '').replace(/^./, x => x.toUpperCase()) + '.';
+}
+const cap = x => String(x || '').replace(/^./, c => c.toUpperCase());
+const pct = m => { const a = new Date(m.start), b = new Date(m.end), n = new Date(); return Math.max(0, Math.min(100, Math.round((n - a) / (b - a) * 100))); };
+const lagnaIdx = c => SIGNS.indexOf(S.div === 'd1' ? c.d1.lagna_sign : c.d9.lagna_sign);
+function legend(c) {
+  const ab = hi() ? AB_HI : AB;
+  return `<button ${hlAttr({p: [], h: [1], t: tr('Ascendant (Lagna)', 'लग्न'), m: tr(`Your rising sign, ${signName(c.d1.lagna_sign)}. It sets house 1, and every other house is counted from it.`, `आपका लग्न ${signName(c.d1.lagna_sign)}। यही पहला भाव है, बाकी भाव इसी से गिने जाते हैं।`)})}><b>${hi() ? 'लग्न' : 'Asc'}</b> ${tr('Ascendant', '')}</button>` +
+    Object.keys(ab).map(p => `<button ${hlAttr(planetHL(c, p))}><b>${ab[p]}</b> ${plName(p)}</button>`).join('') +
+    `<span><b>℞</b> ${tr('retrograde', 'वक्री')}</span><span class="note">${S.style === 'north' ? tr('Top diamond = house 1. Small numbers are signs (1 Aries … 12 Pisces); shaded box is your Lagna.', 'ऊपर का भाग = पहला भाव। छोटी संख्या = राशि (1 मेष … 12 मीन); हल्का रंग = लग्न।') : tr('Signs stay fixed in each box; shaded box is your Lagna.', 'हर खाने में राशि स्थिर है; हल्का रंग = लग्न।')}</span>`;
+}
+// chart geometry (320-unit square)
+const CW = 320, CH2 = 160, CQ = 80;
+const N_POLYS = [[[CH2, 0], [3 * CQ, CQ], [CH2, CH2], [CQ, CQ]], [[0, 0], [CH2, 0], [CQ, CQ]], [[0, 0], [CQ, CQ], [0, CH2]], [[0, CH2], [CQ, CQ], [CH2, CH2], [CQ, 3 * CQ]], [[0, CH2], [CQ, 3 * CQ], [0, CW]], [[0, CW], [CQ, 3 * CQ], [CH2, CW]], [[CH2, CW], [CQ, 3 * CQ], [CH2, CH2], [3 * CQ, 3 * CQ]], [[CH2, CW], [3 * CQ, 3 * CQ], [CW, CW]], [[CW, CW], [3 * CQ, 3 * CQ], [CW, CH2]], [[CW, CH2], [3 * CQ, 3 * CQ], [CH2, CH2], [3 * CQ, CQ]], [[CW, CH2], [3 * CQ, CQ], [CW, 0]], [[CW, 0], [3 * CQ, CQ], [CH2, 0]]];
+const N_CENTERS = [[CH2, CQ - 4], [CQ, CW / 12 + 3], [CW / 12 + 2, CQ], [CQ, CH2 - 4], [CW / 12 + 2, 3 * CQ], [CQ, 11 * CW / 12 - 3], [CH2, 3 * CQ - 4], [3 * CQ, 11 * CW / 12 - 3], [11 * CW / 12 - 2, 3 * CQ], [3 * CQ, CH2 - 4], [11 * CW / 12 - 2, CQ], [3 * CQ, CW / 12 + 3]];
+const N_NUM = [[CH2, CH2 - 16], [CQ, CQ - 13], [CQ - 14, CQ + 1], [CH2 - 16, CH2 + 1], [CQ - 14, 3 * CQ + 1], [CQ, 3 * CQ + 15], [CH2, CH2 + 18], [3 * CQ, 3 * CQ + 15], [3 * CQ + 14, 3 * CQ + 1], [CH2 + 16, CH2 + 1], [3 * CQ + 14, CQ + 1], [3 * CQ, CQ - 13]];
+const S_POS = {11: [0, 0], 0: [0, 1], 1: [0, 2], 2: [0, 3], 3: [1, 3], 4: [2, 3], 5: [3, 3], 6: [3, 2], 7: [3, 1], 8: [3, 0], 9: [2, 0], 10: [1, 0]};
+function houseXY(style, h, L) {
+  if (style === 'south') { const [r, col] = S_POS[(L + h - 1) % 12]; return [col * CQ + CQ / 2, r * CQ + CQ / 2 + 6]; }
+  const [x, y] = N_CENTERS[h - 1]; return [x, y + 6];
+}
+function chartSVG(c, div, style, mini = false) {
+  const L = SIGNS.indexOf(c[div].lagna_sign), signs = c[div].signs, ab = hi() ? AB_HI : AB;
+  const occ = s => signs[SIGNS[s]] || [];
+  const ascLbl = hi() ? 'लग्न' : 'Asc';
+  let k = 0;
+  const pl = (p, x, y, fs = 13) => {
+    const r = c.planets[p], deg = div === 'd1' && !mini ? `<tspan class="deg" dx="1">${Math.floor(r.degree)}°</tspan>` : '', rx = r.retrograde && !['Rahu', 'Ketu'].includes(p) && !mini ? '<tspan class="deg">℞</tspan>' : '';
+    const w = mini ? 38 : (deg ? 40 : 28) + (rx ? 6 : 0);
+    return `<g class="ch-g" data-p="${p}" data-x="${x}" data-y="${y - 4.5}" style="--i:${k++}" role="button" aria-label="${plName(p)}"><rect class="ch-hit" x="${x - 22}" y="${y - 15}" width="44" height="21"/><rect class="ch-ring" x="${x - w / 2}" y="${y - (mini ? 20 : 14)}" width="${w}" height="${mini ? 26 : 19}" rx="${mini ? 13 : 9.5}"/><text class="ch-pl" x="${x}" y="${y}" text-anchor="middle" style="font-size:${mini ? 24 : fs}px">${ab[p]}${deg}${rx}</text></g>`;
+  };
+  const svgOpen = lbl => `<svg viewBox="-2 -2 ${CW + 4} ${CW + 4}" role="img" aria-label="${lbl}" data-div="${div}" data-style="${style}" class="${mini ? 'mini' : ''}">`;
+  if (style === 'south') {
+    const q = CQ; let g = `<rect class="ch-bg" x="0" y="0" width="${CW}" height="${CW}"/><rect class="ch-center" x="${q}" y="${q}" width="${2 * q}" height="${2 * q}"/>`, t = '';
+    for (let s = 0; s < 12; s++) {
+      const [r, col] = S_POS[s], x = col * q, y = r * q, h = (s - L + 12) % 12 + 1;
+      g += `<rect data-h="${h}" class="ch-house ${s === L ? 'lagna' : ''}" x="${x}" y="${y}" width="${q}" height="${q}"/>`;
+      if (!mini) t += `<text class="ch-num" x="${x + 6}" y="${y + 15}" style="pointer-events:none">${hi() ? SIGNS_HI[s] : SIGNS[s].slice(0, 3)}</text>`;
+      if (s === L && !mini) t += `<text class="ch-asc" x="${x + q - 6}" y="${y + 15}" text-anchor="end" style="pointer-events:none">${ascLbl}</text>`;
+      occ(s).forEach((p, i) => { t += pl(p, x + (i % 2 ? q * .72 : q * .3), y + (mini ? 34 : 38) + Math.floor(i / 2) * (mini ? 26 : 19), 13); });
+    }
+    g += `<rect class="ch-line" x="0" y="0" width="${CW}" height="${CW}"/><rect class="ch-line" x="${q}" y="${q}" width="${2 * q}" height="${2 * q}"/>`;
+    for (let i = 1; i < 4; i++) g += `<line class="ch-line" x1="${i * q}" y1="0" x2="${i * q}" y2="${q}"/><line class="ch-line" x1="${i * q}" y1="${3 * q}" x2="${i * q}" y2="${CW}"/><line class="ch-line" x1="0" y1="${i * q}" x2="${q}" y2="${i * q}"/><line class="ch-line" x1="${3 * q}" y1="${i * q}" x2="${CW}" y2="${i * q}"/>`;
+    g += t + (mini ? '' : `<text class="ch-title" x="${CW / 2}" y="${CW / 2 + 2}" text-anchor="middle">${div === 'd1' ? tr('Rasi', 'राशि') : tr('Navamsa', 'नवांश')}</text><text class="ch-num" x="${CW / 2}" y="${CW / 2 + 22}" text-anchor="middle">${esc(c.profile.name)}</text>`);
+    return svgOpen(`South Indian ${div} chart`) + g + '</svg>';
+  }
+  let g = `<rect class="ch-bg" x="0" y="0" width="${CW}" height="${CW}"/>`;
+  N_POLYS.forEach((pts, i) => { g += `<polygon data-h="${i + 1}" class="ch-house ${i === 0 ? 'lagna' : ''}" points="${pts.map(p => p.join(',')).join(' ')}"><title>${tr('House', 'भाव')} ${i + 1}</title></polygon>`; });
+  g += `<rect class="ch-line" x="0" y="0" width="${CW}" height="${CW}"/><line class="ch-line" x1="0" y1="0" x2="${CW}" y2="${CW}"/><line class="ch-line" x1="${CW}" y1="0" x2="0" y2="${CW}"/><polygon class="ch-line" points="${CH2},0 ${CW},${CH2} ${CH2},${CW} 0,${CH2}"/>`;
+  for (let i = 0; i < 12; i++) {
+    const sg = (L + i) % 12, [nx, ny] = N_NUM[i], [cx, cy] = N_CENTERS[i];
+    if (!mini) g += `<text class="ch-num" x="${nx}" y="${ny + 4}" text-anchor="middle" style="pointer-events:none">${sg + 1}</text>`;
+    const ps = occ(sg).slice(); if (i === 0 && !mini) ps.unshift('ASC');
+    const diamond = i % 3 === 0, side = [2, 4, 8, 10].includes(i);
+    const perRow = diamond ? 2 : side ? 1 : (ps.length > 2 ? 2 : 1), lh = mini ? 26 : side && ps.length > 3 ? 15 : 17;
+    const rows = Math.ceil(ps.length / perRow), y0 = cy - (rows - 1) * lh / 2;
+    ps.forEach((p, j) => {
+      const r = Math.floor(j / perRow), ci = j % perRow, n = Math.min(perRow, ps.length - r * perRow);
+      const x = cx + (n === 2 ? (ci ? 21 : -21) : 0), y = y0 + r * lh + 5;
+      g += p === 'ASC' ? `<text class="ch-asc" x="${x}" y="${y}" text-anchor="middle" style="pointer-events:none">${ascLbl}</text>` : pl(p, x, y, side && ps.length > 3 ? 12 : 13);
+    });
+  }
+  return svgOpen(`North Indian ${div} chart`) + g + '</svg>';
+}
+// ------------------------------------------------------------------ motion helpers
+(function revealOnScroll() {
+  if (!('IntersectionObserver' in window) || !('MutationObserver' in window)) return;
+  const io = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } }), {rootMargin: '0px 0px -6% 0px'});
+  let q = 0;
+  const scan = () => { q = 0; if (RM()) return; $$('main .card:not(.reveal)').forEach(el => { el.classList.add('reveal'); io.observe(el); }); };
+  new MutationObserver(() => { if (!q) q = requestAnimationFrame(scan); }).observe(document.getElementById('root'), {childList: true, subtree: true});
+})();
+function countUp(el, ring, to) {
+  if (!el || RM()) return;
+  const t0 = performance.now(), d = 1200, dec = to % 1 ? 1 : 0;
+  el.textContent = (0).toFixed(dec); ring.style.setProperty('--p', 0);
+  const step = t => { const k = Math.min(1, (t - t0) / d), e = 1 - Math.pow(1 - k, 3), v = to * e; el.textContent = v.toFixed(dec); ring.style.setProperty('--p', v / 36 * 100); if (k < 1) requestAnimationFrame(step); };
+  requestAnimationFrame(step);
+}
+// ------------------------------------------------------------------ chat citations
+const PL_HI_EN = {'सूर्य': 'Sun', 'चंद्रमा': 'Moon', 'चंद्र': 'Moon', 'चन्द्र': 'Moon', 'मंगल': 'Mars', 'बुध': 'Mercury', 'गुरु': 'Jupiter', 'बृहस्पति': 'Jupiter', 'शुक्र': 'Venus', 'शनि': 'Saturn', 'राहु': 'Rahu', 'केतु': 'Ketu'};
+const SIGN_HI_EN = Object.fromEntries(SIGNS_HI.map((h, i) => [h, SIGNS[i]]));
+const CITE_EN = new RegExp(`\\b(Sun|Moon|Mars|Mercury|Jupiter|Venus|Saturn|Rahu|Ketu)((?:\\s+(?:is|placed|posited|sits|sitting|located|currently))*)\\s+(?:in|through|transiting|transits)\\s+(?:the\\s+|your\\s+|its\\s+)?(?:(\\d{1,2})(?:st|nd|rd|th)\\s+house|house\\s+(\\d{1,2})|(${SIGNS.join('|')}))\\b`, 'g');
+const CITE_HI = new RegExp(`(${Object.keys(PL_HI_EN).join('|')})\\s+(?:(?:आपके|आपकी|की|का|के|से)\\s+){0,2}(?:(\\d{1,2})\\s*(?:वें|वाँ|वां|वे)?\\s*भाव|(${SIGNS_HI.join('|')})\\s*(?:राशि)?\\s*में)`, 'g');
+function cite(html) {
+  return html.replace(CITE_EN, (m, p, _w, h1, h2, sg) => `<span class="cite" role="button" tabindex="0" data-cp="${p}" data-ch="${h1 || h2 || ''}" data-cs="${sg || ''}">${m}</span>`)
+    .replace(CITE_HI, (m, p, h, sg) => `<span class="cite" role="button" tabindex="0" data-cp="${PL_HI_EN[p]}" data-ch="${h || ''}" data-cs="${sg ? SIGN_HI_EN[sg] : ''}">${m}</span>`);
+}
+async function openCite(p, h, sg, label) {
+  const prof = activeProfile(); let c;
+  try { c = await chartOf(prof); } catch (e) { return toast(e.message); }
+  const r = c.planets[p], L = SIGNS.indexOf(c.d1.lagna_sign), mh = c.planets.Moon.house, fromMoon = (r.house - mh + 12) % 12 + 1, tr0 = c.transits.planets[p];
+  h = +h || (sg ? (SIGNS.indexOf(sg) - L + 12) % 12 + 1 : 0);
+  let note = '';
+  if (h && h !== r.house) note = fromMoon === h ? tr(' The answer is counting houses from your Moon.', ' उत्तर में भाव चंद्रमा से गिने गए हैं।') : tr0 && tr0.house_from_lagna === h ? tr(" The answer refers to today's transit (gochar).", ' उत्तर आज के गोचर की बात कर रहा है।') : tr0 && tr0.house_from_moon === h ? tr(" The answer refers to today's transit, counted from your Moon.", ' उत्तर चंद्र से गिने आज के गोचर की बात कर रहा है।') : '';
+  const o = {p: [p], h: [...new Set([r.house].concat(h ? [h] : []))], asp: p, t: label, m: tr(`In ${prof.name}'s birth chart: ${plName(p)} is in ${signName(r.sign)}, house ${r.house}.`, `${prof.name} की कुंडली में: ${plName(p)} ${signName(r.sign)} में, ${r.house}वें भाव में।`) + note};
+  const sh = $('#sheet');
+  sh.innerHTML = `<div class="sheet cite-sheet" role="dialog" aria-label="${esc(label)}"><div class="spread"><h4>${tr('From the answer', 'उत्तर से')}</h4><button class="iconbtn" id="citeX" aria-label="${tr('Close', 'बंद करें')}">${I.x()}</button></div>
+    <div class="chartwrap">${chartSVG(c, 'd1', S.style)}</div><div class="info"><b class="t">${esc(label)}</b><span class="m">${esc(o.m)}</span></div>
+    <button class="btn sec2 block" style="margin-top:10px" id="citeOpen">${I.chart(20)} ${tr('Open in full chart', 'पूरी कुंडली में खोलें')}</button></div>`;
+  sh.hidden = false; sh.onclick = e => { if (e.target === sh) closeSheet(); };
+  document.addEventListener('keydown', escClose);
+  applyHL(sh.querySelector('.chartwrap svg'), c, o);
+  $('#citeX').onclick = closeSheet;
+  $('#citeOpen').onclick = () => { S.hl = {...o, t: plName(p) + ' · ' + label}; S.hlFor = prof.id; S.div = 'd1'; go('kundli'); };
+}
+// ------------------------------------------------------------------ chat
+const md = s => {
+  const lines = esc(s).split('\n'); let out = '', inL = false;
+  const inline = x => x.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/(^|[^*])\*([^*\n]+)\*/g, '$1<em>$2</em>').replace(/_([^_\n]+)_/g, '<em>$1</em>');
+  for (const l of lines) {
+    const m = l.match(/^\s*(?:[-*•]|\d+\.)\s+(.*)/);
+    if (m) { if (!inL) { out += '<ul>'; inL = true; } out += `<li>${inline(m[1])}</li>`; continue; }
+    if (inL) { out += '</ul>'; inL = false; }
+    if (l.trim()) out += `<p>${inline(l.replace(/^#+\s*/, ''))}</p>`;
+  }
+  return out + (inL ? '</ul>' : '');
+};
+const chatKey = () => 'chat-' + activeProfile().id;
+async function refreshWallet() { try { S.wallet = await api('/api/wallet?device=' + DEVICE); } catch {} }
+const creditsLabel = () => { const w = S.wallet; if (!w) return ''; return w.free_left ? tr(`${w.free_left} free left`, `${w.free_left} मुफ़्त शेष`) : tr(`${w.credits} credits`, `${w.credits} क्रेडिट`); };
+const ERR = {
+  ai_not_configured: () => [tr('The astrologer is not switched on yet', 'AI ज्योतिषी अभी चालू नहीं है'), tr('Answers will start once the app owner adds an AI key on the server. Your chart, life periods and matching already work.', 'सर्वर पर AI कुंजी जुड़ते ही उत्तर मिलने लगेंगे। कुंडली, दशा और मिलान अभी भी काम करते हैं।')],
+  insufficient_credits: () => [tr("You're out of free questions", 'मुफ़्त प्रश्न समाप्त'), tr('Add credits to keep asking. Your question was not charged.', 'प्रश्न पूछते रहने के लिए क्रेडिट जोड़ें। इस प्रश्न का शुल्क नहीं लगा।')],
+  network: () => [tr("Couldn't reach the astrologer", 'ज्योतिषी से संपर्क नहीं हो सका'), tr('Check your connection and try again. You were not charged.', 'कनेक्शन जाँचें और फिर कोशिश करें। कोई शुल्क नहीं लगा।')],
+  llm_error: () => [tr('Something went wrong', 'कुछ गड़बड़ हुई'), tr('The answer could not be completed. You were not charged; please try again.', 'उत्तर पूरा नहीं हो सका। शुल्क नहीं लगा; फिर कोशिश करें।')],
+};
+const errBubble = code => { const [t, m] = (ERR[code] || ERR.llm_error)(); return `<div class="bub err"><b>${t}</b>${m}${code === 'insufficient_credits' ? `<div><button class="btn sm" style="margin-top:10px" data-go="me">${tr('Add credits', 'क्रेडिट जोड़ें')}</button></div>` : ''}</div>`; };
+const bubble = m => m.role === 'user' ? `<div class="bub me">${esc(m.content)}</div>` : m.role === 'error' ? errBubble(m.code) : `<div class="bub ai">${cite(md(m.content))}</div>`;
+function pageAsk() {
+  const p = activeProfile(), hist = store.get(chatKey(), []), on = !!(S.status && S.status.ai_configured);
+  $('#app').innerHTML = `<div class="chat">
+    <header class="top"><div class="bot ${on ? 'on' : ''}"><span class="dev">ॐ</span><i></i></div>
+      <div class="ttl"><b>${tr('Acharya', 'आचार्य')} <span class="muted" style="font-weight:500">· AI</span></b><small>${on ? tr('Answers from your chart', 'आपकी कुंडली से उत्तर') : tr('Not switched on yet', 'अभी चालू नहीं')}</small></div>
+      ${S.wallet ? `<button class="iconbtn credits" id="credBtn" aria-label="${tr('Credits', 'क्रेडिट')}">${creditsLabel()}</button>` : ''}
+      <button class="iconbtn langbtn" id="langBtn">${hi() ? 'English' : 'हिंदी'}</button></header>
+    <button class="asking" id="whoBtn" aria-haspopup="dialog">${tr('Reading the chart of', 'इनकी कुंडली पढ़ रहे हैं:')} <span class="avatar sm">${initial(p.name)}</span><b style="color:var(--ink)">${esc(p.name)}</b>${I.chev()}</button>
+    <div class="msgs" id="msgs" aria-live="polite"></div>
+    <div class="composer">${hist.length ? `<div class="chips scroll" id="qchips">${chipsHtml()}</div>` : ''}
+      <form id="cf"><textarea id="ci" rows="1" aria-label="${tr('Your question', 'आपका प्रश्न')}" placeholder="${tr('Ask about career, marriage, health…', 'करियर, विवाह, स्वास्थ्य के बारे में पूछें…')}"></textarea><button class="send" aria-label="${tr('Send', 'भेजें')}">${I.send()}</button></form>
+      <div class="quota" id="quota"></div></div></div>`;
+  bindHeader();
+  const c = $('#credBtn'); if (c) c.onclick = () => go('me');
+  const box = $('#msgs');
+  box.innerHTML = hist.length ? hist.map(bubble).join('') : `<div class="welcome"><div class="bot ${on ? 'on' : ''}"><span class="dev">ॐ</span><i></i></div>
+      <h4>${tr(`Namaste, ${esc(p.name)}`, `नमस्ते, ${esc(p.name)}`)}</h4>
+      <p>${tr(`Ask anything. I read your birth chart (${fmtDate(p.date)}, ${esc(p.place.name.split(',')[0])}) and today's planets, and tell you which placements I used.`, `कुछ भी पूछें। मैं आपकी कुंडली (${fmtDate(p.date)}, ${esc(p.place.name.split(',')[0])}) और आज के ग्रह पढ़कर बताता हूँ कि किन योगों के आधार पर उत्तर दिया।`)}</p>
+      ${on ? '' : `<div class="notice" style="text-align:left;margin-bottom:14px">${I.info()}<div><b>${ERR.ai_not_configured()[0]}.</b> ${ERR.ai_not_configured()[1]}</div></div>`}
+      <div class="qgrid">${chipsHtml('q')}</div></div>`;
+  box.scrollTop = box.scrollHeight;
+  updateQuota();
+  const ci = $('#ci');
+  ci.oninput = () => { ci.style.height = 'auto'; ci.style.height = Math.min(120, ci.scrollHeight) + 'px'; };
+  ci.onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); $('#cf').requestSubmit(); } };
+  $('#cf').onsubmit = e => { e.preventDefault(); const q = ci.value.trim(); if (q) { ci.value = ''; ci.style.height = 'auto'; ask(q); } };
+  $$('.chat [data-q]').forEach(b => b.onclick = () => ask(b.dataset.q));
+  bindGo();
+  box.addEventListener('click', e => { const b = e.target.closest('.cite'); if (b) openCite(b.dataset.cp, b.dataset.ch, b.dataset.cs, b.textContent); });
+  box.addEventListener('keydown', e => { const b = e.target.closest('.cite'); if (b && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); openCite(b.dataset.cp, b.dataset.ch, b.dataset.cs, b.textContent); } });
+  if (S.pendingQ) { const q = S.pendingQ; S.pendingQ = null; ask(q); }
+}
+const bindGo = () => $$('[data-go]').forEach(b => b.onclick = () => go(b.dataset.go));
+function updateQuota() {
+  const q = $('#quota'), w = S.wallet; if (!q || !w) return;
+  q.textContent = w.free_left ? tr(`${w.free_left} of ${w.free_total} free questions left`, `${w.free_total} में से ${w.free_left} मुफ़्त प्रश्न शेष`) : tr(`${w.question_cost} credits per question · ${w.credits} left`, `प्रति प्रश्न ${w.question_cost} क्रेडिट · ${w.credits} शेष`);
+  const c = $('#credBtn'); if (c) c.textContent = creditsLabel();
+}
+async function ask(q) {
+  if (S.streaming) return;
+  const p = activeProfile(), key = chatKey(), hist = store.get(key, []);
+  const box = $('#msgs');
+  const w = box.querySelector('.welcome'); if (w) w.remove();
+  box.insertAdjacentHTML('beforeend', bubble({role: 'user', content: q}));
+  const aiEl = document.createElement('div'); aiEl.className = 'bub ai'; aiEl.innerHTML = `<span class="typing" aria-label="${tr('Reading your chart', 'कुंडली पढ़ रहे हैं')}"><i></i><i></i><i></i></span>`;
+  box.appendChild(aiEl); box.scrollTop = box.scrollHeight;
+  S.streaming = true;
+  const msgs = hist.filter(m => m.role !== 'error').slice(-8).map(m => ({role: m.role, content: m.content})).concat([{role: 'user', content: q}]);
+  let text = '', err = null;
+  try {
+    const r = await fetch(API + '/api/chat', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({device: DEVICE, profile: profileBody(p), messages: msgs, lang: S.lang})});
+    if (!r.ok || !r.body) throw new Error('HTTP ' + r.status);
+    const reader = r.body.getReader(), dec = new TextDecoder(); let buf = '';
+    for (;;) {
+      const {value, done} = await reader.read(); if (done) break;
+      buf += dec.decode(value, {stream: true});
+      let i; while ((i = buf.indexOf('\n\n')) >= 0) {
+        const line = buf.slice(0, i).trim(); buf = buf.slice(i + 2);
+        if (!line.startsWith('data:')) continue;
+        const ev = JSON.parse(line.slice(5));
+        if (ev.type === 'token') { text += ev.text; aiEl.innerHTML = cite(md(text)); box.scrollTop = box.scrollHeight; }
+        else if (ev.type === 'done') { if (ev.wallet) S.wallet = ev.wallet; }
+        else if (ev.type === 'error') { err = ev; if (ev.wallet) S.wallet = ev.wallet; }
+      }
+    }
+  } catch (e) { err = {code: 'network'}; }
+  S.streaming = false;
+  if (err) {
+    aiEl.outerHTML = errBubble(err.code);
+    hist.push({role: 'user', content: q}, {role: 'error', code: err.code || 'llm_error', content: ''});
+    bindGo();
+  } else hist.push({role: 'user', content: q}, {role: 'assistant', content: text});
+  store.set(key, hist.slice(-40));
+  if (!$('#qchips')) { $('.composer').insertAdjacentHTML('afterbegin', `<div class="chips scroll" id="qchips">${chipsHtml()}</div>`); $$('#qchips [data-q]').forEach(b => b.onclick = () => ask(b.dataset.q)); }
+  box.scrollTop = box.scrollHeight;
+  refreshWallet().then(updateQuota);
+}
+// ----------------------------------------------------------------- match
+const KOOTA = {
+  Varna: ['Temperament', 'स्वभाव'], Vashya: ['Mutual attraction', 'आकर्षण'], Tara: ['Destiny & wellbeing', 'भाग्य'], Yoni: ['Intimacy', 'शारीरिक अनुकूलता'],
+  'Graha Maitri': ['Friendship of minds', 'मानसिक मित्रता'], Gana: ['Nature & behaviour', 'स्वभाव (गण)'], Bhakoot: ['Love & family growth', 'प्रेम और परिवार'], Nadi: ['Health & genes', 'स्वास्थ्य और संतान'],
+};
+function pageMatch() {
+  const M = S.match;
+  $('#app').innerHTML = header() + `<main id="m"><div class="h1">${tr('Compatibility', 'कुंडली मिलान')}</div><p class="sub">${tr('Kundli Milan · 36-point Ashtakoota', 'अष्टकूट · 36 गुण')}</p></main>`;
+  bindHeader();
+  if (S.profiles.length < 2) {
+    $('#m').innerHTML += `<div class="card"><div class="state"><div class="ic">${I.match()}</div><h4>${tr('Add a second person', 'दूसरा व्यक्ति जोड़ें')}</h4><p>${tr('Matching compares two birth charts. Add your partner or a prospective match to begin.', 'मिलान दो कुंडलियों की तुलना करता है। शुरू करने के लिए दूसरे व्यक्ति को जोड़ें।')}</p><button class="btn" id="addM">${I.plus()} ${tr('Add a person', 'व्यक्ति जोड़ें')}</button></div></div>`;
+    $('#addM').onclick = () => startOnb(); return;
+  }
+  if (!M.girl || !S.profiles.find(p => p.id === M.girl)) M.girl = (S.profiles.find(p => p.gender === 'Female') || S.profiles[0]).id;
+  if (!M.boy || !S.profiles.find(p => p.id === M.boy)) M.boy = (S.profiles.find(p => p.gender === 'Male' && p.id !== M.girl) || S.profiles.find(p => p.id !== M.girl)).id;
+  const pick = (k, label) => { const p = S.profiles.find(x => x.id === M[k]); return `<label class="pick"><small>${label}</small><span class="avatar lg">${initial(p.name)}</span><b>${esc(p.name)}</b><span class="d">${fmtDate(p.date)}</span>
+    <select id="m-${k}" aria-label="${label}">${S.profiles.map(x => `<option value="${x.id}" ${x.id === p.id ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select><span class="chg">${tr('Change', 'बदलें')} ${I.chev(14)}</span></label>`; };
+  $('#m').innerHTML += `<div class="card"><div class="pair">${pick('girl', tr('Bride', 'वधू'))}<span class="amp">${I.match(22)}</span>${pick('boy', tr('Groom', 'वर'))}</div>
+      <button class="btn block" style="margin-top:14px" id="doM">${tr('Check compatibility', 'मिलान देखें')}</button></div><div id="mres"></div>`;
+  ['girl', 'boy'].forEach(k => $('#m-' + k).onchange = e => { M[k] = e.target.value; M.result = null; pageMatch(); });
+  $('#doM').onclick = runMatch;
+  if (M.result) showMatch();
+}
+async function runMatch() {
+  const M = S.match;
+  if (M.girl === M.boy) return toast(tr('Pick two different people', 'दो अलग व्यक्ति चुनें'));
+  $('#mres').innerHTML = `<div class="card"><div class="score">${skel(104, '104px', 0)}<div style="flex:1">${skel(20, '80%')}${skel(14, '50%')}${skel(14, '90%', 0)}</div></div></div>`;
+  const g = S.profiles.find(p => p.id === M.girl), b = S.profiles.find(p => p.id === M.boy);
+  try { M.result = await api('/api/match', {girl: profileBody(g), boy: profileBody(b)}); showMatch(); $('#mres').scrollIntoView({behavior: 'smooth', block: 'start'}); }
+  catch (e) { $('#mres').innerHTML = errState(e.message, 'retryM'); $('#retryM').onclick = runMatch; }
+}
+function showMatch() {
+  const r = S.match.result, good = r.total >= 25, ok = r.total >= 18;
+  const lvl = good ? tr('Good match', 'अच्छा मिलान') : ok ? tr('Average match', 'सामान्य मिलान') : tr('Below the usual threshold', 'सामान्य सीमा से कम');
+  $('#mres').innerHTML = `<div class="card"><div class="score"><div class="ring" style="--p:${r.total / 36 * 100}"><div><span><b id="mscore">${r.total}</b><br><small>${tr('of 36', '36 में')}</small></span></div></div>
+      <div style="min-width:0"><b style="font-size:17px">${esc(r.girl_name)} & ${esc(r.boy_name)}</b><div style="margin:5px 0"><span class="tag ${good ? 'good' : 'warn'}">${lvl}</span></div><div class="small muted">${tr('18+ is traditionally acceptable; 25+ is good.', '18+ परंपरागत रूप से स्वीकार्य; 25+ अच्छा।')}</div></div></div>
+      <div class="facts"><div><b>${esc(r.girl_name)}</b>${signName(r.girl_moon.sign)} ${tr('Moon', 'राशि')} · ${esc(r.girl_moon.nakshatra)}</div><div><b>${esc(r.boy_name)}</b>${signName(r.boy_moon.sign)} ${tr('Moon', 'राशि')} · ${esc(r.boy_moon.nakshatra)}</div></div></div>
+    <div class="card"><div class="sec"><h3>${tr('How the 36 points add up', '36 गुण कैसे बने')}</h3><span class="sk">8 Koota</span></div>
+      ${r.kootas.map(k => `<div class="koota"><div class="n"><b>${tr(KOOTA[k.name] ? KOOTA[k.name][0] : k.name, KOOTA[k.name] ? KOOTA[k.name][1] : k.name)}</b><small>${esc(k.name)} · ${esc(k.girl)} / ${esc(k.boy)}</small></div><div class="s">${k.score}<span>/${k.max}</span></div><div class="bar"><i style="width:${k.score / k.max * 100}%"></i></div></div>`).join('')}</div>
+    <div class="card"><div class="sec"><h3>${tr('Things to be aware of', 'ध्यान देने योग्य')}</h3><span class="sk">Dosha</span></div>
+      <div class="item"><div class="hd">${tr('Mars factor', 'मंगल दोष')} <span class="muted" style="font-weight:500;font-size:13.5px">Manglik</span></div><p>${tr('Bride', 'वधू')}: ${esc(r.manglik.girl)} · ${tr('Groom', 'वर')}: ${esc(r.manglik.boy)}. ${esc(cap(r.manglik.verdict))}</p></div>
+      ${r.doshas.map(d => `<div class="item"><div class="hd">${esc(d.name)} <span class="tag ${d.exceptions.length ? 'good' : 'warn'}">${d.exceptions.length ? tr('Cancelled', 'निरस्त') : tr('Present', 'है')}</span></div><p>${d.exceptions.length ? tr('Cancelled because ', 'निरस्त: ') + esc(d.exceptions.join('; ')) : tr('No classical exception applies.', 'कोई शास्त्रीय अपवाद लागू नहीं।')}</p></div>`).join('') || `<div class="item"><p>${tr('No Nadi or Bhakoot dosha.', 'नाड़ी या भकूट दोष नहीं।')}</p></div>`}
+      <p class="small muted" style="margin:12px 0 0">${tr('Guna milan is one traditional input. A full reading also looks at the 7th house, Venus, the Navamsa and both dashas.', 'गुण मिलान एक पारंपरिक आधार है। पूर्ण विश्लेषण में 7वाँ भाव, शुक्र, नवांश और दोनों की दशाएँ भी देखी जाती हैं।')}</p>
+      <button class="btn sec2 block" style="margin-top:12px" id="askMatch">${I.ask(20)} ${tr('Ask about this match', 'इस मिलान के बारे में पूछें')}</button></div>`;
+  $('#askMatch').onclick = () => { S.pendingQ = tr(`I am considering marriage with ${r.boy_name === activeProfile().name ? r.girl_name : r.boy_name}. Our guna milan is ${r.total}/36. What should I keep in mind?`, `मेरा विवाह ${r.boy_name === activeProfile().name ? r.girl_name : r.boy_name} से विचाराधीन है। गुण मिलान ${r.total}/36 है। मुझे किन बातों का ध्यान रखना चाहिए?`); go('ask'); };
+  countUp($('#mscore'), $('#mres .ring'), r.total);
+}
+// ---------------------------------------------------------------- profile
+function pageMe() {
+  const w = S.wallet || {credits: 0, free_left: 0, free_total: 3, question_cost: 15, packs: {}}, cur = activeProfile(), on = !!(S.status && S.status.ai_configured);
+  $('#app').innerHTML = header() + `<main><div class="h1">${tr('Profile', 'प्रोफ़ाइल')}</div><p class="sub">${tr('People, credits and settings', 'लोग, क्रेडिट और सेटिंग्स')}</p>
+    <section class="card"><div class="sec"><h3>${tr('People', 'लोग')}</h3><span class="sk">${tr('saved kundlis', 'सहेजी कुंडलियाँ')}</span></div><ul class="plist">${S.profiles.map(p => `<li>
+      <button class="opt ${p.id === cur.id ? 'on' : ''}" data-use="${p.id}" style="flex:1;min-width:0"><span class="avatar lg">${initial(p.name)}</span><span class="nm"><b>${esc(p.name)}</b><small>${esc(relName(p.relation))} · ${fmtDate(p.date)} · ${p.time ? fmtTime(p.time) : tr('time unknown', 'समय अज्ञात')} · ${esc(p.place.name.split(',')[0])}</small></span></button>
+      <button class="iconbtn" data-edit="${p.id}" aria-label="${tr('Edit', 'बदलें')} ${esc(p.name)}">${I.edit()}</button><button class="iconbtn" data-del="${p.id}" aria-label="${tr('Delete', 'हटाएँ')} ${esc(p.name)}">${I.trash()}</button></li>`).join('')}</ul>
+      <button class="btn sec2 block" style="margin-top:10px" id="addP2">${I.plus()} ${tr('Add a person', 'व्यक्ति जोड़ें')}</button></section>
+    <section class="card"><div class="sec"><h3>${tr('Credits', 'क्रेडिट')}</h3></div>
+      <div class="spread"><div><span style="font-size:26px;font-weight:700">${w.credits}</span> <span class="muted">${tr('credits', 'क्रेडिट')}</span></div><span class="tag">${w.free_left}/${w.free_total} ${tr('free questions left', 'मुफ़्त प्रश्न शेष')}</span></div>
+      <p class="small muted" style="margin:6px 0 0">${tr(`After the free questions, each answer uses ${w.question_cost} credits.`, `मुफ़्त प्रश्नों के बाद प्रति उत्तर ${w.question_cost} क्रेडिट।`)}</p>
+      <div class="packs">${Object.entries(w.packs || {}).map(([k, v]) => `<button class="pack" data-pack="${k}"><b>${v.credits}</b><small>${tr('credits', 'क्रेडिट')}</small><small style="color:var(--ink);font-weight:700;margin-top:4px">${esc(v.price)}</small></button>`).join('')}</div>
+      <p class="small muted" style="margin:10px 0 0">${tr('Demo mode: no payment is taken. Tapping a pack adds test credits.', 'डेमो: कोई भुगतान नहीं। पैक टैप करने पर टेस्ट क्रेडिट जुड़ते हैं।')}</p></section>
+    <section class="card"><div class="sec"><h3>${tr('Settings', 'सेटिंग्स')}</h3></div>
+      <div class="setrow"><span>${tr('Language', 'भाषा')}</span><div class="seg" id="setLang"><button data-v="en" aria-pressed="${!hi()}">English</button><button data-v="hi" aria-pressed="${hi()}">हिंदी</button></div></div>
+      <div class="setrow"><span>${tr('Chart style', 'कुंडली शैली')}</span><div class="seg" id="setSty"><button data-v="north" aria-pressed="${S.style === 'north'}">${tr('North', 'उत्तर')}</button><button data-v="south" aria-pressed="${S.style === 'south'}">${tr('South', 'दक्षिण')}</button></div></div>
+      <div class="setrow"><span>${tr('Chat history', 'चैट इतिहास')}</span><button class="btn quiet" id="clr">${tr('Clear', 'मिटाएँ')}</button></div></section>
+    <section class="card"><div class="sec"><h3>${tr('About', 'जानकारी')}</h3></div>
+      <p class="small" style="margin:0 0 8px">${tr('Charts use the Swiss Ephemeris with Lahiri ayanamsa, whole-sign houses and Vimshottari dasha.', 'कुंडली: स्विस एफ़ेमेरिस, लाहिरी अयनांश, पूर्ण राशि भाव, विंशोत्तरी दशा।')} AI: ${on ? esc(S.status.model) : tr('not switched on yet', 'अभी चालू नहीं')}.</p>
+      <p class="small muted" style="margin:0 0 8px">${tr('Astrological guidance for reflection, not medical, legal or financial advice.', 'यह चिंतन हेतु ज्योतिषीय मार्गदर्शन है, चिकित्सा, कानूनी या वित्तीय सलाह नहीं।')}</p>
+      <p class="small muted" style="margin:0 0 4px">${tr('Device ID (for support)', 'डिवाइस आईडी')}: <code style="font-size:11px;word-break:break-all">${esc(DEVICE)}</code></p>
+      <a class="btn quiet" style="padding:0" href="privacy.html">${tr('Privacy policy', 'गोपनीयता नीति')}</a></section>
+    <p class="small muted" style="text-align:center">Drishti · Ikshana Solutions</p></main>`;
+  bindHeader();
+  $$('[data-pack]').forEach(b => b.onclick = async () => { try { S.wallet = await api('/api/wallet/topup', {device: DEVICE, pack: b.dataset.pack}); toast(tr(`Added ${S.wallet.packs[b.dataset.pack].credits} demo credits`, `${S.wallet.packs[b.dataset.pack].credits} डेमो क्रेडिट जोड़े गए`)); render(); } catch (e) { toast(e.message); } });
+  $$('[data-use]').forEach(b => b.onclick = () => { S.active = b.dataset.use; store.set('active', S.active); S.sel = null; render(); toast(tr(`Now showing ${activeProfile().name}'s chart`, `अब ${activeProfile().name} की कुंडली`)); });
+  $$('[data-edit]').forEach(b => b.onclick = () => startOnb(S.profiles.find(p => p.id === b.dataset.edit)));
+  $$('[data-del]').forEach(b => b.onclick = () => {
+    const p = S.profiles.find(x => x.id === b.dataset.del); if (!confirm(tr(`Delete ${p.name}'s profile and chat?`, `${p.name} की प्रोफ़ाइल और चैट हटाएँ?`))) return;
+    S.profiles = S.profiles.filter(x => x.id !== p.id); localStorage.removeItem('dr-chat-' + p.id); store.set('profiles', S.profiles);
+    if (S.active === p.id) { S.active = S.profiles[0]?.id || null; store.set('active', S.active); } render();
+  });
+  $('#addP2').onclick = () => startOnb();
+  $$('#setLang button').forEach(b => b.onclick = () => { S.lang = b.dataset.v; store.set('lang', S.lang); render(); });
+  $$('#setSty button').forEach(b => b.onclick = () => { S.style = b.dataset.v; store.set('style', S.style); render(); });
+  $('#clr').onclick = () => { S.profiles.forEach(p => localStorage.removeItem('dr-chat-' + p.id)); toast(tr('Chat history cleared', 'चैट इतिहास मिटाया गया')); };
+}
+// ------------------------------------------------------------------ boot
+(async function boot() {
+  render();
+  try { S.status = await api('/api/status'); } catch { S.status = {ai_configured: false}; }
+  await refreshWallet();
+  if (S.profiles.length && !S.onb && (S.tab === 'ask' || S.tab === 'me')) render();
+  if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js');
+})();
+</script>
+</body>
+</html>
