@@ -1,4 +1,5 @@
-"""LLM layer: OpenAI-compatible /chat/completions, configured by env vars.
+"""LLM layer: OpenAI-compatible /chat/completions (or native Anthropic Messages API when
+LLM_BASE_URL is https://api.anthropic.com/v1), configured by env vars.
 
 LLM_API_KEY   required to enable AI (never hardcoded)
 LLM_BASE_URL  default https://api.openai.com/v1
@@ -106,6 +107,20 @@ def compact_chart(profile: dict, chart: dict) -> dict:
 
 async def stream_chat(messages: list[dict], max_tokens: int = 900) -> AsyncIterator[str]:
     c = config()
+    got = False
+    if "anthropic.com" in c["base_url"]:
+        gen = _stream_anthropic(c, messages, max_tokens)
+    else:
+        gen = _stream_openai(c, messages, max_tokens)
+    async for tok in gen:
+        got = True
+        yield tok
+    if not got:
+        # Never "succeed" with an empty answer (the user would be charged for nothing)
+        raise RuntimeError("LLM returned no text")
+
+
+async def _stream_openai(c: dict, messages: list[dict], max_tokens: int) -> AsyncIterator[str]:
     body = {"model": c["model"], "messages": messages, "stream": True}
     m = c["model"].lower()
     if m.startswith(("gpt-5", "o1", "o3", "o4")) and "chat" not in m:
@@ -113,9 +128,7 @@ async def stream_chat(messages: list[dict], max_tokens: int = 900) -> AsyncItera
         body["max_completion_tokens"] = max_tokens * 4
         body["reasoning_effort"] = os.environ.get("LLM_REASONING_EFFORT", "low")
     else:
-        if not m.startswith("claude"):
-            # newer Claude models reject `temperature`; other providers still accept it
-            body["temperature"] = 0.6
+        body["temperature"] = 0.6
         body["max_tokens"] = max_tokens
     headers = {"Authorization": f"Bearer {c['api_key']}", "Content-Type": "application/json"}
     async with httpx.AsyncClient(timeout=httpx.Timeout(90, connect=15)) as client:
@@ -135,6 +148,46 @@ async def stream_chat(messages: list[dict], max_tokens: int = 900) -> AsyncItera
                     continue
                 if delta:
                     yield delta
+
+
+async def _stream_anthropic(c: dict, messages: list[dict], max_tokens: int) -> AsyncIterator[str]:
+    """Native Anthropic Messages API (used when LLM_BASE_URL points at api.anthropic.com)."""
+    system = "\n\n".join(m["content"] for m in messages if m["role"] == "system")
+    turns: list[dict] = []
+    for m in messages:
+        if m["role"] not in ("user", "assistant") or not m.get("content"):
+            continue
+        if turns and turns[-1]["role"] == m["role"]:
+            turns[-1]["content"] += "\n\n" + m["content"]  # merge back-to-back turns
+        else:
+            turns.append({"role": m["role"], "content": m["content"]})
+    while turns and turns[0]["role"] != "user":
+        turns.pop(0)
+    body = {"model": c["model"], "max_tokens": max_tokens, "system": system,
+            "messages": turns, "stream": True}
+    headers = {"x-api-key": c["api_key"], "anthropic-version": "2023-06-01",
+               "content-type": "application/json"}
+    base = c["base_url"][:-3] if c["base_url"].endswith("/v1") else c["base_url"]
+    async with httpx.AsyncClient(timeout=httpx.Timeout(90, connect=15)) as client:
+        async with client.stream("POST", f"{base}/v1/messages", json=body, headers=headers) as r:
+            if r.status_code >= 400:
+                txt = (await r.aread()).decode(errors="ignore")[:300]
+                raise RuntimeError(f"LLM HTTP {r.status_code}: {txt}")
+            async for line in r.aiter_lines():
+                if not line.startswith("data:"):
+                    continue
+                try:
+                    ev = json.loads(line[5:].strip())
+                except json.JSONDecodeError:
+                    continue
+                t = ev.get("type")
+                if t == "content_block_delta" and ev.get("delta", {}).get("type") == "text_delta":
+                    if ev["delta"].get("text"):
+                        yield ev["delta"]["text"]
+                elif t == "error":
+                    raise RuntimeError(f"LLM stream error: {json.dumps(ev.get('error'))[:200]}")
+                elif t == "message_stop":
+                    break
 
 
 async def complete(messages: list[dict], max_tokens: int = 500) -> str:
