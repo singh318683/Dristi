@@ -113,7 +113,9 @@ async def stream_chat(messages: list[dict], max_tokens: int = 900) -> AsyncItera
         body["max_completion_tokens"] = max_tokens * 4
         body["reasoning_effort"] = os.environ.get("LLM_REASONING_EFFORT", "low")
     else:
-        body["temperature"] = 0.6
+        if not m.startswith("claude"):
+            # newer Claude models reject `temperature`; other providers still accept it
+            body["temperature"] = 0.6
         body["max_tokens"] = max_tokens
     headers = {"Authorization": f"Bearer {c['api_key']}", "Content-Type": "application/json"}
     async with httpx.AsyncClient(timeout=httpx.Timeout(90, connect=15)) as client:
