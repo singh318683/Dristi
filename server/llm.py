@@ -163,8 +163,13 @@ async def _stream_anthropic(c: dict, messages: list[dict], max_tokens: int) -> A
             turns.append({"role": m["role"], "content": m["content"]})
     while turns and turns[0]["role"] != "user":
         turns.pop(0)
-    body = {"model": c["model"], "max_tokens": max_tokens, "system": system,
-            "messages": turns, "stream": True}
+    while turns and turns[-1]["role"] != "user":  # newer Claude models reject a trailing assistant turn
+        turns.pop()
+    # Newer Claude models think (adaptively) by default and thinking counts toward max_tokens,
+    # so give room for it and keep effort low: these are short chart readings.
+    body = {"model": c["model"], "max_tokens": max_tokens * 4, "system": system,
+            "messages": turns, "stream": True,
+            "output_config": {"effort": os.environ.get("LLM_EFFORT", "low")}}
     headers = {"x-api-key": c["api_key"], "anthropic-version": "2023-06-01",
                "content-type": "application/json"}
     base = c["base_url"][:-3] if c["base_url"].endswith("/v1") else c["base_url"]
@@ -184,6 +189,10 @@ async def _stream_anthropic(c: dict, messages: list[dict], max_tokens: int) -> A
                 if t == "content_block_delta" and ev.get("delta", {}).get("type") == "text_delta":
                     if ev["delta"].get("text"):
                         yield ev["delta"]["text"]
+                elif t == "message_delta" and ev.get("delta", {}).get("stop_reason"):
+                    stop = ev["delta"]["stop_reason"]
+                    if stop not in ("end_turn", "stop_sequence"):
+                        raise RuntimeError(f"LLM stopped early ({stop})")
                 elif t == "error":
                     raise RuntimeError(f"LLM stream error: {json.dumps(ev.get('error'))[:200]}")
                 elif t == "message_stop":
