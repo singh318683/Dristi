@@ -7,7 +7,8 @@ SERVER = os.path.join(ROOT, "server")
 sys.path.insert(0, SERVER)
 os.chdir(SERVER)  # app.py uses paths like ephe/ and data/ relative to server/
 
-# Vercel's filesystem is read-only except /tmp, so keep the SQLite DB there.
+# Vercel's filesystem is read-only except /tmp, so the SQLite fallback lives there.
+# DATABASE_URL (Postgres) wins over this when it is set; see server/db.py.
 os.environ.setdefault("DRISHTI_DB", "/tmp/app.db")
 
 from app import app  # noqa: E402,F401  (FastAPI instance Vercel looks for)

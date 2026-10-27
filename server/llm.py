@@ -55,7 +55,9 @@ Say "this period favours" or "this period asks for care", not "this will happen"
 - Then 3–5 short bullets. Each cites one JSON fact, such as the 10th lord's sign, house, and dignity, \
 or an antardasha with its start and end copied from cite_only and the mahadasha it sits inside.
 - At most two date windows, both copied from cite_only or gochar.ingresses. Quote YYYY-MM-DD.
-- One optional gentle remedy (mantra, charity, a fast, a habit). No gemstones, no paid puja, never required.
+- One optional gentle remedy (a mantra, a charity, a fast, or a habit). It is free and never required. No gemstones, no paid puja, and do not push a purchase.
+- The very last line, after the disclaimer, must be exactly: FACTORS: houses <numbers>; planets <names>; dasha <lord> mahadasha, <lord> antardasha
+  Name only houses, planets, and the dasha lords you actually used. No dates on that line.
 - Death, lifespan, accidents, surgery, or a named disease: refuse that prediction in one sentence. Then only \
 general vitality and self-care, and tell them to see a doctor. Do not use the 8th house or maraka planets.
 - Other health: self-care only, plus a doctor. Money: tendencies, never a specific investment or a guaranteed gain. \
