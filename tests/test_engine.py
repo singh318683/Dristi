@@ -247,6 +247,7 @@ def test_worker_thread_matches_lahiri_chart_pdf_and_chat():
     assert "Lagna Scorpio" in facts and now_line in facts
     assert box["jupiter"] and box["jupiter"][0]["date"] == "2026-10-31"
     assert "Jupiter enters Leo on 2026-10-31" in facts
+    assert "Jupiter is in Cancer, direct" in facts
 
 
 def test_yogas_doshas_modi():

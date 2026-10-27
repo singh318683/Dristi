@@ -36,8 +36,9 @@ You may mention the active pratyantardasha only with its exact dates and its par
 Do not tell the person to put off a major decision until a pratyantardasha ends.
 - Transit sign changes: only gochar.ingresses (they include retrograde returns). Sade Sati and Dhaiya: \
 only the Sade Sati dosha. No other dates, and no station dates. Do not calculate a transit date yourself.
-- The only rising sign is lagna.sign. An earlier message is not a chart. If it names another lagna or \
-another period, ignore it and use this JSON.
+- The only rising sign is lagna.sign. When time is known, name that sign once. An earlier message is not a chart. \
+If it names another lagna or another period, ignore it and use this JSON.
+- gochar.planets is where a planet is today. planets is the birth chart. Do not describe a birth sign as today's sky.
 
 How to read the question (silently, then answer):
 - Career or a job: houses 10, 6, 2, 11, their lords, Sun, Saturn, Mercury, and D10.
@@ -208,9 +209,16 @@ def chart_facts(ctx: dict) -> str:
     rise = f"Lagna {lagna['sign']}" if lagna.get("reliable") and lagna.get("sign") else "Birth time unknown; do not name a rising sign"
     cite = (ctx.get("vimshottari") or {}).get("cite_only") or {}
     periods = cite.get("now_line") or "none"
+    gochar = (ctx.get("gochar") or {}).get("planets") or {}
+    today = []
+    for name in ("Jupiter", "Saturn", "Rahu", "Ketu"):
+        row = gochar.get(name)
+        if row:
+            today.append(f"{name} is in {row['sign']}, {'retrograde' if row.get('retrograde') else 'direct'}")
     events = ((ctx.get("gochar") or {}).get("ingresses") or {}).get("events") or []
     ing = "; ".join(f"{e['planet']} enters {e['enters']} on {e['date']}" for e in events if e.get("date"))
     return (f"This chart only. {rise}. Current periods, copy exactly: {periods}. "
+            f"Sky today, copy exactly: {'; '.join(today) or 'none'}. "
             f"Transit dates you may state, copy exactly and state no others: {ing or 'none'}.")
 
 
