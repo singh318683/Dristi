@@ -79,11 +79,15 @@ LANG_RULES = {
 }
 
 HOROSCOPE_PROMPT = """You are the daily-horoscope writer for the {app} Vedic astrology app. \
-Write today's horoscope for people with Moon sign (rashi) {sign}, based ONLY on the sidereal transit \
-JSON given (houses are counted from {sign}). Do not invent a date or a placement. Mention the Moon's transit \
-house today and one slower influence (Jupiter, Saturn or Rahu/Ketu) by house. Give: a 2-sentence overview, \
-then one short line each for **Love**, **Career**, **Money**, **Health** (self-care only, no medical claims), \
-then "Lucky colour" and "Lucky number". Warm and encouraging, no fear, no certainty, under 140 words. {lang_rule}"""
+Write today's horoscope only for people whose Moon sign (rashi) is {sign} ({sign_hi}). \
+Use ONLY the sidereal transit JSON. Every house_from_rashi value is already counted from {sign}; \
+use those numbers and do not recount from another rashi or from the Moon's current sign. \
+The first line must name this rashi ({sign} in English, {sign_hi} in Hindi) and the date in the JSON. \
+Do not title the reading with any other sign, even when a planet is transiting that sign. \
+Mention the Moon's house_from_rashi and one slower influence (Jupiter, Saturn or Rahu/Ketu) by its house_from_rashi. \
+Give: a 2-sentence overview, then one short line each for **Love**, **Career**, **Money**, **Health** \
+(self-care only, no medical claims), then "Lucky colour" and "Lucky number". \
+Warm and encouraging, no fear, no certainty, under 140 words. {lang_rule}"""
 
 
 def config() -> dict:

@@ -1,4 +1,5 @@
 """Wallet, referral credits, magic-link sign-in, panchang and kundli PDF endpoints."""
+import json
 import os
 import sys
 
@@ -7,6 +8,8 @@ import pytest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "server"))
 import app  # noqa: E402
 import db  # noqa: E402
+import engine  # noqa: E402
+import llm  # noqa: E402
 import pdfkundli  # noqa: E402
 
 DELHI = {"name": "Delhi, India", "lat": 28.65195, "lon": 77.23149, "tz": "Asia/Kolkata"}
@@ -116,3 +119,52 @@ def test_panchang_and_pdf_endpoints(client):
     assert "Sun" in text and "House 1:" in text
     hi_text = "\n".join(hi_lines)
     assert "कुंडली" in hi_text and "आचार्य" in hi_text and "Asha" in hi_text
+
+
+def test_horoscope_is_cached_per_sign_and_language(client, monkeypatch):
+    calls = []
+
+    async def fake_complete(messages, max_tokens=400):
+        calls.append(messages[0]["content"])
+        payload = json.loads(messages[1]["content"])
+        sign, lang = payload["sign"], payload["lang"]
+        house = payload["transits"]["Moon"]["house_from_rashi"]
+        assert engine.SIGNS_HI[engine.SIGNS.index(sign)] in messages[0]["content"]
+        if lang == "hi":
+            name = engine.SIGNS_HI[engine.SIGNS.index(sign)]
+            return f"{name} राशि का राशिफल। चंद्रमा {house}वें भाव में।"
+        return f"{sign} Horoscope. The Moon moves through your {house}th house."
+
+    monkeypatch.setattr(llm, "configured", lambda: True)
+    monkeypatch.setattr(llm, "complete", fake_complete)
+
+    cancer = client.get("/api/horoscope", params={"sign": "Cancer", "lang": "en"})
+    pisces = client.get("/api/horoscope", params={"sign": "Pisces", "lang": "en"})
+    pisces_hi = client.get("/api/horoscope", params={"sign": "Pisces", "lang": "hi"})
+    assert cancer.status_code == pisces.status_code == pisces_hi.status_code == 200
+    assert "no-store" in cancer.headers["cache-control"]
+    c, p, h = cancer.json(), pisces.json(), pisces_hi.json()
+    assert c["sign"] == "Cancer" and p["sign"] == "Pisces" and h["lang"] == "hi"
+    assert c["date"] == p["date"] == h["date"]
+    assert c["text"] != p["text"] != h["text"]
+    assert "Cancer" in c["text"] and "Pisces" not in c["text"]
+    assert "Pisces" in p["text"] and "Cancer" not in p["text"]
+    assert "मीन" in h["text"] and "Pisces" not in h["text"]
+    assert c["transits"]["Moon"]["sign"] == p["transits"]["Moon"]["sign"]
+    assert c["transits"]["Moon"]["house_from_rashi"] != p["transits"]["Moon"]["house_from_rashi"]
+    assert str(c["transits"]["Moon"]["house_from_rashi"]) in c["text"]
+    assert str(p["transits"]["Moon"]["house_from_rashi"]) in p["text"]
+    assert len(calls) == 3
+
+    again = client.get("/api/horoscope", params={"sign": "Pisces", "lang": "en"}).json()
+    assert again["text"] == p["text"] and len(calls) == 3
+
+    with db.connect() as con:
+        con.execute("update horoscope set body=? where day=? and sign=? and lang=?",
+                    ("Cancer Horoscope, 27 October 2026. Today the Moon moves through your 11th house.",
+                     p["date"], "Pisces", "en"))
+    repaired = client.get("/api/horoscope", params={"sign": "Pisces", "lang": "en"}).json()
+    assert "Pisces" in repaired["text"] and "Cancer Horoscope" not in repaired["text"]
+    assert len(calls) == 4
+    kept = client.get("/api/horoscope", params={"sign": "Cancer", "lang": "en"}).json()
+    assert kept["text"] == c["text"] and len(calls) == 4
