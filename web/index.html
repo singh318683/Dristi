@@ -398,6 +398,34 @@ body.app-fit .reveal{opacity:1;transform:none}
 .costline{font-size:12.5px;font-weight:700;color:var(--on-tint);background:var(--primary-tint);border-radius:10px;padding:6px 10px;margin-bottom:6px;text-align:center}
 .minirow{display:flex;gap:8px;align-items:center;min-width:0}
 .minirow .grow{flex:1;min-width:0}
+.gita-banner{flex:0 0 auto;display:flex;align-items:center;gap:8px;width:100%;height:32px;min-height:32px;max-height:32px;margin:0;padding:0 10px;border:1px solid var(--primary-line);background:var(--primary-tint);color:var(--ink);border-radius:10px;text-align:left;font-size:12.5px;line-height:1;font-weight:500}
+.gita-banner .gita-m{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gita-banner .gita-r{flex:none;font-weight:700;color:var(--on-tint);font-size:11.5px;letter-spacing:.02em}
+.gita-bg{position:fixed;inset:0;z-index:70;display:flex;align-items:flex-end;justify-content:center;background:rgba(20,16,10,0);padding:0;transition:background .28s ease}
+.gita-bg.show{background:rgba(20,16,10,.4)}
+.gita-card{width:min(100%,560px);max-height:min(78dvh,640px);background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:20px 20px 0 0;box-shadow:0 18px 50px -20px rgba(0,0,0,.45);padding:8px 16px calc(14px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:8px;transform:translateY(16px);opacity:0;transition:opacity .28s ease,transform .28s ease}
+.gita-bg.show .gita-card{opacity:1;transform:none}
+.gita-grab{width:36px;height:4px;border-radius:4px;background:var(--line-strong);margin:2px auto 2px;flex:none}
+.gita-kicker{margin:0;font-size:13px;font-weight:700;letter-spacing:.04em;color:var(--on-tint)}
+.gita-body{overflow:auto;min-height:0}
+.gita-sa{margin:8px 0 0;font-size:18px;line-height:1.75;white-space:pre-wrap}
+.gita-mean{margin:8px 0 0;font-size:15.5px;line-height:1.5}
+.gita-actions{display:flex;gap:8px;flex:none}
+.gita-actions .btn{flex:1}
+@media (max-height:700px){
+  body.app-fit main.fit{gap:4px;padding:4px 12px}
+  body.app-fit .h1{font-size:18px}
+  body.app-fit .clamp3{-webkit-line-clamp:2;max-height:2.9em}
+  body.app-fit .card,body.app-fit .cta{padding:6px 10px}
+  body.app-fit #hHoro .card{max-height:86px;overflow:hidden}
+}
+@media (max-height:650px){
+  body.app-fit main.fit{gap:2px;padding:2px 10px}
+}
+@media (max-height:580px){
+  body.app-fit .cta > p{display:none}
+  body.app-fit #dashaCard .small,body.app-fit #dashaCard .bar{display:none}
+}
 </style>
 </head>
 <body>
@@ -514,6 +542,8 @@ const chipsHtml = (cls = 'chip') => CHIPS().map(q => `<button class="${cls}" dat
 function render() {
   document.documentElement.lang = S.lang;
   closeSheet();
+  const gitaOpen = document.getElementById('gita');
+  if (gitaOpen) { document.removeEventListener('keydown', gitaEsc); gitaOpen.remove(); }
   const root = $('#root');
   const fitting = S.profiles.length && !S.onb;
   document.body.classList.toggle('app-fit', !!fitting);
@@ -694,10 +724,104 @@ function bindOnb() {
     });
   }
 }
+// ------------------------------------------------------------------ gita
+let gitaVerse = null;
+function localDay(d = new Date()) {
+  const z = n => String(n).padStart(2, '0');
+  return d.getFullYear() + '-' + z(d.getMonth() + 1) + '-' + z(d.getDate());
+}
+function gitaRef(v) { return (hi() ? 'भगवद्गीता ' : 'Bhagavad Gita ') + v.chapter + '.' + v.verse; }
+async function ensureGita() {
+  const date = localDay();
+  if (gitaVerse && gitaVerse.date === date) return gitaVerse;
+  gitaVerse = await api('/api/gita?date=' + date);
+  return gitaVerse;
+}
+function closeGita() {
+  const bg = document.getElementById('gita');
+  if (!bg) return;
+  const p = activeProfile();
+  if (p) store.set('gita-day-' + p.id, localDay());
+  document.removeEventListener('keydown', gitaEsc);
+  const done = () => { if (bg.isConnected) bg.remove(); };
+  bg.classList.remove('show');
+  if (RM()) done();
+  else { bg.addEventListener('transitionend', done, {once: true}); setTimeout(done, 400); }
+}
+function gitaEsc(e) { if (e.key === 'Escape') closeGita(); }
+function openGita(v) {
+  let bg = document.getElementById('gita');
+  if (!bg) { bg = document.createElement('div'); bg.id = 'gita'; bg.className = 'gita-bg'; document.body.appendChild(bg); }
+  const ref = gitaRef(v), meaning = hi() ? v.hi : v.en;
+  bg.innerHTML = `<div class="gita-card" role="dialog" aria-modal="true" aria-labelledby="gitaRef">
+    <span class="gita-grab" aria-hidden="true"></span>
+    <p class="gita-kicker" id="gitaRef">${esc(ref)}</p>
+    <div class="gita-body"><p class="gita-sa" lang="sa">${esc(v.sa)}</p><p class="gita-mean">${esc(meaning)}</p></div>
+    <div class="gita-actions">
+      <button type="button" class="btn sm sec2" id="gitaShare">${I.share(16)} ${tr('Share', 'साझा करें')}</button>
+      <button type="button" class="btn sm" id="gitaClose">${tr('Close', 'बंद करें')}</button>
+    </div></div>`;
+  bg.onclick = e => { if (e.target === bg) closeGita(); };
+  $('#gitaClose').onclick = closeGita;
+  $('#gitaShare').onclick = () => shareCard('gita');
+  document.removeEventListener('keydown', gitaEsc);
+  document.addEventListener('keydown', gitaEsc);
+  requestAnimationFrame(() => bg.classList.add('show'));
+  $('#gitaClose').focus();
+}
+async function shareGita() {
+  let v;
+  try { v = await ensureGita(); }
+  catch (e) { return toast(e.message); }
+  const canvas = document.createElement('canvas');
+  canvas.width = 1080; canvas.height = 1920;
+  const g = canvas.getContext('2d');
+  g.fillStyle = '#FAF7F2'; g.fillRect(0, 0, 1080, 1920);
+  g.fillStyle = '#B35A00'; g.fillRect(0, 0, 1080, 420);
+  g.fillStyle = '#FFFFFF';
+  g.font = '700 120px Arial, "Noto Sans Devanagari", sans-serif';
+  g.fillText('Drishti', 80, 220);
+  g.font = '600 40px Arial, "Noto Sans Devanagari", sans-serif';
+  g.fillText(tr('Verse of the day', 'आज का श्लोक'), 84, 290);
+  g.fillStyle = '#1F1B16';
+  g.font = '700 64px Arial, "Noto Sans Devanagari", sans-serif';
+  let y = wrapCanvas(g, gitaRef(v), 80, 520, 920, 80, 2);
+  g.font = '500 46px "Noto Sans Devanagari", "Noto Serif Devanagari", Arial, sans-serif';
+  String(v.sa || '').split('\n').forEach(line => { y = wrapCanvas(g, line, 80, y + 28, 920, 68, 4); });
+  g.font = '500 40px Arial, "Noto Sans Devanagari", sans-serif';
+  g.fillStyle = '#5F584F';
+  wrapCanvas(g, hi() ? v.hi : v.en, 80, y + 36, 920, 58, 8);
+  g.fillStyle = '#B35A00'; g.fillRect(0, 1680, 1080, 240);
+  g.fillStyle = '#FFFFFF';
+  g.font = '700 42px Arial, sans-serif';
+  g.fillText('Drishti', 80, 1770);
+  g.font = '500 36px Arial, sans-serif';
+  const url = (location.protocol.startsWith('http') ? location.origin : 'https://drishti.app');
+  g.fillText(url, 80, 1830);
+  await deliverCard(canvas, 'gita');
+}
+async function mountGita() {
+  const p = activeProfile();
+  if (!p) return;
+  const id = p.id;
+  let v;
+  try { v = await ensureGita(); }
+  catch { return; }
+  if (S.tab !== 'home' || !activeProfile() || activeProfile().id !== id) return;
+  const b = $('#gitaBanner');
+  if (!b) return;
+  const meaning = hi() ? v.hi : v.en, ref = gitaRef(v);
+  b.hidden = false;
+  b.innerHTML = `<span class="gita-m">${esc(meaning)}</span><span class="gita-r">${esc(ref)}</span>`;
+  b.setAttribute('aria-label', tr('Verse of the day', 'आज का श्लोक') + '. ' + meaning + ' ' + ref);
+  b.onclick = () => openGita(v);
+  if (store.get('gita-day-' + id, '') !== localDay()) openGita(v);
+}
 // ------------------------------------------------------------------ home
 async function pageHome() {
   const p = activeProfile();
   $('#app').innerHTML = header() + `<main class="fit">
+    <button type="button" class="gita-banner" id="gitaBanner" hidden></button>
     <div><div class="h1">${tr('Namaste', 'नमस्ते')}, ${esc(p.name)}</div>
       <p class="sub" id="gsub">${tr('Acharya is an AI astrologer', 'आचार्य एक AI ज्योतिषी हैं')} · ${new Date().toLocaleDateString(loc(), {weekday: 'short', day: 'numeric', month: 'short'})}</p></div>
     <section class="cta"><p>${tr('Ask about this chart. The cost is shown before you send.', 'इस कुंडली के बारे में पूछें। भेजने से पहले शुल्क दिखेगा।')}</p>
@@ -712,6 +836,7 @@ async function pageHome() {
   $('#askBtn').onclick = () => go('ask');
   $$('main [data-q]').forEach(b => b.onclick = () => { S.pendingQ = b.dataset.q; go('ask'); });
   loadPanchang(p);
+  mountGita();
   let c;
   try { c = await chartOf(p); } catch (e) { const b = $('#hDasha'); if (b) b.innerHTML = errState(e.message, 'retryH'); const r = $('#retryH'); if (r) r.onclick = () => render(); return; }
   if (S.tab !== 'home') return;
@@ -814,8 +939,19 @@ async function downloadKundli() {
 }
 function wrapCanvas(g, text, x, y, maxW, lineH, maxLines) {
   const words = String(text || '').split(/\s+/).filter(Boolean);
-  let line = '', n = 0;
+  const tokens = [];
   for (const w of words) {
+    if (g.measureText(w).width <= maxW) { tokens.push(w); continue; }
+    let buf = '';
+    for (const ch of w) {
+      const trial = buf + ch;
+      if (g.measureText(trial).width > maxW && buf) { tokens.push(buf); buf = ch; }
+      else buf = trial;
+    }
+    if (buf) tokens.push(buf);
+  }
+  let line = '', n = 0;
+  for (const w of tokens) {
     const trial = line ? line + ' ' + w : w;
     if (g.measureText(trial).width > maxW && line) {
       g.fillText(line, x, y); y += lineH; n++; line = w;
@@ -825,7 +961,21 @@ function wrapCanvas(g, text, x, y, maxW, lineH, maxLines) {
   if (line) g.fillText(line, x, y);
   return y + lineH;
 }
+async function deliverCard(canvas, kind) {
+  const url = (location.protocol.startsWith('http') ? location.origin : 'https://drishti.app');
+  const blob = await new Promise(res => canvas.toBlob(res, 'image/png'));
+  if (!blob) return;
+  const file = new File([blob], 'drishti-' + kind + '.png', {type: 'image/png'});
+  if (navigator.share && navigator.canShare && navigator.canShare({files: [file]})) {
+    try { await navigator.share({files: [file], title: 'Drishti', text: 'Drishti · ' + url}); return; }
+    catch (e) { if (e && e.name === 'AbortError') return; }
+  }
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = file.name; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+}
 async function shareCard(kind) {
+  if (kind === 'gita') { await shareGita(); return; }
   const p = activeProfile();
   let title = 'Drishti', lines = [];
   try {
@@ -876,15 +1026,7 @@ async function shareCard(kind) {
   g.font = '500 36px Arial, sans-serif';
   const url = (location.protocol.startsWith('http') ? location.origin : 'https://drishti.app');
   g.fillText(url, 80, 1830);
-  const blob = await new Promise(res => canvas.toBlob(res, 'image/png'));
-  const file = new File([blob], 'drishti-' + kind + '.png', {type: 'image/png'});
-  if (navigator.share && navigator.canShare && navigator.canShare({files: [file]})) {
-    try { await navigator.share({files: [file], title: 'Drishti', text: 'Drishti · ' + url}); return; }
-    catch (e) { if (e && e.name === 'AbortError') return; }
-  }
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob); a.download = file.name; a.click();
-  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  await deliverCard(canvas, kind);
 }
 // ------------------------------------------------------------------ kundli
 // ------------------------------------------------------------------ kundli: highlight model
