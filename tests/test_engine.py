@@ -85,6 +85,27 @@ def test_navamsa():
     assert engine.navamsa_sign(359.9) == 11
 
 
+def test_dasamsa_odd_and_even_signs():
+    # Odd rashi counted from itself: 0° Aries = Aries, 3° Aries = Taurus, 27° Aries = Capricorn.
+    assert engine.dasamsa_sign(0) == 0 and engine.dasamsa_sign(3) == 1 and engine.dasamsa_sign(27) == 9
+    # Even rashi counted from the 9th: 0° Taurus = Capricorn, 0° Cancer = Pisces, 0° Virgo = Taurus.
+    assert engine.dasamsa_sign(30) == 9 and engine.dasamsa_sign(90) == 11 and engine.dasamsa_sign(150) == 1
+    # 29.9° Pisces (even): 9th from Pisces is Scorpio, and the 10th part from there is Leo.
+    assert engine.dasamsa_sign(359.9) == 4
+
+
+def test_mercury_virgo_dignity_bands():
+    # Exalted in Virgo only up to the moolatrikona band; 20°–30° is own sign.
+    assert engine.dignity("Mercury", 5, 0) == "exalted"
+    assert engine.dignity("Mercury", 5, 15.9) == "exalted"
+    assert engine.dignity("Mercury", 5, 16) == "moolatrikona"
+    assert engine.dignity("Mercury", 5, 19.9) == "moolatrikona"
+    assert engine.dignity("Mercury", 5, 20) == "own sign"
+    assert engine.dignity("Mercury", 5, 25) == "own sign"
+    # Moon: Taurus 0–4 exalted, 4–30 moolatrikona (Taurus is not Moon's own sign).
+    assert engine.dignity("Moon", 1, 3) == "exalted" and engine.dignity("Moon", 1, 4) == "moolatrikona"
+
+
 def test_nakshatra_boundaries():
     assert engine.nak_info(0)["nakshatra"] == "Ashwini" and engine.nak_info(0)["pada"] == 1
     assert engine.nak_info(13.34)["nakshatra"] == "Bharani"
@@ -121,6 +142,15 @@ def test_dasha_structure():
         assert m["antardashas"][0]["start"] == m["start"] and m["antardashas"][-1]["end"] == m["end"]
     cur = c["dasha"]["current"]
     assert cur["antardasha"]["start"] <= "2026-10-23" <= cur["antardasha"]["end"]
+    pds = cur["pratyantardashas"]
+    assert len(pds) == 9 and len(cur["next_antardasha_pratyantardashas"]) == 9
+    assert pds[0]["start"] == cur["antardasha"]["start"] and pds[-1]["end"] == cur["antardasha"]["end"]
+    for a, b in zip(pds, pds[1:]):
+        assert a["end"] == b["start"]
+    assert pds[0]["lord"] == cur["antardasha"]["lord"]
+    # End dates are exclusive instants but inclusive calendar days: a period can
+    # still be running on the morning of its end date.
+    assert cur["pratyantardasha"]["start"] <= "2026-10-23" <= cur["pratyantardasha"]["end"]
 
 
 def test_yogas_doshas_modi():

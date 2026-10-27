@@ -10,7 +10,7 @@ async def cc(req: Request):
     body = await req.json(); LAST["body"] = body
     sys_json = body["messages"][1]["content"]
     chart = json.loads(sys_json.split("\n", 1)[1])
-    md = chart["vimshottari"]["current"]["mahadasha"]["lord"]
+    md = next(r["lord"] for r in chart["vimshottari"]["mahadasha"] if r["status"] == "now")
     text = (f"**Namaste {chart['person']['name']}.** Mock answer. Lagna {chart['lagna']['sign']}, "
             f"Moon {chart['moon_sign']}, running {md} mahadasha.\n- point one\n- point two\n_Disclaimer._")
     async def gen():
