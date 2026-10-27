@@ -168,3 +168,22 @@ def test_horoscope_is_cached_per_sign_and_language(client, monkeypatch):
     assert len(calls) == 4
     kept = client.get("/api/horoscope", params={"sign": "Cancer", "lang": "en"}).json()
     assert kept["text"] == c["text"] and len(calls) == 4
+
+
+SUDHANSHU = {"name": "sudhanshu singh", "gender": "male", "date": "1981-05-10", "time": "19:30",
+             "place": {"name": "Along, Arunachal Pradesh, India", "lat": 28.16951, "lon": 94.8006, "tz": "Asia/Kolkata"}}
+
+
+def test_chart_endpoint_stays_lahiri_even_if_the_caller_thread_is_fagan(client):
+    import swisseph as swe
+    swe.set_sid_mode(swe.SIDM_FAGAN_BRADLEY, 0, 0)
+    try:
+        got = client.post("/api/chart", json=SUDHANSHU)
+    finally:
+        swe.set_sid_mode(swe.SIDM_LAHIRI, 0, 0)
+    assert got.status_code == 200
+    body = got.json()
+    assert 23.4 < body["ayanamsa"]["value"] < 23.8
+    assert body["lagna"]["sign"] == "Scorpio" and body["lagna"]["degree"] > 18
+    assert body["dasha"]["current"]["mahadasha"]["start"] == "2024-06-29"
+    assert body["dasha"]["current"]["antardasha"]["lord"] == "Rahu"
