@@ -230,9 +230,9 @@ async def api_chat(r: ChatReq):
     chart = chart_for(r.profile)
     ctx = llm.compact_chart(r.profile.model_dump() | {"place": r.profile.place.name}, chart)
     system = llm.SYSTEM_PROMPT.format(app=APP_NAME, lang_rule=llm.LANG_RULES[lang])
-    today = datetime.now(timezone.utc).date().isoformat()
     msgs = [{"role": "system", "content": system},
-            {"role": "system", "content": f"Today is {today}. Chart JSON:\n" + json.dumps(ctx, ensure_ascii=False, separators=(",", ":"))}]
+            {"role": "system", "content": f"Today is {ctx['as_of']} UTC. Copy dasha periods only from vimshottari.cite_only, and transit sign changes only from gochar.ingresses.\nChart JSON:\n"
+             + json.dumps(ctx, ensure_ascii=False, separators=(",", ":"))}]
     for m in r.messages[-10:]:
         if m.role in ("user", "assistant"):
             msgs.append({"role": m.role, "content": m.content[:4000]})
