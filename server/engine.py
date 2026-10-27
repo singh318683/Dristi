@@ -150,11 +150,14 @@ def lagna_lon(jd: float, lat: float, lon: float) -> float:
 
 
 def dignity(planet: str, sign: int, deg: float) -> str:
-    if planet in MOOLA:
-        s, a, b = MOOLA[planet]
-        if sign == s and a <= deg < b:
-            return "moolatrikona"
+    moola = MOOLA.get(planet)
+    if moola and sign == moola[0] and moola[1] <= deg < moola[2]:
+        return "moolatrikona"
+    # Mercury is exalted in Virgo and also owns Virgo. Past the moolatrikona
+    # slice (16°–20°) the rest of Virgo is own sign, not exalted (BPHS).
     if EXALT.get(planet) == sign:
+        if moola and sign == moola[0] and deg >= moola[2] and sign in OWN.get(planet, []):
+            return "own sign"
         return "exalted"
     if DEBIL.get(planet) == sign:
         return "debilitated"
@@ -172,6 +175,15 @@ def dignity(planet: str, sign: int, deg: float) -> str:
 
 def navamsa_sign(lon: float) -> int:
     return int(lon // (30 / 9)) % 12
+
+
+def dashamsha_sign(lon: float) -> int:
+    """D10 (Parashara): 3° parts. Odd signs count from themselves, even signs from the 9th."""
+    sign = int(lon // 30) % 12
+    part = min(9, int((lon % 30) // 3))
+    # sign index 0,2,4... are the odd rashis (Aries, Gemini, ...)
+    start = sign if sign % 2 == 0 else (sign + 8) % 12
+    return (start + part) % 12
 
 
 # -------------------------------------------------------------- dashas ----
@@ -224,11 +236,22 @@ def vimshottari(moon_lon: float, birth: datetime, now: datetime, levels: int = 3
         pds = subs(ad["lord"], ad["start"], ad["years"])
         pd = next(a for a in pds if a["start"] <= now < a["end"])
         current["pratyantardasha"] = fmt(pd)
-        nxt = ads[ads.index(ad) + 1] if ads.index(ad) < 8 else None
-        if nxt is None:
-            nm = mds[mds.index(md) + 1]
-            nxt = subs(nm["lord"], nm["start"], nm["years"])[0]
-        current["next_antardasha"] = fmt(nxt)
+        current["pratyantardashas"] = [fmt(x) for x in pds]
+        ad_i = ads.index(ad)
+        if ad_i + 1 < len(ads):
+            nxt, nxt_md = ads[ad_i + 1], md["lord"]
+        else:
+            md_i = mds.index(md)
+            if md_i + 1 < len(mds):
+                nm = mds[md_i + 1]
+                nxt, nxt_md = subs(nm["lord"], nm["start"], nm["years"])[0], nm["lord"]
+            else:
+                nxt = nxt_md = None
+        if nxt is not None:
+            current["next_antardasha"] = fmt(nxt)
+            current["next_antardasha_mahadasha"] = nxt_md
+            current["next_antardasha_pratyantardashas"] = [
+                fmt(x) for x in subs(nxt["lord"], nxt["start"], nxt["years"])]
     by, bm = int(balance_years), (balance_years - int(balance_years)) * 12
     return {"system": "Vimshottari", "year_length_days": YEAR_DAYS,
             "birth_nakshatra_lord": lord0,
@@ -252,7 +275,9 @@ def planet_rows(pos: dict, lagna_sign: int, sun_lon: float) -> dict:
                    "degree": round(deg, 4), "degree_dms": dms(deg), **nak_info(lon),
                    "retrograde": retro, "combust": combust,
                    "house": (sign - lagna_sign) % 12 + 1, "dignity": dignity(p, sign, deg),
-                   "navamsa_sign": SIGNS[navamsa_sign(lon)], "speed_deg_per_day": round(spd, 4)}
+                   "navamsa_sign": SIGNS[navamsa_sign(lon)],
+                   "dashamsha_sign": SIGNS[dashamsha_sign(lon)],
+                   "speed_deg_per_day": round(spd, 4)}
     return rows
 
 
@@ -285,7 +310,8 @@ def compute_chart(utc: datetime, lat: float, lon: float, time_known: bool = True
     rows = planet_rows(pos, ref_sign, pos["Sun"][0])
     lagna = {"longitude": round(asc, 4), "sign": SIGNS[int(asc // 30)], "sign_index": int(asc // 30),
              "degree": round(asc % 30, 4), "degree_dms": dms(asc % 30), **nak_info(asc),
-             "navamsa_sign": SIGNS[navamsa_sign(asc)], "reliable": time_known}
+             "navamsa_sign": SIGNS[navamsa_sign(asc)],
+             "dashamsha_sign": SIGNS[dashamsha_sign(asc)], "reliable": time_known}
     houses = chart_houses(rows, ref_sign)
     d1 = {SIGNS[s]: [p for p in PLANETS if rows[p]["sign_index"] == s] for s in range(12)}
     d9 = {SIGNS[s]: [p for p in PLANETS if navamsa_sign(pos[p][0]) == s] for s in range(12)}
@@ -345,6 +371,16 @@ def sign_changes(planet: str, start: datetime, years: float, step_days: float = 
             sign = s2
         jd = jd2
     return res
+
+
+def slow_ingresses(now: datetime, years: float = 2.0) -> list[dict]:
+    """Sidereal sign ingresses of Jupiter, Saturn, and Rahu in the next `years` (includes retrograde returns)."""
+    out = []
+    for planet in ("Jupiter", "Saturn", "Rahu"):
+        for dt, sign in sign_changes(planet, now, years, step_days=4):
+            out.append({"planet": planet, "enters": SIGNS[sign], "date": dt.date().isoformat()})
+    out.sort(key=lambda r: (r["date"], r["planet"]))
+    return out
 
 
 def sade_sati(moon_sign: int, now: datetime) -> dict:

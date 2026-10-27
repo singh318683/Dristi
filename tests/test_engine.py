@@ -85,6 +85,37 @@ def test_navamsa():
     assert engine.navamsa_sign(359.9) == 11
 
 
+def test_dashamsha_parashara():
+    # Odd signs count from themselves; even signs from the 9th. Each part is 3°.
+    assert engine.SIGNS[engine.dashamsha_sign(0)] == "Aries"
+    assert engine.SIGNS[engine.dashamsha_sign(3)] == "Taurus"
+    assert engine.SIGNS[engine.dashamsha_sign(27)] == "Capricorn"   # Aries, 10th part
+    assert engine.SIGNS[engine.dashamsha_sign(30)] == "Capricorn"   # 0° Taurus, 9th from Taurus
+    assert engine.SIGNS[engine.dashamsha_sign(33)] == "Aquarius"
+    assert engine.SIGNS[engine.dashamsha_sign(90)] == "Pisces"      # 0° Cancer
+    assert engine.SIGNS[engine.dashamsha_sign(90 + 9.92)] == "Gemini"
+    c = _chart("1990-05-15", "10:30", 28.65195, 77.23149)
+    for r in list(c["planets"].values()) + [c["lagna"]]:
+        assert r["dashamsha_sign"] == engine.SIGNS[engine.dashamsha_sign(r["longitude"])]
+
+
+def test_mercury_virgo_dignity_is_not_exalted_after_moolatrikona():
+    # BPHS: Mercury exalted in Virgo, moolatrikona 16°–20°, own sign for the rest of Virgo.
+    assert engine.dignity("Mercury", 5, 0) == "exalted"
+    assert engine.dignity("Mercury", 5, 15.9) == "exalted"
+    assert engine.dignity("Mercury", 5, 16) == "moolatrikona"
+    assert engine.dignity("Mercury", 5, 19.99) == "moolatrikona"
+    assert engine.dignity("Mercury", 5, 20) == "own sign"
+    assert engine.dignity("Mercury", 5, 29.9) == "own sign"
+    assert engine.dignity("Mercury", 2, 10) == "own sign"          # Gemini
+    assert engine.dignity("Moon", 1, 2) == "exalted"
+    assert engine.dignity("Moon", 1, 10) == "moolatrikona"
+    assert engine.dignity("Sun", 4, 10) == "moolatrikona"
+    assert engine.dignity("Sun", 4, 25) == "own sign"
+    assert engine.dignity("Sun", 0, 10) == "exalted"
+    assert engine.dignity("Rahu", 1, 5) == "exalted"
+
+
 def test_nakshatra_boundaries():
     assert engine.nak_info(0)["nakshatra"] == "Ashwini" and engine.nak_info(0)["pada"] == 1
     assert engine.nak_info(13.34)["nakshatra"] == "Bharani"
@@ -121,6 +152,17 @@ def test_dasha_structure():
         assert m["antardashas"][0]["start"] == m["start"] and m["antardashas"][-1]["end"] == m["end"]
     cur = c["dasha"]["current"]
     assert cur["antardasha"]["start"] <= "2026-10-23" <= cur["antardasha"]["end"]
+    pds = cur["pratyantardashas"]
+    assert len(pds) == 9 and pds[0]["lord"] == cur["antardasha"]["lord"]
+    assert pds[0]["start"] == cur["antardasha"]["start"] and pds[-1]["end"] == cur["antardasha"]["end"]
+    for a, b in zip(pds, pds[1:]):
+        assert a["end"] == b["start"]
+    assert any(p["start"] == cur["pratyantardasha"]["start"] for p in pds)
+    assert cur["pratyantardasha"]["start"] <= "2026-10-23" <= cur["pratyantardasha"]["end"]
+    nxt = cur["next_antardasha_pratyantardashas"]
+    assert nxt[0]["start"] == cur["next_antardasha"]["start"] and nxt[-1]["end"] == cur["next_antardasha"]["end"]
+    assert nxt[0]["lord"] == cur["next_antardasha"]["lord"]
+    assert cur["next_antardasha_mahadasha"] in engine.DASHA_ORDER
 
 
 def test_yogas_doshas_modi():
