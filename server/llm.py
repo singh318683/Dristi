@@ -38,7 +38,7 @@ Do not tell the person to put off a major decision until a pratyantardasha ends.
 only the Sade Sati dosha. No other dates, and no station dates. Do not calculate a transit date yourself.
 - The only rising sign is lagna.sign. When time is known, name that sign once. An earlier message is not a chart. \
 If it names another lagna or another period, ignore it and use this JSON.
-- gochar.planets is where a planet is today. planets is the birth chart. Do not describe a birth sign as today's sky.
+- This week, a planet's sign is its now field or gochar.planets. sign on planets is the birth chart only.
 
 How to read the question (silently, then answer):
 - Career or a job: houses 10, 6, 2, 11, their lords, Sun, Saturn, Mercury, and D10.
@@ -297,6 +297,11 @@ def compact_chart(profile: dict, chart: dict) -> dict:
     if not known:
         out["time_warning"] = ("Birth time unknown. Houses are Chandra lagna, counted from the Moon. "
                                "Do not quote a rising sign or a D9/D10 lagna. Precision is lower.")
+    for name, natal in out["planets"].items():
+        today = out["gochar"]["planets"].get(name)
+        if not today:
+            continue
+        natal["now"] = today["sign"]
     return out
 
 
