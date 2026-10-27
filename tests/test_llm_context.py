@@ -246,7 +246,8 @@ def test_prompt_rules_and_payload_stay_compact():
     hindi = llm.SYSTEM_PROMPT.format(app="Drishti", lang_rule=llm.LANG_RULES["hi"])
     llm.HOROSCOPE_PROMPT.format(app="Drishti", sign="Mesha", lang_rule=llm.LANG_RULES["en"])
     for phrase in ("cite_only", "do_not_collapse", "pratyantardasha", "from_lagna", "from_moon",
-                   "rules_houses", "D10", "doctor", "8th house", "time_known", "YYYY-MM-DD"):
+                   "rules_houses", "D10", "doctor", "8th house", "time_known", "YYYY-MM-DD",
+                   "FACTORS:", "never required"):
         assert phrase in text
     assert "प्रत्यंतर" in hindi and "YYYY-MM-DD" in hindi
     assert "sub-period" in llm.LANG_RULES["hi"]
