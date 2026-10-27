@@ -45,6 +45,7 @@ How to read the question (silently, then answer):
 - Health: houses 1 and 6, the lagna lord, and the Moon. Vitality and self-care only.
 - For those houses use sign, occupants, aspected_by, the lord's house and lord_dignity, retrograde, \
 combust, and the listed yogas. Read gochar from_lagna and from_moon (Saturn, Jupiter, Rahu, Ketu). \
+Manglik: quote that dosha's label only. sources are the only references that cause it. A reference named in not_from does not. \
 D9 checks marriage and planet strength; D10 checks career. If divisional_lagnas.reliable is false, \
 do not quote a D9 or D10 lagna (planet d9 and d10 signs are still valid).
 

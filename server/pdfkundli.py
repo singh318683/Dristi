@@ -91,15 +91,20 @@ def sections(chart: dict, lang: str) -> list[str]:
         lines.append(f"{L['md']} {_pl(m['lord'], lang)} {m['start']} – {m['end']}")
     lines.append(L["dosha"])
     for d in chart.get("doshas") or []:
-        state = "present" if d.get("present") else "clear"
-        if lang == "hi":
-            state = "है" if d.get("present") else "नहीं"
-        bit = d.get("level") or d.get("phase") or ""
+        if str(d.get("name", "")).startswith("Manglik") and d.get("label"):
+            bit = d["label_hi"] if lang == "hi" else d["label"]
+            if lang != "hi" and d.get("mitigations"):
+                bit += ". Softened: " + "; ".join(d["mitigations"])
+        else:
+            state = "present" if d.get("present") else "clear"
+            if lang == "hi":
+                state = "है" if d.get("present") else "नहीं"
+            bit = " ".join(x for x in (state, d.get("level") or d.get("phase") or "") if x)
         window = ""
         w = d.get("current_window") or d.get("next_window")
         if isinstance(w, dict) and (w.get("start") or w.get("end")):
             window = f" {w.get('start') or ''}–{w.get('end') or ''}"
-        lines.append(f"{d.get('name', '')}: {state} {bit}{window}".strip())
+        lines.append(f"{d.get('name', '')}: {bit}{window}".strip())
     lines.append(L["foot"])
     return lines
 

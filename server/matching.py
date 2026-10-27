@@ -121,8 +121,10 @@ def milan(girl: dict, boy: dict) -> dict:
         doshas.append({"name": "Bhakoot Dosha", "exceptions": exc})
     gm = next(d for d in girl["doshas"] if d["name"].startswith("Manglik"))
     bm = next(d for d in boy["doshas"] if d["name"].startswith("Manglik"))
-    gmp, bmp = gm["level"] in ("present", "mild (cancelled/reduced)"), bm["level"] in ("present", "mild (cancelled/reduced)")
-    manglik = {"girl": gm["level"], "boy": bm["level"],
+    full = {"present", "mild", "mild (cancelled/reduced)"}
+    gmp, bmp = gm["level"] in full, bm["level"] in full
+    manglik = {"girl": gm.get("label") or gm["level"], "boy": bm.get("label") or bm["level"],
+               "girl_hi": gm.get("label_hi") or gm["level"], "boy_hi": bm.get("label_hi") or bm["level"],
                "verdict": "both Manglik: dosha cancels out" if gmp and bmp else
                "neither is Manglik" if not (gmp or bmp) else
                "only one partner is Manglik: traditionally needs review or remedies"}
