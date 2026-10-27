@@ -725,22 +725,32 @@ async function pageHome() {
   $('#shareH').onclick = () => shareCard('horoscope');
   loadHoroscope(c.moon_sign);
 }
+let horoReq = 0;
+function readingForSign(text, sign) {
+  const name = hi() ? SIGNS_HI[SIGNS.indexOf(sign)] : sign;
+  return !!(name && text && String(text).includes(name));
+}
 async function loadHoroscope(sign) {
   const box = $('#hHoro'); if (!box) return;
+  const req = ++horoReq;
+  const lang = S.lang;
   try {
-    const h = await api(`/api/horoscope?sign=${sign}&lang=${S.lang}`);
-    if (!$('#hHoro')) return;
+    const h = await api(`/api/horoscope?sign=${encodeURIComponent(sign)}&lang=${lang}`);
+    if (req !== horoReq || !$('#hHoro') || h.sign !== sign || (h.lang && h.lang !== lang)) return;
     const T = h.transits;
     const facts = ['Moon', 'Sun', 'Venus', 'Mars'].map(p => `<div><b>${plName(p)} · ${signName(T[p].sign)}</b>${tr(HOUSE_MEAN[T[p].house_from_rashi][0], HOUSE_MEAN[T[p].house_from_rashi][1])}</div>`).join('');
-    S.horoText = h.text || '';
+    const named = !!(h.ai && readingForSign(h.text, sign));
+    if (named) { S.horoText = h.text; S.horoFor = sign + ':' + lang; }
+    else if (S.horoFor !== sign + ':' + lang) { S.horoText = ''; S.horoFor = ''; }
     const notice = tr('Today’s faster planets, until the AI reading is switched on.', 'AI राशिफल चालू होने तक आज के तेज़ ग्रह।');
-    const full = h.ai ? md(h.text) : `<p class="small muted" style="margin:4px 0 0">${notice}</p><div class="facts">${facts}</div>`;
-    const preview = h.ai
-      ? `<div class="clamp3">${esc(String(h.text || '').replace(/[*_#>`]/g, '').replace(/\s+/g, ' ').trim())}</div>`
-      : `<p class="small muted" style="margin:4px 0 0">${notice}</p><div class="facts">${facts}</div>`;
+    const factsBlock = `<p class="small muted" style="margin:4px 0 0">${notice}</p><div class="facts">${facts}</div>`;
+    const full = named ? md(h.text) : factsBlock;
+    const preview = named
+      ? `<div class="clamp3">${esc(String(h.text).replace(/[*_#>`]/g, '').replace(/\s+/g, ' ').trim())}</div>`
+      : factsBlock;
     box.innerHTML = `<button class="card link horo" id="horoOpen"><div class="sec" style="margin:0"><h3>${tr("Today's horoscope", 'आज का राशिफल')}</h3><span class="sk">${signName(sign)}</span></div>${preview}</button>`;
     $('#horoOpen').onclick = () => openDetail(tr("Today's horoscope", 'आज का राशिफल'), full + `<p class="small muted">${tr('Free. Not a prediction.', 'मुफ़्त। यह भविष्यवाणी नहीं।')}</p>`);
-  } catch (e) { box.innerHTML = errState(e.message, 'retryHoro'); const r = $('#retryHoro'); if (r) r.onclick = () => loadHoroscope(sign); }
+  } catch (e) { if (req !== horoReq || !$('#hHoro')) return; box.innerHTML = errState(e.message, 'retryHoro'); const r = $('#retryHoro'); if (r) r.onclick = () => loadHoroscope(sign); }
 }
 async function loadPanchang(p) {
   const box = $('#hPanch'); if (!box || !p.place) return;
@@ -816,8 +826,16 @@ async function shareCard(kind) {
     } else {
       const c = await chartOf(p);
       title = tr("Today's horoscope", 'आज का राशिफल');
-      const blurb = (S.horoText || tr('Open Drishti for the full reading.', 'पूरा राशिफल दृष्टि में पढ़ें।')).replace(/\s+/g, ' ');
-      lines = [p.name, signName(c.moon_sign) + ' ' + tr('Moon', 'राशि'), blurb];
+      const key = c.moon_sign + ':' + S.lang;
+      let blurb = S.horoFor === key && readingForSign(S.horoText, c.moon_sign) ? S.horoText : '';
+      if (!blurb) {
+        const h = await api(`/api/horoscope?sign=${encodeURIComponent(c.moon_sign)}&lang=${S.lang}`);
+        if (h && h.sign === c.moon_sign && (!h.lang || h.lang === S.lang) && readingForSign(h.text, c.moon_sign)) {
+          blurb = h.text; S.horoText = h.text; S.horoFor = key;
+        }
+      }
+      if (!blurb) blurb = tr('Open Drishti for the full reading.', 'पूरा राशिफल दृष्टि में पढ़ें।');
+      lines = [p.name, signName(c.moon_sign) + ' ' + tr('Moon', 'राशि'), blurb.replace(/\s+/g, ' ')];
     }
   } catch (e) { return toast(e.message); }
   const canvas = document.createElement('canvas');

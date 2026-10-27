@@ -416,6 +416,23 @@ async def api_chat(r: ChatReq):
 
 
 # ----------------------------------------------------------- horoscope ----
+def _sign_label(sign: str, lang: str) -> str:
+    """The name the reading must use: English rashi, or Devanagari when lang is hi."""
+    if lang == "hi":
+        return engine.SIGNS_HI[engine.SIGNS.index(sign)]
+    return sign
+
+
+def reading_fits(text: str | None, sign: str, lang: str) -> bool:
+    """A cached paragraph belongs to this rashi only when it names that rashi in this language."""
+    return bool(text) and _sign_label(sign, lang) in text
+
+
+def _horo_json(payload: dict) -> JSONResponse:
+    # no-store: a shared cache must not replay one sign's body for another query.
+    return JSONResponse(payload, headers={"Cache-Control": "private, no-store"})
+
+
 @app.get("/api/horoscope")
 async def api_horoscope(sign: str, lang: str = "en"):
     if sign not in engine.SIGNS:
@@ -426,26 +443,31 @@ async def api_horoscope(sign: str, lang: str = "en"):
     tr = engine.transits(now, s, s)
     facts = {p: {"sign": v["sign"], "house_from_rashi": v["house_from_moon"], "retrograde": v["retrograde"]}
              for p, v in tr["planets"].items()}
-    base = {"sign": sign, "date": now.date().isoformat(), "transits": facts}
-    if not llm.configured():
-        return base | {"ai": False, "text": None}
     day = now.date().isoformat()
+    base = {"sign": sign, "lang": lang, "date": day, "transits": facts}
+    if not llm.configured():
+        return _horo_json(base | {"ai": False, "text": None})
     with db.connect() as con:
         row = con.execute("select body from horoscope where day=? and sign=? and lang=?", (day, sign, lang)).fetchone()
-    if row:
-        return base | {"ai": True, "text": row[0]}
+        if row and reading_fits(row[0], sign, lang):
+            return _horo_json(base | {"ai": True, "text": row[0]})
+        if row:
+            con.execute("delete from horoscope where day=? and sign=? and lang=?", (day, sign, lang))
     try:
         text = await llm.complete([
-            {"role": "system", "content": llm.HOROSCOPE_PROMPT.format(app=APP_NAME, sign=sign, lang_rule=llm.LANG_RULES[lang])},
+            {"role": "system", "content": llm.HOROSCOPE_PROMPT.format(
+                app=APP_NAME, sign=sign, sign_hi=engine.SIGNS_HI[s], lang_rule=llm.LANG_RULES[lang])},
             {"role": "user", "content": json.dumps(base, ensure_ascii=False)}], max_tokens=400)
     except Exception as e:
-        return base | {"ai": False, "text": None, "error": str(e)[:160]}
+        return _horo_json(base | {"ai": False, "text": None, "error": str(e)[:160]})
+    if not reading_fits(text, sign, lang):
+        return _horo_json(base | {"ai": False, "text": None})
     with db.connect() as con:
         con.execute(
             "insert into horoscope(day, sign, lang, body) values(?,?,?,?) "
             "on conflict(day, sign, lang) do update set body=excluded.body",
             (day, sign, lang, text))
-    return base | {"ai": True, "text": text}
+    return _horo_json(base | {"ai": True, "text": text})
 
 
 # ------------------------------------------------------------- referral ----
