@@ -336,25 +336,32 @@ svg.mini .ch-line{stroke-width:2}
 .cite-sheet .chartwrap{margin-top:4px}
 .cite-sheet .chartwrap svg{max-width:300px}
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.001ms!important;animation-delay:0s!important;animation-iteration-count:1!important;transition-duration:.001ms!important;scroll-behavior:auto!important}.reveal{opacity:1;transform:none}}
-/* single viewport: the page does not scroll; detail lives in a sheet; chat scrolls in .msgs */
-body.app-fit{height:100dvh;overflow:hidden}
-body.app-fit #root{height:100dvh;display:flex;flex-direction:column;align-items:center}
+/* One screen when it fits. Rows never shrink or overlap; main scrolls if the
+   small viewport (iOS Safari toolbars) is shorter than the cards. */
+body.app-fit{height:100dvh;height:100svh;max-height:100svh;overflow:hidden}
+body.app-fit #root{height:100%;max-height:100%;min-height:0;display:flex;flex-direction:column;align-items:center}
 body.app-fit .app{flex:1;min-height:0;width:100%;max-width:560px;height:auto;display:flex;flex-direction:column;padding-bottom:0;overflow:hidden}
-body.app-fit nav.bottom{position:relative;left:auto;right:auto;width:100%;max-width:560px;flex:none}
+body.app-fit nav.bottom{position:relative;left:auto;right:auto;width:100%;max-width:560px;flex:none;flex-shrink:0;padding-bottom:env(safe-area-inset-bottom)}
 body.app-fit nav.bottom .in{height:56px}
-body.app-fit .top{flex:none;flex-wrap:nowrap;min-height:48px;padding-top:calc(env(safe-area-inset-top) + 2px);padding-bottom:2px}
+body.app-fit .top{flex:none;flex-shrink:0;flex-wrap:nowrap;min-height:48px;padding-top:calc(env(safe-area-inset-top) + 2px);padding-bottom:2px}
 body.app-fit .logo small{letter-spacing:.06em;font-size:10px}
 body.app-fit .who-btn{max-width:108px}
-body.app-fit main.fit{flex:1;min-height:0;overflow:hidden;display:flex;flex-direction:column;gap:8px;padding:8px 12px}
+body.app-fit main.fit{flex:1;min-height:0;overflow-x:hidden;overflow-y:auto;display:flex;flex-direction:column;gap:6px;padding:6px 12px;-webkit-overflow-scrolling:touch}
+body.app-fit main.fit > *{flex:0 0 auto}
+body.app-fit .chips{flex-shrink:0;min-height:36px}
+body.app-fit .chartcard > *{flex-shrink:0}
+body.app-fit .chartcard > .chartwrap{flex:1 1 auto;min-height:0}
 body.app-fit .h1{font-size:20px;line-height:1.2;margin:0}
 body.app-fit .sub{margin:0;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-body.app-fit .card,body.app-fit .cta{margin-bottom:0;padding:10px 12px}
+body.app-fit .card,body.app-fit .cta{margin-bottom:0;padding:8px 12px}
 body.app-fit .cta p{margin:0 0 8px;font-size:13.5px}
 body.app-fit .btn{min-height:40px;font-size:15px;border-radius:12px;padding:0 12px}
 body.app-fit .chip,body.app-fit .seg button{min-height:36px}
 body.app-fit .setrow{min-height:40px}
 body.app-fit .input{min-height:40px}
-body.app-fit .chat{height:auto;flex:1;min-height:0}
+body.app-fit .chat{height:auto;flex:1;min-height:0;overflow:hidden}
+body.app-fit .chat > *{flex-shrink:0}
+body.app-fit .chat > .msgs{flex:1 1 auto;min-height:0;overflow-y:auto}
 body.app-fit .asking{min-height:36px;padding:2px 12px}
 body.app-fit .composer{padding:6px 10px 8px}
 body.app-fit .composer textarea{max-height:64px}
@@ -364,7 +371,7 @@ body.app-fit .welcome h4{font-size:17px;margin:0 0 2px}
 body.app-fit .welcome p{margin:0 auto 8px;font-size:13.5px}
 body.app-fit .qgrid{gap:6px}
 body.app-fit .qgrid button{min-height:40px;font-size:14px;padding:6px 8px}
-body.app-fit .chartcard{flex:1;min-height:0;display:flex;flex-direction:column;overflow:hidden;padding:8px 10px}
+body.app-fit main.fit > .chartcard{flex:1 1 160px;min-height:160px;display:flex;flex-direction:column;overflow:hidden;padding:8px 10px}
 body.app-fit .chartwrap{flex:1;min-height:0;margin-top:4px;overflow:hidden}
 body.app-fit .chartwrap svg{width:100%;height:100%;max-width:none;max-height:100%}
 body.app-fit .info{margin-top:4px;padding:6px 8px;min-height:0;max-height:58px;overflow:hidden;font-size:13px}
@@ -375,7 +382,9 @@ body.app-fit .pair .pick{padding:8px 6px}
 body.app-fit .ring{width:84px;height:84px}
 body.app-fit .ring div{width:66px;height:66px}
 body.app-fit .ring b{font-size:22px}
-.clamp3{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+body.app-fit .reveal{opacity:1;transform:none}
+.card.horo{overflow:hidden}
+.clamp3{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;line-height:1.45;max-height:4.35em}
 .sheet-bg.as-bottom{align-items:flex-end;padding:0}
 .sheet.tall{width:min(100%,560px);max-height:min(78dvh,720px);border-radius:18px 18px 0 0;display:flex;flex-direction:column;padding:8px 14px 16px}
 .sheet.tall .sheet-body{overflow:auto;min-height:0}
@@ -724,9 +733,13 @@ async function loadHoroscope(sign) {
     const T = h.transits;
     const facts = ['Moon', 'Sun', 'Venus', 'Mars'].map(p => `<div><b>${plName(p)} · ${signName(T[p].sign)}</b>${tr(HOUSE_MEAN[T[p].house_from_rashi][0], HOUSE_MEAN[T[p].house_from_rashi][1])}</div>`).join('');
     S.horoText = h.text || '';
-    const body = h.ai ? md(h.text) : `<p class="small muted" style="margin:4px 0 0">${tr('Today’s faster planets, until the AI reading is switched on.', 'AI राशिफल चालू होने तक आज के तेज़ ग्रह।')}</p><div class="facts">${facts}</div>`;
-    box.innerHTML = `<button class="card link horo" id="horoOpen"><div class="sec" style="margin:0"><h3>${tr("Today's horoscope", 'आज का राशिफल')}</h3><span class="sk">${signName(sign)}</span></div><div class="clamp3">${body}</div></button>`;
-    $('#horoOpen').onclick = () => openDetail(tr("Today's horoscope", 'आज का राशिफल'), body + `<p class="small muted">${tr('Free. Not a prediction.', 'मुफ़्त। यह भविष्यवाणी नहीं।')}</p>`);
+    const notice = tr('Today’s faster planets, until the AI reading is switched on.', 'AI राशिफल चालू होने तक आज के तेज़ ग्रह।');
+    const full = h.ai ? md(h.text) : `<p class="small muted" style="margin:4px 0 0">${notice}</p><div class="facts">${facts}</div>`;
+    const preview = h.ai
+      ? `<div class="clamp3">${esc(String(h.text || '').replace(/[*_#>`]/g, '').replace(/\s+/g, ' ').trim())}</div>`
+      : `<p class="small muted" style="margin:4px 0 0">${notice}</p><div class="facts">${facts}</div>`;
+    box.innerHTML = `<button class="card link horo" id="horoOpen"><div class="sec" style="margin:0"><h3>${tr("Today's horoscope", 'आज का राशिफल')}</h3><span class="sk">${signName(sign)}</span></div>${preview}</button>`;
+    $('#horoOpen').onclick = () => openDetail(tr("Today's horoscope", 'आज का राशिफल'), full + `<p class="small muted">${tr('Free. Not a prediction.', 'मुफ़्त। यह भविष्यवाणी नहीं।')}</p>`);
   } catch (e) { box.innerHTML = errState(e.message, 'retryHoro'); const r = $('#retryHoro'); if (r) r.onclick = () => loadHoroscope(sign); }
 }
 async function loadPanchang(p) {
