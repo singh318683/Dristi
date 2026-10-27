@@ -228,14 +228,8 @@ async def api_chat(r: ChatReq):
                        "message": f"You've used your free questions. Each question costs {QUESTION_COST} credits."})
         return StreamingResponse(broke(), media_type="text/event-stream")
     chart = chart_for(r.profile)
-    ctx = llm.compact_chart(r.profile.model_dump() | {"place": r.profile.place.name}, chart)
-    system = llm.SYSTEM_PROMPT.format(app=APP_NAME, lang_rule=llm.LANG_RULES[lang])
-    today = datetime.now(timezone.utc).date().isoformat()
-    msgs = [{"role": "system", "content": system},
-            {"role": "system", "content": f"Today is {today}. Chart JSON:\n" + json.dumps(ctx, ensure_ascii=False, separators=(",", ":"))}]
-    for m in r.messages[-10:]:
-        if m.role in ("user", "assistant"):
-            msgs.append({"role": m.role, "content": m.content[:4000]})
+    profile = r.profile.model_dump() | {"place": r.profile.place.name}
+    msgs = llm.build_chat_messages(APP_NAME, profile, chart, [m.model_dump() for m in r.messages], lang)
 
     async def gen():
         got = False
