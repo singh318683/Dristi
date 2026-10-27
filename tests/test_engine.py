@@ -198,6 +198,57 @@ def test_sudhanshu_manglik_is_venus_only():
     assert "not_from" in sent["say"] or "Not from" in sent["say"]
 
 
+def test_worker_thread_matches_lahiri_chart_pdf_and_chat():
+    """Sync handlers run on a worker thread. That thread must not fall back to Fagan/Bradley."""
+    import threading
+    import swisseph as swe
+
+    pinned = datetime(2026, 10, 27, tzinfo=timezone.utc)
+    box = {}
+
+    def run():
+        swe.set_sid_mode(swe.SIDM_FAGAN_BRADLEY, 0, 0)
+        utc, _ = engine.local_to_utc("1981-05-10", "19:30", "Asia/Kolkata", 94.8006)
+        box["chart"] = engine.compute_chart(utc, 28.16951, 94.8006, now=pinned)
+        box["jupiter"] = [e for e in engine.slow_ingresses(pinned, 2.0)
+                          if e["planet"] == "Jupiter" and e["enters"] == "Leo"]
+
+    worker = threading.Thread(target=run)
+    worker.start()
+    worker.join()
+    c = box["chart"]
+    assert 23.4 < c["ayanamsa"]["value"] < 23.8
+    assert c["ayanamsa"]["name"].startswith("Lahiri")
+    assert c["lagna"]["sign"] == "Scorpio"
+    venus_houses = [h["house"] for h in c["houses"] if h["lord"] == "Venus"]
+    assert venus_houses == [7, 12]
+    cur = c["dasha"]["current"]
+    assert cur["mahadasha"]["lord"] == "Moon"
+    assert cur["mahadasha"]["start"] == "2024-06-29" and cur["mahadasha"]["end"] == "2034-06-29"
+    assert cur["antardasha"]["lord"] == "Rahu"
+    assert cur["antardasha"]["start"] == "2025-11-28" and cur["antardasha"]["end"] == "2027-05-30"
+    assert cur["pratyantardasha"]["lord"] == "Ketu"
+    assert cur["pratyantardasha"]["start"] == "2026-10-14" and cur["pratyantardasha"]["end"] == "2026-11-15"
+    # The Fagan/Bradley chart this birth was wrongly given: Moon MD from 2025-08-14, Mars AD.
+    assert cur["mahadasha"]["start"] != "2025-08-14"
+    assert cur["antardasha"]["lord"] != "Mars"
+    text = "\n".join(pdfkundli.sections(c, "en"))
+    assert "Lagna (rising sign): Scorpio" in text
+    assert "Mahadasha Moon 2024-06-29" in text
+    assert "Antardasha Rahu 2025-11-28" in text
+    assert "Pratyantardasha Ketu 2026-10-14" in text
+    ctx = llm.compact_chart({"name": "sudhanshu singh", "date": "1981-05-10", "time": "19:30", "place": "Along"}, c)
+    now_line = ctx["vimshottari"]["cite_only"]["now_line"]
+    assert now_line == ("Moon mahadasha (2024-06-29 to 2034-06-29) > "
+                        "Rahu antardasha (2025-11-28 to 2027-05-30) > "
+                        "Ketu pratyantardasha (2026-10-14 to 2026-11-15)")
+    assert ctx["lagna"]["sign"] == "Scorpio"
+    facts = llm.chart_facts(ctx)
+    assert "Lagna Scorpio" in facts and now_line in facts
+    assert box["jupiter"] and box["jupiter"][0]["date"] == "2026-10-31"
+    assert "Jupiter enters Leo on 2026-10-31" in facts
+
+
 def test_yogas_doshas_modi():
     c = _chart("1950-09-17", "11:00", dm(23, 37), dm(72, 28))
     names = {y["name"] for y in c["yogas"]}

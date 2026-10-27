@@ -392,6 +392,9 @@ body.app-fit .reveal{opacity:1;transform:none}
 .why summary{cursor:pointer;font-size:13px;font-weight:700;color:var(--on-tint);list-style:none}
 .why summary::-webkit-details-marker{display:none}
 .why p{margin:4px 0 0;font-size:13px;color:var(--muted)}
+.plain{margin-top:10px;background:var(--primary-tint);border:1px solid var(--primary-line);border-radius:12px;padding:10px 12px}
+.plain > b{display:block;margin:0 0 4px;color:var(--on-tint);font-size:13px}
+.plain p{font-size:15.5px;line-height:1.5}
 .costline{font-size:12.5px;font-weight:700;color:var(--on-tint);background:var(--primary-tint);border-radius:10px;padding:6px 10px;margin-bottom:6px;text-align:center}
 .minirow{display:flex;gap:8px;align-items:center;min-width:0}
 .minirow .grow{flex:1;min-width:0}
@@ -682,9 +685,11 @@ function bindOnb() {
       if (!o.place) { toast(tr('Pick the birth place from the list', 'सूची से जन्म स्थान चुनें')); pl.focus(); return; }
       const p = {id: o.id || uid(), name: o.name, relation: o.relation, gender: o.gender || null, date: o.date, time: o.unknown ? null : o.time, place: o.place, offset: off === '' ? null : parseFloat(off)};
       const i = S.profiles.findIndex(x => x.id === p.id);
+      const prev = i >= 0 ? S.profiles[i] : null;
       if (i >= 0) S.profiles[i] = p; else S.profiles.push(p);
       store.set('profiles', S.profiles); S.active = p.id; store.set('active', p.id);
       Object.keys(S.charts).forEach(k => k.startsWith(p.id) && delete S.charts[k]);
+      if (prev && birthStamp(prev) !== birthStamp(p)) localStorage.removeItem('dr-chat-' + p.id);
       S.onb = null; S.tab = 'home'; S.sel = null; render(); window.scrollTo(0, 0);
     });
   }
@@ -1177,6 +1182,7 @@ const md = s => {
   return out + (inL ? '</ul>' : '');
 };
 const chatKey = () => 'chat-' + activeProfile().id;
+const birthStamp = p => { const pl = p.place || {}; return [p.date || '', p.time || '', pl.lat, pl.lon, pl.tz || '', p.offset ?? ''].join('|'); };
 async function refreshWallet() { try { S.wallet = await api('/api/wallet?device=' + DEVICE); } catch {} }
 const creditsLabel = () => { const w = S.wallet; if (!w) return ''; return w.free_left ? tr(`${w.free_left} free left`, `${w.free_left} मुफ़्त शेष`) : tr(`${w.credits} credits`, `${w.credits} क्रेडिट`); };
 const ERR = {
@@ -1186,15 +1192,28 @@ const ERR = {
   llm_error: () => [tr('Something went wrong', 'कुछ गड़बड़ हुई'), tr('The answer could not be completed. You were not charged; please try again.', 'उत्तर पूरा नहीं हो सका। शुल्क नहीं लगा; फिर कोशिश करें।')],
 };
 const errBubble = code => { const [t, m] = (ERR[code] || ERR.llm_error)(); return `<div class="bub err"><b>${t}</b>${m}${code === 'insufficient_credits' ? `<div><button class="btn sm" style="margin-top:10px" data-go="me">${tr('Add credits', 'क्रेडिट जोड़ें')}</button></div>` : ''}</div>`; };
-function visibleAnswer(text) {
-  const i = String(text || '').search(/\n\s*FACTORS\s*:/i);
-  if (i >= 0) return text.slice(0, i).trim();
-  return String(text || '').replace(/\s*FACTORS\s*:[^\n]*$/i, '').trim();
+const SIMPLE_RE = /(?:^|\n)\s*(?:\*\*|__)?(In simple words|सरल शब्दों में)(?:\*\*|__)?\s*:?\s*(?:\n|$)/i;
+function splitAnswer(text) {
+  const raw = String(text || '');
+  const factAt = raw.search(/\n\s*FACTORS\s*:/i);
+  const head = (factAt >= 0 ? raw.slice(0, factAt) : raw.replace(/\s*FACTORS\s*:[^\n]*$/i, '')).trim();
+  const m = head.match(SIMPLE_RE);
+  if (!m) return {body: head, simple: '', heading: ''};
+  return {body: head.slice(0, m.index).trim(), heading: m[1], simple: head.slice(m.index + m[0].length).trim()};
+}
+function plainBox(heading, simple) {
+  if (!heading && !simple) return '';
+  const title = heading || (hi() ? 'सरल शब्दों में' : 'In simple words');
+  return `<div class="plain"><b>${esc(title)}</b>${simple ? md(simple) : ''}</div>`;
+}
+function answerHtml(text) {
+  const {body, simple, heading} = splitAnswer(text);
+  return cite(md(body)) + plainBox(heading, simple);
 }
 function splitFactors(text) {
   const raw = String(text || '');
   const m = raw.match(/(?:^|\n)\s*FACTORS\s*:\s*(.+)\s*$/i);
-  const body = m ? raw.slice(0, m.index).trim() : visibleAnswer(raw);
+  const body = m ? raw.slice(0, m.index).trim() : raw.replace(/\s*FACTORS\s*:[^\n]*$/i, '').trim();
   let why = m ? m[1].trim() : '';
   if (!why && body) {
     const ps = [...new Set(body.match(PL_RE) || [])];
@@ -1210,8 +1229,9 @@ const bubble = m => {
   if (m.role === 'user') return `<div class="bub me">${esc(m.content)}</div>`;
   if (m.role === 'error') return errBubble(m.code);
   const {body, why} = splitFactors(m.content);
+  const parts = splitAnswer(body);
   const whyHtml = why ? `<details class="why"><summary>${tr('Why', 'क्यों')}</summary><p>${esc(why)}</p></details>` : '';
-  return `<div class="bub ai">${cite(md(body))}${whyHtml}</div>`;
+  return `<div class="bub ai">${cite(md(parts.body))}${plainBox(parts.heading, parts.simple)}${whyHtml}</div>`;
 };
 function pageAsk() {
   const p = activeProfile(), hist = store.get(chatKey(), []), on = !!(S.status && S.status.ai_configured);
@@ -1282,7 +1302,7 @@ async function ask(q) {
         const line = buf.slice(0, i).trim(); buf = buf.slice(i + 2);
         if (!line.startsWith('data:')) continue;
         const ev = JSON.parse(line.slice(5));
-        if (ev.type === 'token') { text += ev.text; aiEl.innerHTML = cite(md(visibleAnswer(text))); box.scrollTop = box.scrollHeight; }
+        if (ev.type === 'token') { text += ev.text; aiEl.innerHTML = answerHtml(text); box.scrollTop = box.scrollHeight; }
         else if (ev.type === 'done') { if (ev.wallet) S.wallet = ev.wallet; }
         else if (ev.type === 'error') { err = ev; if (ev.wallet) S.wallet = ev.wallet; }
       }

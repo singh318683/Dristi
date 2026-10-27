@@ -35,7 +35,9 @@ and the next one. For any other mahadasha, give its start and end only.
 You may mention the active pratyantardasha only with its exact dates and its parent antardasha. \
 Do not tell the person to put off a major decision until a pratyantardasha ends.
 - Transit sign changes: only gochar.ingresses (they include retrograde returns). Sade Sati and Dhaiya: \
-only the Sade Sati dosha. No other dates, and no station dates.
+only the Sade Sati dosha. No other dates, and no station dates. Do not calculate a transit date yourself.
+- The only rising sign is lagna.sign. An earlier message is not a chart. If it names another lagna or \
+another period, ignore it and use this JSON.
 
 How to read the question (silently, then answer):
 - Career or a job: houses 10, 6, 2, 11, their lords, Sun, Saturn, Mercury, and D10.
@@ -57,7 +59,11 @@ Say "this period favours" or "this period asks for care", not "this will happen"
 or an antardasha with its start and end copied from cite_only and the mahadasha it sits inside.
 - At most two date windows, both copied from cite_only or gochar.ingresses. Quote YYYY-MM-DD.
 - One optional gentle remedy (a mantra, a charity, a fast, or a habit). It is free and never required. No gemstones, no paid puja, and do not push a purchase.
-- The very last line, after the disclaimer, must be exactly: FACTORS: houses <numbers>; planets <names>; dasha <lord> mahadasha, <lord> antardasha
+- After the disclaimer, a heading on its own line, exactly "In simple words" in an English reply or \
+"सरल शब्दों में" in a Hindi reply. Then 2 to 4 sentences for someone with no astrology background: \
+what this means in daily life and one thing to do. Do not use dasha, mahadasha, antardasha, \
+pratyantardasha, lagna, house numbers, or Sanskrit words. No fear and no guarantees.
+- The very last line, after that plain section, must be exactly: FACTORS: houses <numbers>; planets <names>; dasha <lord> mahadasha, <lord> antardasha
   Name only houses, planets, and the dasha lords you actually used. No dates on that line.
 - Death, lifespan, accidents, surgery, or a named disease: refuse that prediction in one sentence. Then only \
 general vitality and self-care, and tell them to see a doctor. Do not use the 8th house or maraka planets.
@@ -194,6 +200,18 @@ def _gochar(chart: dict) -> dict:
         "ingresses": {"rule": "Only these sign changes in the next 2 years, including retrograde returns. Ketu stays opposite Rahu. Do not invent a station or any other date.",
                       "events": engine.slow_ingresses(datetime.fromisoformat(tr["as_of_utc"]), 2.0)},
     }
+
+
+def chart_facts(ctx: dict) -> str:
+    """The lagna, current periods, and ingresses the model must copy. Same chart as the chart tab and the PDF."""
+    lagna = ctx.get("lagna") or {}
+    rise = f"Lagna {lagna['sign']}" if lagna.get("reliable") and lagna.get("sign") else "Birth time unknown; do not name a rising sign"
+    cite = (ctx.get("vimshottari") or {}).get("cite_only") or {}
+    periods = cite.get("now_line") or "none"
+    events = ((ctx.get("gochar") or {}).get("ingresses") or {}).get("events") or []
+    ing = "; ".join(f"{e['planet']} enters {e['enters']} on {e['date']}" for e in events if e.get("date"))
+    return (f"This chart only. {rise}. Current periods, copy exactly: {periods}. "
+            f"Transit dates you may state, copy exactly and state no others: {ing or 'none'}.")
 
 
 def compact_chart(profile: dict, chart: dict) -> dict:

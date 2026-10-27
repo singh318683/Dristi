@@ -14,8 +14,20 @@ import swisseph as swe
 
 EPHE = os.path.join(os.path.dirname(__file__), "ephe")
 swe.set_ephe_path(EPHE)
-swe.set_sid_mode(swe.SIDM_LAHIRI, 0, 0)
 FLAGS = swe.FLG_SWIEPH | swe.FLG_SIDEREAL | swe.FLG_SPEED
+
+
+def use_lahiri() -> None:
+    """Swiss Ephemeris stores the sidereal mode per thread, and the default is Fagan/Bradley.
+
+    Setting it at import only covers the thread that imported this module. Sync FastAPI
+    routes (chart, kundli PDF) run in a worker thread, so they were computing a different
+    chart from the async chat route. Call this on every thread before a sidereal calc.
+    """
+    swe.set_sid_mode(swe.SIDM_LAHIRI, 0, 0)
+
+
+use_lahiri()
 
 SIGNS = ["Aries", "Taurus", "Gemini", "Cancer", "Leo", "Virgo", "Libra",
          "Scorpio", "Sagittarius", "Capricorn", "Aquarius", "Pisces"]
@@ -131,6 +143,7 @@ def dms(x: float) -> str:
 
 
 def sidereal_positions(jd: float) -> dict:
+    use_lahiri()
     out = {}
     for p in PLANETS[:-1]:
         xx, _ = swe.calc_ut(jd, SWE_ID[p], FLAGS)
@@ -141,10 +154,12 @@ def sidereal_positions(jd: float) -> dict:
 
 
 def ayanamsa(jd: float) -> float:
+    use_lahiri()
     return swe.get_ayanamsa_ut(jd)
 
 
 def lagna_lon(jd: float, lat: float, lon: float) -> float:
+    use_lahiri()
     _, ascmc = swe.houses_ex(jd, lat, lon, b"W", swe.FLG_SIDEREAL)
     return ascmc[0] % 360
 
@@ -352,7 +367,8 @@ def transits(now: datetime, ref_sign: int, moon_sign: int) -> dict:
 
 
 def sign_changes(planet: str, start: datetime, years: float, step_days: float = 4) -> list[tuple[datetime, int]]:
-    """Ingress times (sidereal) of a slow planet within [start, start+years]."""
+    """Ingress times (sidereal Lahiri) of a slow planet within [start, start+years]."""
+    use_lahiri()
     res = []
     jd = jd_ut(start); end = jd + years * 365.25
     sign = int(sidereal_positions(jd)[planet][0] // 30)
