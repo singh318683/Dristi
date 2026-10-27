@@ -11,6 +11,8 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "server"))
 import engine  # noqa: E402
+import llm  # noqa: E402
+import pdfkundli  # noqa: E402
 from matching import milan  # noqa: E402
 
 NOW = datetime(2026, 10, 23, tzinfo=timezone.utc)
@@ -163,6 +165,37 @@ def test_dasha_structure():
     assert nxt[0]["start"] == cur["next_antardasha"]["start"] and nxt[-1]["end"] == cur["next_antardasha"]["end"]
     assert nxt[0]["lord"] == cur["next_antardasha"]["lord"]
     assert cur["next_antardasha_mahadasha"] in engine.DASHA_ORDER
+
+
+def test_sudhanshu_manglik_is_venus_only():
+    """1981-05-10 19:30 Along: Mars is 6th from Lagna, 10th from Moon, 12th from Venus."""
+    utc, _ = engine.local_to_utc("1981-05-10", "19:30", "Asia/Kolkata", 94.8006)
+    c = engine.compute_chart(utc, 28.16951, 94.8006)
+    assert c["lagna"]["sign"] == "Scorpio" and c["moon_sign"] == "Cancer"
+    assert c["janma_nakshatra"] == "Ashlesha"
+    assert c["planets"]["Venus"]["sign"] == "Taurus" and c["planets"]["Mars"]["sign"] == "Aries"
+    m = next(d for d in c["doshas"] if d["name"].startswith("Manglik"))
+    assert m["sources"] == ["Venus"]
+    assert m["houses"] == {"Lagna": 6, "Moon": 10, "Venus": 12}
+    assert m["label"] == "partial: Mars is 12th from Venus"
+    assert "Moon" not in m["label"] and "only from Moon" not in m["label"]
+    assert m["label_hi"] == "आंशिक: मंगल शुक्र से 12वें भाव में है"
+    assert "चंद्र" not in m["label_hi"]
+    assert m["not_from"] == "not from Lagna (6th) or Moon (10th)"
+    assert "Venus" not in m["not_from"]
+    en = pdfkundli.sections(c, "en")
+    hi = pdfkundli.sections(c, "hi")
+    en_line = next(line for line in en if line.startswith("Manglik"))
+    hi_line = next(line for line in hi if line.startswith("Manglik"))
+    assert en_line.startswith("Manglik (Kuja) Dosha: partial: Mars is 12th from Venus")
+    assert "Moon" not in en_line and "only from Moon/Venus" not in en_line
+    assert hi_line.endswith("आंशिक: मंगल शुक्र से 12वें भाव में है")
+    assert "चंद्र" not in hi_line
+    ctx = llm.compact_chart({"name": "sudhanshu singh", "gender": "male", "date": "1981-05-10", "time": "19:30"}, c)
+    sent = next(d for d in ctx["doshas"] if d["name"].startswith("Manglik"))
+    assert sent["sources"] == ["Venus"] and "Moon" not in sent["label"]
+    assert sent["not_from"] == "not from Lagna (6th) or Moon (10th)"
+    assert "not_from" in sent["say"] or "Not from" in sent["say"]
 
 
 def test_yogas_doshas_modi():

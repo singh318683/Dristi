@@ -512,30 +512,8 @@ def yogas_and_doshas(chart: dict, now: datetime):
                               "basis": f"{p} debilitated in {P[p]['sign']}, but {', '.join(cond)} in a kendra from Lagna/Moon"})
 
     # ---- doshas
-    # Manglik
-    mh_l = P["Mars"]["house"] if tk else None
-    mh_m = hfrom("Moon", "Mars")
-    mh_v = hfrom("Venus", "Mars")
-    bad = {1, 2, 4, 7, 8, 12}
-    frm = []
-    if mh_l and mh_l in bad: frm.append(f"Lagna (house {mh_l})")
-    if mh_m in bad: frm.append(f"Moon ({mh_m}{_ord(mh_m)} from Moon)")
-    if mh_v in bad: frm.append(f"Venus ({mh_v}{_ord(mh_v)} from Venus)")
-    cancels = []
-    if P["Mars"]["dignity"] in ("own sign", "exalted", "moolatrikona"):
-        cancels.append(f"Mars is {P['Mars']['dignity']} in {P['Mars']['sign']}")
-    if P["Mars"]["sign"] in ("Leo", "Aquarius"):
-        cancels.append("Mars in Leo/Aquarius (classical exception)")
-    if P["Jupiter"]["sign"] == P["Mars"]["sign"] or P["Mars"]["house"] in aspects_of("Jupiter", P["Jupiter"]["house"]):
-        cancels.append("Jupiter conjoins/aspects Mars")
-    level = "none"
-    if mh_l in bad or (not tk and mh_m in bad):
-        level = "mild (cancelled/reduced)" if cancels else "present"
-    elif frm:
-        level = "partial (only from Moon/Venus)"
-    doshas.append({"name": "Manglik (Kuja) Dosha", "present": level not in ("none",),
-                   "level": level, "from": frm, "mitigations": cancels,
-                   "note": "Matching with another Manglik chart traditionally neutralises it."})
+    # Manglik: whole-sign houses of Mars from Lagna, Moon and Venus. 1, 2, 4, 7, 8, 12.
+    doshas.append(_manglik_dosha(P, tk, hfrom))
     # Kaal Sarp
     r = P["Rahu"]["longitude"]
     rel = [((P[p]["longitude"] - r) % 360) for p in PLANETS[:7]]
@@ -559,6 +537,71 @@ def yogas_and_doshas(chart: dict, now: datetime):
 
 def _ord(n: int) -> str:
     return "th" if 10 <= n % 100 <= 20 else {1: "st", 2: "nd", 3: "rd"}.get(n % 10, "th")
+
+
+def _join(bits: list[str], conj: str) -> str:
+    if len(bits) <= 1:
+        return bits[0] if bits else ""
+    if len(bits) == 2:
+        return f"{bits[0]} {conj} {bits[1]}"
+    return ", ".join(bits[:-1]) + f", {conj} " + bits[-1]
+
+
+def _manglik_dosha(P: dict, time_known: bool, hfrom) -> dict:
+    """Label names only the references whose house is actually 1, 2, 4, 7, 8 or 12."""
+    bad = {1, 2, 4, 7, 8, 12}
+    checked = []
+    if time_known:
+        checked.append(("Lagna", P["Mars"]["house"]))
+    checked.append(("Moon", hfrom("Moon", "Mars")))
+    checked.append(("Venus", hfrom("Venus", "Mars")))
+    houses = {ref: house for ref, house in checked}
+    sources = [ref for ref, house in checked if house in bad]
+    missed = [(ref, house) for ref, house in checked if house not in bad]
+    cancels = []
+    if P["Mars"]["dignity"] in ("own sign", "exalted", "moolatrikona"):
+        cancels.append(f"Mars is {P['Mars']['dignity']} in {P['Mars']['sign']}")
+    if P["Mars"]["sign"] in ("Leo", "Aquarius"):
+        cancels.append("Mars in Leo/Aquarius (classical exception)")
+    if P["Jupiter"]["sign"] == P["Mars"]["sign"] or P["Mars"]["house"] in aspects_of("Jupiter", P["Jupiter"]["house"]):
+        cancels.append("Jupiter conjoins/aspects Mars")
+    from_lagna = time_known and houses.get("Lagna") in bad
+    from_moon_as_lagna = (not time_known) and houses["Moon"] in bad
+    if from_lagna or from_moon_as_lagna:
+        level = "mild" if cancels else "present"
+    elif sources:
+        level = "partial"
+    else:
+        level = "none"
+    hi_ref = {"Lagna": "लग्न", "Moon": "चंद्र", "Venus": "शुक्र"}
+    if sources:
+        en_bits = [f"{h}{_ord(h)} from the Lagna" if ref == "Lagna" else f"{h}{_ord(h)} from {ref}"
+                   for ref, h in checked if ref in sources]
+        hi_bits = [f"{hi_ref[ref]} से {h}वें भाव" for ref, h in checked if ref in sources]
+        prefix = {"present": "present", "mild": "mild", "partial": "partial"}[level]
+        hi_prefix = {"present": "पूरा", "mild": "हल्का", "partial": "आंशिक"}[level]
+        label = f"{prefix}: Mars is {_join(en_bits, 'and')}"
+        label_hi = f"{hi_prefix}: मंगल {_join(hi_bits, 'और')} में है"
+    else:
+        who = "the Lagna, Moon or Venus" if time_known else "the Moon or Venus"
+        who_hi = "लग्न, चंद्र या शुक्र" if time_known else "चंद्र या शुक्र"
+        label = f"Mars is not in houses 1, 2, 4, 7, 8 or 12 from {who}"
+        label_hi = f"मंगल {who_hi} से 1, 2, 4, 7, 8 या 12वें भाव में नहीं है"
+    if missed:
+        miss_en = [f"{ref} ({h}{_ord(h)})" for ref, h in missed]
+        miss_hi = [f"{hi_ref[ref]} ({h}वें)" for ref, h in missed]
+        not_from = "not from " + _join(miss_en, "or")
+        not_from_hi = _join(miss_hi, "या") + " से नहीं"
+    else:
+        not_from = ""
+        not_from_hi = ""
+    say = "Attribute Manglik only to sources, and quote label. " + (
+        not_from[0].upper() + not_from[1:] + "." if not_from else "Every checked reference qualifies.")
+    return {"name": "Manglik (Kuja) Dosha", "present": level != "none",
+            "level": level, "sources": sources, "from": sources, "houses": houses,
+            "label": label, "label_hi": label_hi, "not_from": not_from, "not_from_hi": not_from_hi,
+            "say": say, "mitigations": cancels,
+            "note": "Matching with another Manglik chart traditionally neutralises it."}
 
 
 def moon_sign_now(now: datetime | None = None) -> dict:

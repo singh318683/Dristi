@@ -777,10 +777,19 @@ function panchangHtml(g, p) {
     row(tr('Rahu kaal', 'राहु काल'), `${clock(g.rahu_kaal.start)} – ${clock(g.rahu_kaal.end)}`) +
     `<p class="small muted">${esc(g.tz)} · ${tr('Free, from the Swiss Ephemeris.', 'मुफ़्त, स्विस एफेमेरिस से।')}</p>`;
 }
+function manglikChip(d) {
+  return (d.sources || []).map(ref => {
+    const h = (d.houses || {})[ref];
+    if (hi()) return `${ref === 'Lagna' ? 'लग्न' : ref === 'Moon' ? 'चंद्र' : 'शुक्र'} से ${h}वें`;
+    return `${h}${ord(h)} from ${ref === 'Lagna' ? 'the Lagna' : ref}`;
+  }).join(', ');
+}
 function doshaChipRow(c) {
   return c.doshas.map(d => {
     const short = d.name.startsWith('Manglik') ? tr('Manglik', 'मंगल') : d.name.startsWith('Sade') ? tr('Sade Sati', 'साढ़े साती') : d.name.startsWith('Kaal') ? tr('Kaal Sarp', 'काल सर्प') : d.name;
-    return `<button class="chip" data-dosha="${esc(d.name)}">${esc(short)} ${d.present ? `<span class="tag warn">${tr('on', 'है')}</span>` : `<span class="tag good">${tr('clear', 'नहीं')}</span>`}</button>`;
+    const on = d.name.startsWith('Manglik') ? !!(d.sources && d.sources.length) : !!d.present;
+    const tag = d.name.startsWith('Manglik') ? (on ? manglikChip(d) : tr('clear', 'नहीं')) : (on ? tr('on', 'है') : tr('clear', 'नहीं'));
+    return `<button class="chip" data-dosha="${esc(d.name)}">${esc(short)} <span class="tag ${on ? 'warn' : 'good'}">${esc(tag)}</span></button>`;
   }).join('');
 }
 function openDosha(c, name) {
@@ -822,7 +831,8 @@ async function shareCard(kind) {
     } else if (kind === 'lagna') {
       const c = await chartOf(p);
       title = tr('Birth chart', 'जन्म कुंडली');
-      lines = [p.name, (c.time_known ? tr('Lagna ', 'लग्न ') + signName(c.lagna.sign) : tr('Birth time unknown', 'जन्म समय अज्ञात')), tr('Moon ', 'चंद्र ') + signName(c.moon_sign), c.janma_nakshatra];
+      const manglik = (c.doshas || []).find(d => d.name.startsWith('Manglik'));
+      lines = [p.name, (c.time_known ? tr('Lagna ', 'लग्न ') + signName(c.lagna.sign) : tr('Birth time unknown', 'जन्म समय अज्ञात')), tr('Moon ', 'चंद्र ') + signName(c.moon_sign), c.janma_nakshatra, manglik ? (hi() ? manglik.label_hi : manglik.label) : ''].filter(Boolean);
     } else {
       const c = await chartOf(p);
       title = tr("Today's horoscope", 'आज का राशिफल');
@@ -1008,13 +1018,18 @@ const dignTag = d => {
   return good ? `<span class="tag good">${esc(label)}</span>` : weak ? `<span class="tag warn">${esc(label)}</span>` : `<span>${esc(label)}</span>`;
 };
 function doshaTag(d) {
+  if (d.name.startsWith('Manglik')) return '';
   if (!d.present) return `<span class="tag good">${tr('Not present', 'नहीं')}</span>`;
   if (d.name.startsWith('Sade')) return `<span class="tag warn">${tr('Active', 'चल रही')}${d.phase ? ' · ' + esc(d.phase.split(' (')[0]) : ''}</span>`;
   if (d.level && (d.level.startsWith('mild') || d.level.startsWith('partial'))) return `<span class="tag warn">${esc(cap(d.level.split(' (')[0]))}</span>`;
   return `<span class="tag warn">${tr('Present', 'है')}</span>`;
 }
 function doshaLine(d) {
-  if (d.name.startsWith('Manglik')) return (d.from.length ? 'Mars from ' + d.from.join(', ') : 'Mars is not in houses 1, 2, 4, 7, 8 or 12') + (d.mitigations.length ? '. Softened: ' + d.mitigations.join('; ') : '') + '.';
+  if (d.name.startsWith('Manglik')) {
+    const label = (hi() ? d.label_hi : d.label) || (d.sources && d.sources.length ? d.sources.join(', ') : tr('Mars is not in houses 1, 2, 4, 7, 8 or 12', 'मंगल 1, 2, 4, 7, 8 या 12वें भाव में नहीं'));
+    const soft = (d.mitigations || []).length ? ' ' + tr('Softened:', 'कम:') + ' ' + d.mitigations.join('; ') + '.' : '';
+    return label + '.' + soft;
+  }
   if (d.name.startsWith('Sade')) return `Saturn is in ${d.saturn_transit_sign}, ${d.saturn_house_from_moon}${ord(d.saturn_house_from_moon)} from your Moon` + (d.current_window ? `. Ends around ${monYr(d.current_window.end)}` : d.next_window ? `. Next: ${monYr(d.next_window.start)} – ${monYr(d.next_window.end)}` : '') + (d.small_panoti_dhaiya ? `. ${d.small_panoti_dhaiya}` : '') + '.';
   return (d.basis || '').replace(/^./, x => x.toUpperCase()) + '.';
 }
@@ -1319,7 +1334,7 @@ function showMatch() {
   const r = S.match.result, good = r.total >= 25, ok = r.total >= 18;
   const lvl = good ? tr('Good match', 'अच्छा मिलान') : ok ? tr('Average match', 'सामान्य मिलान') : tr('Below the usual threshold', 'सामान्य सीमा से कम');
   const detail = r.kootas.map(k => `<div class="koota"><div class="n"><b>${tr(KOOTA[k.name] ? KOOTA[k.name][0] : k.name, KOOTA[k.name] ? KOOTA[k.name][1] : k.name)}</b><small>${esc(k.name)} · ${esc(k.girl)} / ${esc(k.boy)}</small></div><div class="s">${k.score}<span>/${k.max}</span></div><div class="bar"><i style="width:${k.score / k.max * 100}%"></i></div></div>`).join('') +
-    `<div class="item"><div class="hd">${tr('Manglik', 'मंगल दोष')}</div><p>${tr('Bride', 'वधू')}: ${esc(r.manglik.girl)} · ${tr('Groom', 'वर')}: ${esc(r.manglik.boy)}. ${esc(cap(r.manglik.verdict))}</p></div>` +
+    `<div class="item"><div class="hd">${tr('Manglik', 'मंगल दोष')}</div><p>${tr('Bride', 'वधू')}: ${esc(hi() ? (r.manglik.girl_hi || r.manglik.girl) : r.manglik.girl)} · ${tr('Groom', 'वर')}: ${esc(hi() ? (r.manglik.boy_hi || r.manglik.boy) : r.manglik.boy)}. ${esc(cap(r.manglik.verdict))}</p></div>` +
     (r.doshas.map(d => `<div class="item"><div class="hd">${esc(d.name)} <span class="tag ${d.exceptions.length ? 'good' : 'warn'}">${d.exceptions.length ? tr('Cancelled', 'निरस्त') : tr('Present', 'है')}</span></div><p>${d.exceptions.length ? esc(d.exceptions.join('; ')) : tr('No classical exception applies.', 'कोई शास्त्रीय अपवाद लागू नहीं।')}</p></div>`).join('') || `<div class="item"><p>${tr('No Nadi or Bhakoot dosha.', 'नाड़ी या भकूट दोष नहीं।')}</p></div>`) +
     `<p class="small muted">${tr('One traditional input, not a verdict. Acharya can read the 7th house with you.', 'यह एक पारंपरिक आधार है, अंतिम निर्णय नहीं।')}</p>`;
   $('#mres').innerHTML = `<div class="card"><div class="score"><div class="ring" style="--p:${r.total / 36 * 100}"><div><span><b id="mscore">${r.total}</b><br><small>${tr('of 36', '36 में')}</small></span></div></div>
