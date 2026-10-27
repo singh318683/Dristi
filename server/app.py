@@ -19,6 +19,7 @@ from pydantic import BaseModel, Field
 
 import db
 import engine
+import gita
 import llm
 from matching import milan
 
@@ -564,6 +565,20 @@ def api_otp(r: OtpReq):
         501,
         "Phone OTP is not configured. TODO: implement OtpProvider.send and OtpProvider.verify with an SMS vendor. "
         "Email magic link is POST /api/auth/magic.")
+
+
+# -------------------------------------------------------- gita verse ----
+@app.get("/api/gita")
+def api_gita(date: str | None = None):
+    """Today's shloka. No login. `date` is the device's local YYYY-MM-DD."""
+    if date is not None and date.strip():
+        try:
+            day = datetime.strptime(date.strip(), "%Y-%m-%d").date()
+        except ValueError:
+            raise HTTPException(400, "date must be YYYY-MM-DD")
+    else:
+        day = datetime.now(timezone.utc).date()
+    return JSONResponse(gita.verse_for(day), headers={"Cache-Control": "public, max-age=3600"})
 
 
 # ------------------------------------------------------------------ pdf ----
