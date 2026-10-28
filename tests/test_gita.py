@@ -72,6 +72,10 @@ def test_homepage_inlines_the_verse_list(client):
     assert '"ref":"2.47"' in html
     assert "window.__GITA_INJECTED__" not in html
     assert "Date.UTC(2020, 0, 1)" in html
+    assert "sessionStorage" not in html
+    assert "dr-gita-splash" not in html
+    assert "dr-gita-day" not in html
+    assert "openGitaSplash(window.gitaVerseForToday(), true)" in html
 
 
 def test_gita_api_needs_no_login_and_follows_the_date(client):
