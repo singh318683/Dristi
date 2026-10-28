@@ -13,7 +13,7 @@ from functools import lru_cache
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -597,7 +597,12 @@ def api_kundli_pdf(p: Profile, lang: str = "en"):
 # -------------------------------------------------------------- static ----
 @app.get("/")
 def index():
-    return FileResponse(os.path.join(WEB, "index.html"), headers={"Cache-Control": "no-cache"})
+    """Home page. The verse list is inlined so the splash can paint before any fetch."""
+    with open(os.path.join(WEB, "index.html"), encoding="utf-8") as f:
+        html = f.read()
+    payload = json.dumps(list(gita.verses()), ensure_ascii=False, separators=(",", ":")).replace("<", "\\u003c")
+    html = html.replace("window.__GITA_INJECTED__", payload)
+    return HTMLResponse(html, headers={"Cache-Control": "no-cache"})
 
 
 @app.get("/privacy")

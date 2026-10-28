@@ -64,6 +64,16 @@ def test_rotation_is_stable_and_does_not_repeat_within_60_days():
     assert early == gita.verse_for(date(2019, 5, 1))
 
 
+def test_homepage_inlines_the_verse_list(client):
+    html = client.get("/").text
+    assert 'id="gita-splash"' in html
+    assert "gita-card" not in html
+    assert html.count('"sa":') >= 61
+    assert '"ref":"2.47"' in html
+    assert "window.__GITA_INJECTED__" not in html
+    assert "Date.UTC(2020, 0, 1)" in html
+
+
 def test_gita_api_needs_no_login_and_follows_the_date(client):
     pinned = client.get("/api/gita", params={"date": "2026-10-27"})
     assert pinned.status_code == 200
