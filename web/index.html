@@ -401,17 +401,27 @@ body.app-fit .reveal{opacity:1;transform:none}
 .gita-banner{flex:0 0 auto;display:flex;align-items:center;gap:8px;width:100%;height:32px;min-height:32px;max-height:32px;margin:0;padding:0 10px;border:1px solid var(--primary-line);background:var(--primary-tint);color:var(--ink);border-radius:10px;text-align:left;font-size:12.5px;line-height:1;font-weight:500}
 .gita-banner .gita-m{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .gita-banner .gita-r{flex:none;font-weight:700;color:var(--on-tint);font-size:11.5px;letter-spacing:.02em}
-.gita-bg{position:fixed;inset:0;z-index:70;display:flex;align-items:flex-end;justify-content:center;background:rgba(20,16,10,0);padding:0;transition:background .28s ease}
-.gita-bg.show{background:rgba(20,16,10,.4)}
-.gita-card{width:min(100%,560px);max-height:min(78dvh,640px);background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:20px 20px 0 0;box-shadow:0 18px 50px -20px rgba(0,0,0,.45);padding:8px 16px calc(14px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:8px;transform:translateY(16px);opacity:0;transition:opacity .28s ease,transform .28s ease}
-.gita-bg.show .gita-card{opacity:1;transform:none}
-.gita-grab{width:36px;height:4px;border-radius:4px;background:var(--line-strong);margin:2px auto 2px;flex:none}
-.gita-kicker{margin:0;font-size:13px;font-weight:700;letter-spacing:.04em;color:var(--on-tint)}
-.gita-body{overflow:auto;min-height:0}
-.gita-sa{margin:8px 0 0;font-size:18px;line-height:1.75;white-space:pre-wrap}
-.gita-mean{margin:8px 0 0;font-size:15.5px;line-height:1.5}
-.gita-actions{display:flex;gap:8px;flex:none}
-.gita-actions .btn{flex:1}
+body.gita-lock{overflow:hidden}
+.gita-splash{position:fixed;inset:0;z-index:90;display:flex;align-items:center;justify-content:center;padding:calc(env(safe-area-inset-top) + 20px) 20px calc(env(safe-area-inset-bottom) + 20px);background:linear-gradient(165deg,#E8A04A 0%,#F6D7A8 26%,#FAF7F2 58%,#FFF8EE 100%);color:#1F1B16;color-scheme:light;overflow:auto}
+.gita-splash.out{opacity:0;transform:scale(1.04);pointer-events:none;transition:opacity .45s ease,transform .45s ease}
+.gita-center{width:min(480px,100%);margin:auto;display:flex;flex-direction:column;align-items:center;text-align:center;gap:16px;position:relative;z-index:1;animation:gitaFade .6s ease both}
+.gita-om{position:absolute;left:50%;top:50%;transform:translate(-50%,-54%);font-size:min(72vw,300px);line-height:1;color:#B35A00;opacity:.09;pointer-events:none;user-select:none;font-weight:700}
+.gita-diya{width:54px;height:30px;flex:none}
+.gita-top{width:100%;display:flex;align-items:center;justify-content:center;position:relative;min-height:44px}
+.gita-brand{display:flex;align-items:baseline;gap:8px}
+.gita-brand .dev{font-size:22px;font-weight:700;color:#B35A00;line-height:1}
+.gita-brand small{font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:#8F4700;font-weight:700}
+.gita-share{position:absolute;right:0;top:0;width:44px;height:44px;border:0;background:transparent;color:#8F4700;border-radius:12px;display:grid;place-items:center}
+.gita-splash .gita-kicker{margin:0;font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#8F4700}
+.gita-splash .gita-sa{margin:0;font-size:clamp(22px,6.4vw,34px);line-height:1.65;font-weight:650;white-space:pre-wrap}
+.gita-splash .gita-mean{margin:0;font-size:17px;line-height:1.55;color:#3A332C}
+.gita-go{min-height:44px;padding:0 18px;border:0;background:transparent;color:#8F4700;font-weight:700;font-size:16px}
+.gita-progress{position:relative;width:100%;height:3px;background:rgba(179,90,0,.16);border-radius:3px}
+.gita-splash:not(.is-auto) .gita-progress{display:none}
+.gita-progress i{display:block;height:100%;width:0;background:#B35A00}
+.gita-splash.is-auto .gita-progress i{animation:gitaBar 5s linear forwards}
+@keyframes gitaFade{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+@keyframes gitaBar{to{width:100%}}
 @media (max-height:700px){
   body.app-fit main.fit{gap:4px;padding:4px 12px}
   body.app-fit .h1{font-size:18px}
@@ -429,6 +439,104 @@ body.app-fit .reveal{opacity:1;transform:none}
 </style>
 </head>
 <body>
+<div id="gita-splash" class="gita-splash is-auto" role="dialog" aria-modal="true" hidden></div>
+<script>
+window.GITA_VERSES = window.__GITA_INJECTED__ || null;
+(function () {
+  var FALLBACK = {ref:'2.47',chapter:2,verse:47,sa:'कर्मण्येवाधिकारस्ते मा फलेषु कदाचन।\nमा कर्मफलहेतुर्भूर्मा ते सङ्गोऽस्त्वकर्मणि॥',en:'Your right is to the action alone, never to its fruits. Do not make the fruit your reason for acting, and do not cling to doing nothing.',hi:'तुम्हारा अधिकार कर्म में है, फल में कभी नहीं। फल को कर्म का कारण मत बनाओ, और कर्म छोड़कर बैठने में भी मत लगो।'};
+  function gcd(a, b) { while (b) { var t = b; b = a % b; a = t; } return a; }
+  function stepFor(n) { for (var s = Math.max(1, Math.floor(n / 3)); s > 0; s--) if (gcd(s, n) === 1) return s; return 1; }
+  function localDay(d) {
+    d = d || new Date();
+    var z = function (n) { return String(n).padStart(2, '0'); };
+    return d.getFullYear() + '-' + z(d.getMonth() + 1) + '-' + z(d.getDate());
+  }
+  function gitaIndex(day, n) {
+    var p = day.split('-').map(Number);
+    var days = Math.round((Date.UTC(p[0], p[1] - 1, p[2]) - Date.UTC(2020, 0, 1)) / 86400000);
+    return ((days * stepFor(n)) % n + n) % n;
+  }
+  window.gitaVerseForToday = function () {
+    var rows = window.GITA_VERSES;
+    var date = localDay();
+    if (rows && rows.length) return Object.assign({date: date}, rows[gitaIndex(date, rows.length)]);
+    return Object.assign({date: date}, FALLBACK);
+  };
+  function lang() {
+    try { return JSON.parse(localStorage.getItem('dr-lang') || '"en"') === 'hi' ? 'hi' : 'en'; }
+    catch (e) { return 'en'; }
+  }
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; });
+  }
+  function fill(el, v) {
+    var hi = lang() === 'hi';
+    var ref = (hi ? 'भगवद्गीता ' : 'Bhagavad Gita ') + v.chapter + '.' + v.verse;
+    var meaning = hi ? v.hi : v.en;
+    el.dataset.lang = hi ? 'hi' : 'en';
+    el.setAttribute('aria-label', ref);
+    el.innerHTML = '<div class="gita-om" aria-hidden="true">ॐ</div><div class="gita-center">'
+      + '<div class="gita-top"><div class="gita-brand"><span class="dev">दृष्टि</span><small>Drishti</small></div>'
+      + '<button type="button" class="gita-share" id="gitaShare" aria-label="' + (hi ? 'साझा करें' : 'Share') + '">'
+      + '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="12" r="2.2"/><circle cx="17" cy="6.5" r="2.2"/><circle cx="17" cy="17.5" r="2.2"/><path d="M8 11.2l7-3.6M8 12.8l7 3.6"/></svg></button></div>'
+      + '<p class="gita-kicker" id="gitaRef">' + esc(ref) + '</p>'
+      + '<p class="gita-sa" lang="sa">' + esc(v.sa) + '</p><p class="gita-mean">' + esc(meaning) + '</p>'
+      + '<svg class="gita-diya" viewBox="0 0 64 36" aria-hidden="true"><path d="M6 24c6 10 46 10 52 0-10 7-42 7-52 0z" fill="#B35A00" opacity=".45"/><path d="M32 22c2-7 3-12 0-18-3 6-2 11 0 18z" fill="#E07A1A" opacity=".8"/></svg>'
+      + '<button type="button" class="gita-go" id="gitaContinue">' + (hi ? 'आगे बढ़ें' : 'Continue') + '</button>'
+      + '<div class="gita-progress" aria-hidden="true"><i></i></div></div>';
+    var share = el.querySelector('#gitaShare');
+    if (share) share.addEventListener('click', function (e) {
+      e.stopPropagation(); e.preventDefault();
+      if (window.shareGitaCard) window.shareGitaCard();
+    });
+  }
+  function arm(auto) {
+    clearTimeout(window.__gitaTimer);
+    if (auto) window.__gitaTimer = setTimeout(window.dismissGitaSplash, 5000);
+  }
+  window.dismissGitaSplash = function () {
+    var el = document.getElementById('gita-splash');
+    if (!el || el.hidden || el.classList.contains('out')) return;
+    clearTimeout(window.__gitaTimer);
+    try { sessionStorage.setItem('dr-gita-splash', '1'); } catch (e) {}
+    document.body.classList.remove('gita-lock');
+    var root = document.getElementById('root');
+    if (root) root.removeAttribute('aria-hidden');
+    var reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    var done = function () { if (el.isConnected) { el.hidden = true; el.classList.remove('out', 'is-auto'); } };
+    if (reduce) { done(); return; }
+    el.classList.add('out');
+    el.addEventListener('transitionend', done, {once: true});
+    setTimeout(done, 520);
+  };
+  window.__fillGitaSplash = fill;
+  window.openGitaSplash = function (verse, auto) {
+    var el = document.getElementById('gita-splash');
+    if (!el || !verse) return;
+    window.__gitaShown = verse;
+    el.classList.toggle('is-auto', !!auto);
+    el.classList.remove('out');
+    fill(el, verse);
+    el.hidden = false;
+    document.body.classList.add('gita-lock');
+    var root = document.getElementById('root');
+    if (root) root.setAttribute('aria-hidden', 'true');
+    if (!el.dataset.bound) {
+      el.dataset.bound = '1';
+      el.addEventListener('click', function (e) { if (e.target.closest('#gitaShare')) return; window.dismissGitaSplash(); });
+      document.addEventListener('keydown', function (e) {
+        if (e.key !== 'Escape') return;
+        var box = document.getElementById('gita-splash');
+        if (box && !box.hidden) { e.preventDefault(); window.dismissGitaSplash(); }
+      });
+    }
+    arm(!!auto);
+  };
+  try {
+    if (!sessionStorage.getItem('dr-gita-splash')) window.openGitaSplash(window.gitaVerseForToday(), true);
+  } catch (e) {}
+})();
+</script>
 <div id="root"></div>
 <div id="sheet" class="sheet-bg" hidden></div>
 <div id="toast" class="toast" role="status" hidden></div>
@@ -542,8 +650,8 @@ const chipsHtml = (cls = 'chip') => CHIPS().map(q => `<button class="${cls}" dat
 function render() {
   document.documentElement.lang = S.lang;
   closeSheet();
-  const gitaOpen = document.getElementById('gita');
-  if (gitaOpen) { document.removeEventListener('keydown', gitaEsc); gitaOpen.remove(); }
+  const splash = document.getElementById('gita-splash');
+  if (splash && !splash.hidden && window.__gitaShown && splash.dataset.lang !== S.lang && window.__fillGitaSplash) window.__fillGitaSplash(splash, window.__gitaShown);
   const root = $('#root');
   const fitting = S.profiles.length && !S.onb;
   document.body.classList.toggle('app-fit', !!fitting);
@@ -726,48 +834,17 @@ function bindOnb() {
 }
 // ------------------------------------------------------------------ gita
 let gitaVerse = null;
-function localDay(d = new Date()) {
-  const z = n => String(n).padStart(2, '0');
-  return d.getFullYear() + '-' + z(d.getMonth() + 1) + '-' + z(d.getDate());
-}
 function gitaRef(v) { return (hi() ? 'भगवद्गीता ' : 'Bhagavad Gita ') + v.chapter + '.' + v.verse; }
 async function ensureGita() {
-  const date = localDay();
-  if (gitaVerse && gitaVerse.date === date) return gitaVerse;
-  gitaVerse = await api('/api/gita?date=' + date);
+  const inline = window.gitaVerseForToday ? window.gitaVerseForToday() : null;
+  if (gitaVerse && inline && gitaVerse.date === inline.date && gitaVerse.sa) return gitaVerse;
+  if (inline && window.GITA_VERSES && window.GITA_VERSES.length) { gitaVerse = inline; return gitaVerse; }
+  const date = inline ? inline.date : new Date().toISOString().slice(0, 10);
+  try { gitaVerse = await api('/api/gita?date=' + date); }
+  catch (e) { if (inline) { gitaVerse = inline; return gitaVerse; } throw e; }
+  const splash = document.getElementById('gita-splash');
+  if (splash && !splash.hidden && gitaVerse && (!window.__gitaShown || window.__gitaShown.ref !== gitaVerse.ref)) window.openGitaSplash(gitaVerse, splash.classList.contains('is-auto'));
   return gitaVerse;
-}
-function closeGita() {
-  const bg = document.getElementById('gita');
-  if (!bg) return;
-  const p = activeProfile();
-  if (p) store.set('gita-day-' + p.id, localDay());
-  document.removeEventListener('keydown', gitaEsc);
-  const done = () => { if (bg.isConnected) bg.remove(); };
-  bg.classList.remove('show');
-  if (RM()) done();
-  else { bg.addEventListener('transitionend', done, {once: true}); setTimeout(done, 400); }
-}
-function gitaEsc(e) { if (e.key === 'Escape') closeGita(); }
-function openGita(v) {
-  let bg = document.getElementById('gita');
-  if (!bg) { bg = document.createElement('div'); bg.id = 'gita'; bg.className = 'gita-bg'; document.body.appendChild(bg); }
-  const ref = gitaRef(v), meaning = hi() ? v.hi : v.en;
-  bg.innerHTML = `<div class="gita-card" role="dialog" aria-modal="true" aria-labelledby="gitaRef">
-    <span class="gita-grab" aria-hidden="true"></span>
-    <p class="gita-kicker" id="gitaRef">${esc(ref)}</p>
-    <div class="gita-body"><p class="gita-sa" lang="sa">${esc(v.sa)}</p><p class="gita-mean">${esc(meaning)}</p></div>
-    <div class="gita-actions">
-      <button type="button" class="btn sm sec2" id="gitaShare">${I.share(16)} ${tr('Share', 'साझा करें')}</button>
-      <button type="button" class="btn sm" id="gitaClose">${tr('Close', 'बंद करें')}</button>
-    </div></div>`;
-  bg.onclick = e => { if (e.target === bg) closeGita(); };
-  $('#gitaClose').onclick = closeGita;
-  $('#gitaShare').onclick = () => shareCard('gita');
-  document.removeEventListener('keydown', gitaEsc);
-  document.addEventListener('keydown', gitaEsc);
-  requestAnimationFrame(() => bg.classList.add('show'));
-  $('#gitaClose').focus();
 }
 async function shareGita() {
   let v;
@@ -800,28 +877,38 @@ async function shareGita() {
   g.fillText(url, 80, 1830);
   await deliverCard(canvas, 'gita');
 }
-async function mountGita() {
-  const p = activeProfile();
-  if (!p) return;
-  const id = p.id;
-  let v;
-  try { v = await ensureGita(); }
-  catch { return; }
-  if (S.tab !== 'home' || !activeProfile() || activeProfile().id !== id) return;
+function paintGitaBanner(v) {
   const b = $('#gitaBanner');
-  if (!b) return;
+  if (!b || !v) return;
+  gitaVerse = v;
   const meaning = hi() ? v.hi : v.en, ref = gitaRef(v);
   b.hidden = false;
   b.innerHTML = `<span class="gita-m">${esc(meaning)}</span><span class="gita-r">${esc(ref)}</span>`;
   b.setAttribute('aria-label', tr('Verse of the day', 'आज का श्लोक') + '. ' + meaning + ' ' + ref);
-  b.onclick = () => openGita(v);
-  if (store.get('gita-day-' + id, '') !== localDay()) openGita(v);
+  b.onclick = () => window.openGitaSplash(v, false);
+}
+function gitaBannerHtml() {
+  const v = window.GITA_VERSES && window.GITA_VERSES.length && window.gitaVerseForToday ? window.gitaVerseForToday() : null;
+  if (!v) return `<button type="button" class="gita-banner" id="gitaBanner" hidden></button>`;
+  const meaning = hi() ? v.hi : v.en, ref = gitaRef(v);
+  return `<button type="button" class="gita-banner" id="gitaBanner" aria-label="${esc(tr('Verse of the day', 'आज का श्लोक') + '. ' + meaning + ' ' + ref)}"><span class="gita-m">${esc(meaning)}</span><span class="gita-r">${esc(ref)}</span></button>`;
+}
+function mountGita() {
+  const p = activeProfile();
+  if (!p) return;
+  const id = p.id;
+  const inline = window.GITA_VERSES && window.GITA_VERSES.length && window.gitaVerseForToday ? window.gitaVerseForToday() : null;
+  if (inline) { paintGitaBanner(inline); return; }
+  ensureGita().then(v => {
+    if (S.tab !== 'home' || !activeProfile() || activeProfile().id !== id) return;
+    paintGitaBanner(v);
+  }).catch(() => {});
 }
 // ------------------------------------------------------------------ home
 async function pageHome() {
   const p = activeProfile();
   $('#app').innerHTML = header() + `<main class="fit">
-    <button type="button" class="gita-banner" id="gitaBanner" hidden></button>
+    ${gitaBannerHtml()}
     <div><div class="h1">${tr('Namaste', 'नमस्ते')}, ${esc(p.name)}</div>
       <p class="sub" id="gsub">${tr('Acharya is an AI astrologer', 'आचार्य एक AI ज्योतिषी हैं')} · ${new Date().toLocaleDateString(loc(), {weekday: 'short', day: 'numeric', month: 'short'})}</p></div>
     <section class="cta"><p>${tr('Ask about this chart. The cost is shown before you send.', 'इस कुंडली के बारे में पूछें। भेजने से पहले शुल्क दिखेगा।')}</p>
@@ -1606,7 +1693,10 @@ async function captureLink() {
   }
   if (dirty) history.replaceState({}, '', u.pathname + u.search + u.hash);
 }
+window.shareGitaCard = () => shareCard('gita');
 (async function boot() {
+  const splash = document.getElementById('gita-splash');
+  if (splash && !splash.hidden) { document.body.classList.add('gita-lock'); }
   render();
   try { await captureLink(); } catch { /* offline */ }
   try { S.status = await api('/api/status'); } catch { S.status = {ai_configured: false}; }
