@@ -36,7 +36,7 @@ Other env: `FREE_QUESTIONS` (3), `QUESTION_COST` (15 credits), `DRISHTI_DB` (sql
 
 | Variable | Required | Purpose |
 |---|---|---|
-| `DATABASE_URL` | no | Postgres URL (`postgres://` or `postgresql://`, for example Vercel Postgres or Neon). When set, wallets, referrals and sign-in links are stored there. When unset, SQLite at `DRISHTI_DB` is used (default `server/data/app.db`; on Vercel, `/tmp/app.db`). |
+| `DATABASE_URL` | no | Postgres URL (`postgres://` or `postgresql://`). Neon: use the **pooled** string (host contains `-pooler`). SSL is added when the URL does not set `sslmode`. When set, wallets, sign-in, birth profiles and Acharya chats are stored there and survive redeploys. When unset, SQLite at `DRISHTI_DB` is used (default `server/data/app.db`; on Vercel, `/tmp/app.db`, which is wiped on each cold start). The phone still keeps a local copy either way. |
 | `DRISHTI_DB` | no | SQLite file. Ignored when `DATABASE_URL` is set. |
 | `REFERRAL_BONUS` | no | Credits given to both the inviter and the new device when that device asks its first question. Default `15`. |
 | `APP_PUBLIC_URL` | only to send mail | Public origin used inside the magic-link email, e.g. `https://your-app.example`. |
@@ -48,7 +48,7 @@ Other env: `FREE_QUESTIONS` (3), `QUESTION_COST` (15 credits), `DRISHTI_DB` (sql
 
 No secret belongs in source. `POST /api/wallet/topup` still adds demo credits and does not charge a card or UPI.
 
-Sign-in is optional. `POST /api/auth/magic` creates a one-time email link. `POST /api/auth/otp` is a stub (`OtpProvider`) until an SMS vendor is chosen. Signing in records the email on this device; it does not yet merge wallets across devices.
+Sign-in is optional. `POST /api/auth/magic` creates a one-time email link. `POST /api/auth/otp` is a stub (`OtpProvider`) until an SMS vendor is chosen. Signing in records the email on this device. Birth profiles and Acharya chats saved on that phone move to the account the first time, so another signed-in device can load them from `GET /api/sync`. Wallets stay on the device id.
 
 A referral code is `GET /api/referral?device=`. The new device calls `POST /api/referral/attach` with `{device, code}` (the web app does this from `/?ref=CODE`). The bonus is paid inside `charge()`, when that device's first question is actually asked.
 
@@ -63,7 +63,7 @@ A referral code is `GET /api/referral?device=`. The new device calls `POST /api/
 ## Stubbed
 * Payments: demo top-up only. `POST /api/wallet/order` is the Razorpay seam and returns 501. No UPI charge is made.
 * Phone OTP: interface only (`OtpProvider`). Email magic link works without a provider key, and sends mail only when `SMTP_HOST` is set.
-* Cross-device wallet merge after sign-in is not implemented; credits stay on the device id.
+* Cross-device wallet merge after sign-in is not implemented; credits stay on the device id. Birth profiles and Acharya chats are stored for the account once `DATABASE_URL` is set.
 * Web app only (no native builds yet).
 
 ## Now, in the app

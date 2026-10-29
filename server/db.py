@@ -2,6 +2,11 @@
 
 SQL in the app uses '?' placeholders. adapt() turns those into '%s' for Postgres.
 Read the URL inside connect(), not at import, so tests and Vercel can set it first.
+
+Neon: use the pooled connection string (host contains "-pooler"). Each request
+opens a connection and closes it, which is safe on Vercel's short-lived
+functions. prepare_threshold=None is required because Neon's pooler
+(PgBouncer in transaction mode) cannot keep prepared statements.
 """
 from __future__ import annotations
 
@@ -31,6 +36,21 @@ def adapt(sql: str, dialect: str) -> str:
     if dialect == "postgres":
         return sql.replace("?", "%s")
     return sql
+
+
+def normalize_postgres_url(url: str) -> str:
+    """Accept postgres:// and require SSL unless the URL already chooses a mode."""
+    url = url.strip()
+    if url.startswith("postgres://"):
+        url = "postgresql://" + url[len("postgres://"):]
+    if "sslmode=" not in url.split("?", 1)[-1]:
+        url += ("&" if "?" in url else "?") + "sslmode=require"
+    return url
+
+
+def postgres_connect_kwargs() -> dict:
+    # Neon's pooled endpoint rejects named prepared statements.
+    return {"prepare_threshold": None, "connect_timeout": 10}
 
 
 class Conn:
@@ -95,6 +115,22 @@ def _schema(dialect: str) -> list[str]:
             email text not null,
             device text not null,
             created text not null)""",
+        """create table if not exists profiles(
+            id text primary key,
+            owner text not null,
+            body text not null,
+            updated text not null)""",
+        """create table if not exists chats(
+            owner text not null,
+            profile_id text not null,
+            body text not null,
+            updated text not null,
+            primary key(owner, profile_id))""",
+        """create table if not exists account_state(
+            owner text primary key,
+            active text,
+            updated text not null)""",
+        "create index if not exists profiles_owner on profiles(owner)",
     ]
 
 
@@ -113,7 +149,7 @@ def connect() -> Conn:
     url = database_url()
     if dialect_of(url) == "postgres":
         import psycopg
-        raw = psycopg.connect(url)
+        raw = psycopg.connect(normalize_postgres_url(url), **postgres_connect_kwargs())
         con = Conn(raw, "postgres")
     else:
         path = sqlite_path()
