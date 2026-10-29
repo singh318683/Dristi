@@ -547,6 +547,7 @@ def api_verify(token: str, device: str):
         session = secrets.token_urlsafe(24)
         con.execute("insert into sessions(token, email, device, created) values(?,?,?,?)",
                     (session, email, device, created))
+        _adopt_device(con, email, device)
     return {"ok": True, "email": email, "session": session}
 
 
@@ -555,6 +556,168 @@ def api_me(device: str):
     with _lock, db.connect() as con:
         row = con.execute("select email from wallet where device=?", (device,)).fetchone()
     return {"email": row[0] if row else None}
+
+
+def _owner(con, device: str, session: str | None) -> tuple[str, str | None]:
+    """Account email when the session is valid, otherwise this device."""
+    token = (session or "").strip()
+    if token:
+        row = con.execute("select email from sessions where token=?", (token,)).fetchone()
+        if row:
+            return "email:" + row[0], row[0]
+    return "device:" + device.strip(), None
+
+
+def _clean_profile(raw: dict) -> dict | None:
+    if not isinstance(raw, dict):
+        return None
+    pid = str(raw.get("id") or "").strip()
+    name = str(raw.get("name") or "").strip()
+    date = str(raw.get("date") or "").strip()
+    if not pid or len(pid) > 80 or not name or len(name) > 80:
+        return None
+    try:
+        datetime.strptime(date, "%Y-%m-%d")
+    except ValueError:
+        return None
+    place = raw.get("place") if isinstance(raw.get("place"), dict) else None
+    if not place:
+        return None
+    try:
+        lat, lon = float(place.get("lat")), float(place.get("lon"))
+    except (TypeError, ValueError):
+        return None
+    if not (-90 <= lat <= 90 and -180 <= lon <= 180):
+        return None
+    gender = raw.get("gender")
+    if gender not in ("Female", "Male", "Other", None):
+        gender = None
+    time = raw.get("time")
+    if time is not None:
+        time = str(time).strip()
+        if not time or len(time) > 8:
+            time = None
+    offset = raw.get("offset")
+    if isinstance(offset, bool) or not isinstance(offset, (int, float)):
+        offset = None
+    return {
+        "id": pid, "name": name, "relation": str(raw.get("relation") or "Self")[:40],
+        "gender": gender, "date": date, "time": time,
+        "place": {"name": str(place.get("name") or "")[:160], "lat": lat, "lon": lon,
+                  "tz": str(place.get("tz") or "Asia/Kolkata")[:80]},
+        "offset": offset,
+    }
+
+
+def _clean_messages(raw) -> list:
+    if not isinstance(raw, list):
+        return []
+    out = []
+    for item in raw[-40:]:
+        if not isinstance(item, dict) or item.get("role") not in ("user", "assistant", "error"):
+            continue
+        msg = {"role": item["role"], "content": str(item.get("content") or "")[:8000]}
+        if msg["role"] == "error":
+            msg["code"] = str(item.get("code") or "llm_error")[:40]
+        out.append(msg)
+    return out
+
+
+def _adopt_device(con, email: str, device: str):
+    """On first sign-in, the charts saved for this browser become the account's."""
+    owner, dev = "email:" + email, "device:" + device.strip()
+    if con.execute("select 1 from profiles where owner=?", (owner,)).fetchone():
+        return
+    con.execute("update profiles set owner=? where owner=?", (owner, dev))
+    con.execute("update chats set owner=? where owner=?", (owner, dev))
+    if not con.execute("select 1 from account_state where owner=?", (owner,)).fetchone():
+        con.execute("update account_state set owner=? where owner=?", (owner, dev))
+
+
+def _snapshot(con, owner: str) -> dict:
+    profiles = []
+    for pid, body in con.execute("select id, body from profiles where owner=? order by updated", (owner,)).fetchall():
+        try:
+            profiles.append(json.loads(body))
+        except json.JSONDecodeError:
+            continue
+    chats = {}
+    for pid, body in con.execute("select profile_id, body from chats where owner=?", (owner,)).fetchall():
+        try:
+            chats[pid] = json.loads(body)
+        except json.JSONDecodeError:
+            continue
+    state = con.execute("select active from account_state where owner=?", (owner,)).fetchone()
+    email = owner[6:] if owner.startswith("email:") else None
+    return {"storage": con.dialect, "owner": "account" if email else "device", "email": email,
+            "profiles": profiles, "active": state[0] if state else None, "chats": chats}
+
+
+def _save_snapshot(con, owner: str, profiles: list[dict], active: str | None, chats: dict) -> dict:
+    cleaned = []
+    for raw in profiles[:20]:
+        item = _clean_profile(raw)
+        if item:
+            cleaned.append(item)
+    ids = [p["id"] for p in cleaned]
+    now = datetime.now(timezone.utc).isoformat()
+    if ids:
+        marks = ",".join("?" * len(ids))
+        con.execute(f"delete from profiles where owner=? and id not in ({marks})", (owner, *ids))
+        con.execute(f"delete from chats where owner=? and profile_id not in ({marks})", (owner, *ids))
+    else:
+        con.execute("delete from profiles where owner=?", (owner,))
+        con.execute("delete from chats where owner=?", (owner,))
+    for item in cleaned:
+        owned = con.execute("select owner from profiles where id=?", (item["id"],)).fetchone()
+        if owned and owned[0] != owner:
+            continue
+        con.execute(
+            "insert into profiles(id, owner, body, updated) values(?,?,?,?) "
+            "on conflict(id) do update set owner=excluded.owner, body=excluded.body, updated=excluded.updated",
+            (item["id"], owner, json.dumps(item, ensure_ascii=False), now))
+    kept = {row[0] for row in con.execute("select id from profiles where owner=?", (owner,)).fetchall()}
+    for pid in list(kept):
+        msgs = _clean_messages(chats.get(pid)) if isinstance(chats, dict) else []
+        if msgs:
+            con.execute(
+                "insert into chats(owner, profile_id, body, updated) values(?,?,?,?) "
+                "on conflict(owner, profile_id) do update set body=excluded.body, updated=excluded.updated",
+                (owner, pid, json.dumps(msgs, ensure_ascii=False), now))
+        else:
+            con.execute("delete from chats where owner=? and profile_id=?", (owner, pid))
+    chosen = active if active in kept else (ids[0] if ids else None)
+    con.execute(
+        "insert into account_state(owner, active, updated) values(?,?,?) "
+        "on conflict(owner) do update set active=excluded.active, updated=excluded.updated",
+        (owner, chosen, now))
+    return _snapshot(con, owner)
+
+
+class SyncBody(BaseModel):
+    device: str
+    session: str | None = None
+    profiles: list[dict] = Field(default_factory=list)
+    active: str | None = None
+    chats: dict[str, list] = Field(default_factory=dict)
+
+
+@app.get("/api/sync")
+def api_sync_get(device: str, session: str | None = None):
+    if not device.strip():
+        raise HTTPException(400, "device required")
+    with _lock, db.connect() as con:
+        owner, _email = _owner(con, device, session)
+        return _snapshot(con, owner)
+
+
+@app.post("/api/sync")
+def api_sync_put(body: SyncBody):
+    if not body.device.strip():
+        raise HTTPException(400, "device required")
+    with _lock, db.connect() as con:
+        owner, _email = _owner(con, body.device, body.session)
+        return _save_snapshot(con, owner, body.profiles, body.active, body.chats)
 
 
 @app.post("/api/auth/otp")

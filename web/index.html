@@ -685,7 +685,7 @@ function openSwitcher() {
     <button class="opt" id="shManage"><span class="avatar lg">${I.users(20)}</span><span class="meta"><b>${tr('Manage people', 'लोग प्रबंधित करें')}</b></span></button></div>`;
   sh.hidden = false;
   sh.onclick = e => { if (e.target === sh) closeSheet(); };
-  sh.querySelectorAll('[data-pid]').forEach(b => b.onclick = () => { S.active = b.dataset.pid; store.set('active', S.active); S.sel = null; render(); });
+  sh.querySelectorAll('[data-pid]').forEach(b => b.onclick = () => { S.active = b.dataset.pid; store.set('active', S.active); S.sel = null; scheduleSync(); render(); });
   $('#shAdd').onclick = () => startOnb();
   $('#shManage').onclick = () => { S.pendingSheet = 'people'; go('me'); };
   document.addEventListener('keydown', escClose);
@@ -826,7 +826,7 @@ function bindOnb() {
       store.set('profiles', S.profiles); S.active = p.id; store.set('active', p.id);
       Object.keys(S.charts).forEach(k => k.startsWith(p.id) && delete S.charts[k]);
       if (prev && birthStamp(prev) !== birthStamp(p)) localStorage.removeItem('dr-chat-' + p.id);
-      S.onb = null; S.tab = 'home'; S.sel = null; render(); window.scrollTo(0, 0);
+      S.onb = null; S.tab = 'home'; S.sel = null; scheduleSync(); render(); window.scrollTo(0, 0);
     });
   }
 }
@@ -1411,6 +1411,40 @@ const md = s => {
 const chatKey = () => 'chat-' + activeProfile().id;
 const birthStamp = p => { const pl = p.place || {}; return [p.date || '', p.time || '', pl.lat, pl.lon, pl.tz || '', p.offset ?? ''].join('|'); };
 async function refreshWallet() { try { S.wallet = await api('/api/wallet?device=' + DEVICE); } catch {} }
+function sessionToken() { return store.get('session', '') || ''; }
+function localChats() {
+  const chats = {};
+  S.profiles.forEach(p => { const h = store.get('chat-' + p.id, null); if (h && h.length) chats[p.id] = h; });
+  return chats;
+}
+let syncTimer = 0;
+function scheduleSync() { clearTimeout(syncTimer); syncTimer = setTimeout(() => pushSync(), 400); }
+async function pushSync() {
+  try {
+    await api('/api/sync', {device: DEVICE, session: sessionToken() || null, profiles: S.profiles, active: S.active, chats: localChats()});
+  } catch { /* the copy on this phone remains */ }
+}
+async function pullSync() {
+  let remote;
+  try {
+    remote = await api('/api/sync?device=' + encodeURIComponent(DEVICE) + (sessionToken() ? '&session=' + encodeURIComponent(sessionToken()) : ''));
+  } catch { return false; }
+  const local = S.profiles.slice();
+  if (remote.profiles && remote.profiles.length) {
+    const ids = new Set(remote.profiles.map(p => p.id));
+    const extra = local.filter(p => p && p.id && !ids.has(p.id));
+    S.profiles = remote.profiles.concat(extra);
+    store.set('profiles', S.profiles);
+    const active = remote.active && S.profiles.some(p => p.id === remote.active) ? remote.active : (S.profiles[0] && S.profiles[0].id);
+    S.active = active || null; store.set('active', S.active);
+    Object.entries(remote.chats || {}).forEach(([id, msgs]) => store.set('chat-' + id, msgs));
+    extra.forEach(p => { const h = store.get('chat-' + p.id, null); if (h) { /* kept locally; pushed below */ } });
+    if (extra.length) await pushSync();
+    return true;
+  }
+  if (local.length) await pushSync();
+  return false;
+}
 const creditsLabel = () => { const w = S.wallet; if (!w) return ''; return w.free_left ? tr(`${w.free_left} free left`, `${w.free_left} मुफ़्त शेष`) : tr(`${w.credits} credits`, `${w.credits} क्रेडिट`); };
 const ERR = {
   ai_not_configured: () => [tr('The astrologer is not switched on yet', 'AI ज्योतिषी अभी चालू नहीं है'), tr('Answers will start once the app owner adds an AI key on the server. Your chart, life periods and matching already work.', 'सर्वर पर AI कुंजी जुड़ते ही उत्तर मिलने लगेंगे। कुंडली, दशा और मिलान अभी भी काम करते हैं।')],
@@ -1542,6 +1576,7 @@ async function ask(q) {
     bindGo();
   } else { hist.push({role: 'user', content: q}, {role: 'assistant', content: text}); aiEl.outerHTML = bubble({role: 'assistant', content: text}); }
   store.set(key, hist.slice(-40));
+  scheduleSync();
   if (!$('#qchips')) { $('.composer').insertAdjacentHTML('afterbegin', `<div class="chips scroll" id="qchips">${chipsHtml()}</div>`); $$('#qchips [data-q]').forEach(b => b.onclick = () => ask(b.dataset.q)); }
   box.scrollTop = box.scrollHeight;
   refreshWallet().then(updateQuota);
@@ -1602,12 +1637,13 @@ function peopleHtml() {
       <button class="btn sec2 block" style="margin-top:10px" id="addP2">${I.plus()} ${tr('Add a person', 'व्यक्ति जोड़ें')}</button>`;
 }
 function bindPeople() {
-  $$('#sheet [data-use]').forEach(b => b.onclick = () => { S.active = b.dataset.use; store.set('active', S.active); S.sel = null; closeSheet(); render(); });
+  $$('#sheet [data-use]').forEach(b => b.onclick = () => { S.active = b.dataset.use; store.set('active', S.active); S.sel = null; scheduleSync(); closeSheet(); render(); });
   $$('#sheet [data-edit]').forEach(b => b.onclick = () => startOnb(S.profiles.find(p => p.id === b.dataset.edit)));
   $$('#sheet [data-del]').forEach(b => b.onclick = () => {
     const p = S.profiles.find(x => x.id === b.dataset.del); if (!p || !confirm(tr(`Delete ${p.name}'s profile and chat?`, `${p.name} की प्रोफ़ाइल और चैट हटाएँ?`))) return;
     S.profiles = S.profiles.filter(x => x.id !== p.id); localStorage.removeItem('dr-chat-' + p.id); store.set('profiles', S.profiles);
-    if (S.active === p.id) { S.active = S.profiles[0]?.id || null; store.set('active', S.active); } render();
+    if (S.active === p.id) { S.active = S.profiles[0]?.id || null; store.set('active', S.active); }
+    scheduleSync(); render();
   });
   const add = $('#addP2'); if (add) add.onclick = () => startOnb();
 }
@@ -1657,7 +1693,7 @@ function pageMe() {
   if (otp) otp.onclick = () => toast(tr('Phone OTP is not available yet.', 'फ़ोन OTP अभी उपलब्ध नहीं।'));
   $$('#setLang button').forEach(b => b.onclick = () => { S.lang = b.dataset.v; store.set('lang', S.lang); render(); });
   $$('#setSty button').forEach(b => b.onclick = () => { S.style = b.dataset.v; store.set('style', S.style); render(); });
-  $('#clr').onclick = () => { S.profiles.forEach(p => localStorage.removeItem('dr-chat-' + p.id)); toast(tr('Chat history cleared', 'चैट इतिहास मिटाया गया')); };
+  $('#clr').onclick = () => { S.profiles.forEach(p => localStorage.removeItem('dr-chat-' + p.id)); scheduleSync(); toast(tr('Chat history cleared', 'चैट इतिहास मिटाया गया')); };
   $('#aboutBtn').onclick = () => openDetail(tr('About', 'जानकारी'), `<p class="small">${tr('Charts use the Swiss Ephemeris, Lahiri ayanamsa, whole-sign houses and Vimshottari dasha. Acharya is an AI astrologer, not a person.', 'कुंडली स्विस एफेमेरिस, लाहिरी, पूर्ण राशि भाव और विंशोत्तरी दशा से बनती है। आचार्य AI ज्योतिषी हैं, व्यक्ति नहीं।')}</p><p class="small muted">${tr('Guidance for reflection, not medical, legal or financial advice. Remedies are optional and free.', 'यह चिंतन हेतु मार्गदर्शन है, चिकित्सा, कानूनी या वित्तीय सलाह नहीं। उपाय वैकल्पिक और मुफ़्त हैं।')}</p><p class="small muted">${tr('Device ID', 'डिवाइस आईडी')}: <code style="font-size:11px;word-break:break-all">${esc(DEVICE)}</code></p><p><a href="privacy.html">${tr('Privacy policy', 'गोपनीयता नीति')}</a></p>`);
   api('/api/referral?device=' + encodeURIComponent(DEVICE)).then(info => { S.referral = info; const el = $('#refCode'); if (el) el.textContent = info.code; }).catch(() => {});
   if (S.pendingSheet === 'people') { S.pendingSheet = null; openPeople(); }
@@ -1697,6 +1733,8 @@ window.shareGitaCard = () => shareCard('gita');
   if (splash && !splash.hidden) { document.body.classList.add('gita-lock'); }
   render();
   try { await captureLink(); } catch { /* offline */ }
+  const synced = await pullSync();
+  if (synced && !S.onb) render();
   try { S.status = await api('/api/status'); } catch { S.status = {ai_configured: false}; }
   await refreshWallet();
   if (S.profiles.length && !S.onb) render();
