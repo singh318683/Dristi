@@ -498,7 +498,6 @@ window.GITA_VERSES = window.__GITA_INJECTED__ || null;
     var el = document.getElementById('gita-splash');
     if (!el || el.hidden || el.classList.contains('out')) return;
     clearTimeout(window.__gitaTimer);
-    try { sessionStorage.setItem('dr-gita-splash', '1'); } catch (e) {}
     document.body.classList.remove('gita-lock');
     var root = document.getElementById('root');
     if (root) root.removeAttribute('aria-hidden');
@@ -532,9 +531,8 @@ window.GITA_VERSES = window.__GITA_INJECTED__ || null;
     }
     arm(!!auto);
   };
-  try {
-    if (!sessionStorage.getItem('dr-gita-splash')) window.openGitaSplash(window.gitaVerseForToday(), true);
-  } catch (e) {}
+  // Every full load shows the splash. In-app tab changes do not reload, so they leave it dismissed.
+  try { window.openGitaSplash(window.gitaVerseForToday(), true); } catch (e) {}
 })();
 </script>
 <div id="root"></div>
