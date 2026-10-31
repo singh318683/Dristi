@@ -60,6 +60,19 @@ def test_delhi_tuesday_rahu_is_seventh_eighth():
     assert p["tithi"]["en"] == "Krishna Pratipada"
 
 
+def test_civil_date_sets_the_weekday_not_the_place_clock():
+    """Saturday evening in New York is already Sunday in India.
+
+    The vaar follows the civil date we ask for. 31 Oct 2026 is a Saturday
+    everywhere that date is written; 1 Nov 2026 is a Sunday.
+    """
+    sat = panchang.panchang("2026-10-31", DELHI[0], DELHI[1], "Asia/Kolkata")
+    sun = panchang.panchang("2026-11-01", DELHI[0], DELHI[1], "Asia/Kolkata")
+    assert sat["date"] == "2026-10-31" and sat["vaar"]["en"] == "Saturday"
+    assert sun["date"] == "2026-11-01" and sun["vaar"]["en"] == "Sunday"
+    assert sat["vaar"]["weekday"] == 5 and sun["vaar"]["weekday"] == 6
+
+
 def test_rejects_bad_place():
     with pytest.raises(ValueError):
         panchang.panchang("2026-10-27", 91, 0, "UTC")

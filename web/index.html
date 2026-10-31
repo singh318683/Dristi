@@ -428,9 +428,26 @@ body.app-fit .reveal{opacity:1;transform:none}
 .costline{font-size:12.5px;font-weight:700;color:var(--on-tint);background:var(--primary-tint);border-radius:10px;padding:6px 10px;margin-bottom:6px;text-align:center}
 .minirow{display:flex;gap:8px;align-items:center;min-width:0}
 .minirow .grow{flex:1;min-width:0}
-.gita-banner{flex:0 0 auto;display:flex;align-items:center;gap:8px;width:100%;height:32px;min-height:32px;max-height:32px;margin:0;padding:0 10px;border:1px solid var(--primary-line);background:var(--primary-tint);color:var(--ink);border-radius:10px;text-align:left;font-size:12.5px;line-height:1;font-weight:500}
+.gita-banner{flex:0 0 auto;display:flex;align-items:center;gap:8px;width:100%;height:44px;min-height:44px;max-height:44px;margin:0;padding:0 12px;border:1px solid var(--primary-line);background:var(--primary-tint);color:var(--ink);border-radius:14px;text-align:left;font-size:14px;line-height:1.2;font-weight:600}
 .gita-banner .gita-m{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.gita-banner .gita-r{flex:none;font-weight:700;color:var(--on-tint);font-size:11.5px;letter-spacing:.02em}
+.gita-banner .gita-go{flex:none;color:var(--on-tint);display:grid;transform:rotate(-90deg)}
+.home-greet{flex:none;min-width:0}
+.home-tiles{flex:1;min-height:0;display:grid;grid-template-columns:1fr 1fr;grid-template-rows:minmax(0,1fr) minmax(0,1fr);gap:10px}
+.tile{display:flex;flex-direction:column;align-items:flex-start;justify-content:flex-start;gap:4px;width:100%;min-height:0;overflow:hidden;text-align:left;background:var(--surface);border:1.5px solid var(--line-strong);border-radius:18px;padding:14px 12px;box-shadow:var(--shadow);color:var(--ink)}
+.tile .tile-ico{color:var(--primary);display:grid;margin-bottom:4px}
+.tile b{font-size:18px;line-height:1.2;font-weight:700}
+.tile .tile-sub{font-size:13.5px;line-height:1.3;font-weight:500;color:var(--muted);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.tile.ask{background:var(--primary);border-color:transparent;color:var(--on-primary)}
+.tile.ask .tile-ico,.tile.ask .tile-sub{color:var(--on-primary)}
+body.app-fit main.home{overflow:hidden;gap:10px}
+body.app-fit main.home .h1{font-size:26px}
+body.app-fit main.home > .home-tiles{flex:1 1 auto}
+@media (max-height:700px){
+  body.app-fit main.home{gap:6px}
+  body.app-fit main.home .h1{font-size:22px}
+  .tile{padding:10px}
+  .tile b{font-size:16px}
+}
 body.gita-lock{overflow:hidden}
 .gita-splash{position:fixed;inset:0;z-index:90;display:flex;align-items:center;justify-content:center;padding:calc(env(safe-area-inset-top) + 20px) 20px calc(env(safe-area-inset-bottom) + 20px);background:linear-gradient(165deg,#E8A04A 0%,#F6D7A8 26%,#FAF7F2 58%,#FFF8EE 100%);color:#1F1B16;color-scheme:light;overflow:auto}
 .gita-splash.out{opacity:0;transform:scale(1.04);pointer-events:none;transition:opacity .45s ease,transform .45s ease}
@@ -620,6 +637,11 @@ const DIGN = {
 const signName = s => hi() ? SIGNS_HI[SIGNS.indexOf(s)] : s;
 const plName = p => hi() ? PL_HI[p] : p;
 const loc = () => hi() ? 'hi-IN' : 'en-GB';
+function localISODate(d) {
+  d = d || new Date();
+  const z = n => String(n).padStart(2, '0');
+  return d.getFullYear() + '-' + z(d.getMonth() + 1) + '-' + z(d.getDate());
+}
 const fmtDate = iso => iso ? new Date(iso.slice(0, 10) + 'T00:00:00').toLocaleDateString(loc(), {day: 'numeric', month: 'short', year: 'numeric'}) : '';
 const monYr = iso => new Date(iso.slice(0, 10) + 'T00:00:00').toLocaleDateString(loc(), {month: 'short', year: 'numeric'});
 const ord = n => hi() ? 'वें' : ((n % 100 >= 11 && n % 100 <= 13) ? 'th' : ({1: 'st', 2: 'nd', 3: 'rd'}[n % 10] || 'th'));
@@ -665,6 +687,8 @@ const I = {
   users: s => ic('<circle cx="9" cy="8.5" r="3.5"/><path d="M2.5 20c1-3.3 3.6-5 6.5-5s5.5 1.7 6.5 5"/><path d="M16 5.2a3.5 3.5 0 0 1 0 6.6M18 15.3c1.7.8 2.9 2.4 3.5 4.7"/>', s || 22),
   share: s => ic('<circle cx="6" cy="12" r="2.2"/><circle cx="17" cy="6.5" r="2.2"/><circle cx="17" cy="17.5" r="2.2"/><path d="M8 11.2l7-3.6M8 12.8l7 3.6"/>', s || 18),
   file: s => ic('<path d="M7 3h7l5 5v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M14 3v5h5"/>', s || 18),
+  sun: s => ic('<circle cx="12" cy="12" r="4"/><path d="M12 2.6v2M12 19.4v2M2.6 12h2M19.4 12h2M5.1 5.1l1.4 1.4M17.5 17.5l1.4 1.4M18.9 5.1l-1.4 1.4M6.5 17.5l-1.4 1.4"/>', s || 22),
+  verse: s => ic('<rect x="4" y="4" width="16" height="16" rx="3"/>', s || 16, 1.8),
 };
 const CHIPS = () => [
   [I.briefcase(18), tr('Career', 'करियर'), tr('How will my career progress, and when is a good period for growth or a job change?', 'मेरा करियर कैसा रहेगा? नौकरी या व्यवसाय में कब तरक्की होगी?')],
@@ -1130,21 +1154,28 @@ async function shareGita() {
   g.fillText(url, 80, 1830);
   await deliverCard(canvas, 'gita');
 }
+function gitaBannerLabel(v) {
+  const ref = (hi() ? 'गीता ' : 'Gita ') + v.chapter + '.' + v.verse;
+  return tr("Today's verse", 'आज का श्लोक') + ' · ' + ref;
+}
+function gitaBannerInner(v) {
+  return `<span class="tile-ico" style="color:var(--on-tint);margin:0">${I.verse(16)}</span><span class="gita-m">${esc(gitaBannerLabel(v))}</span><span class="gita-go" aria-hidden="true">${I.chev(16)}</span>`;
+}
 function paintGitaBanner(v) {
   const b = $('#gitaBanner');
   if (!b || !v) return;
   gitaVerse = v;
-  const meaning = hi() ? v.hi : v.en, ref = gitaRef(v);
+  const meaning = hi() ? v.hi : v.en;
   b.hidden = false;
-  b.innerHTML = `<span class="gita-m">${esc(meaning)}</span><span class="gita-r">${esc(ref)}</span>`;
-  b.setAttribute('aria-label', tr('Verse of the day', 'आज का श्लोक') + '. ' + meaning + ' ' + ref);
+  b.innerHTML = gitaBannerInner(v);
+  b.setAttribute('aria-label', tr('Verse of the day', 'आज का श्लोक') + '. ' + meaning + ' ' + gitaRef(v));
   b.onclick = () => window.openGitaSplash(v, false);
 }
 function gitaBannerHtml() {
   const v = window.GITA_VERSES && window.GITA_VERSES.length && window.gitaVerseForToday ? window.gitaVerseForToday() : null;
   if (!v) return `<button type="button" class="gita-banner" id="gitaBanner" hidden></button>`;
-  const meaning = hi() ? v.hi : v.en, ref = gitaRef(v);
-  return `<button type="button" class="gita-banner" id="gitaBanner" aria-label="${esc(tr('Verse of the day', 'आज का श्लोक') + '. ' + meaning + ' ' + ref)}"><span class="gita-m">${esc(meaning)}</span><span class="gita-r">${esc(ref)}</span></button>`;
+  const meaning = hi() ? v.hi : v.en;
+  return `<button type="button" class="gita-banner" id="gitaBanner" aria-label="${esc(tr('Verse of the day', 'आज का श्लोक') + '. ' + meaning + ' ' + gitaRef(v))}">${gitaBannerInner(v)}</button>`;
 }
 function mountGita() {
   const p = activeProfile();
@@ -1157,81 +1188,119 @@ function mountGita() {
     paintGitaBanner(v);
   }).catch(() => {});
 }
+function dashaUntil(cur) {
+  if (!cur || !cur.mahadasha || !cur.antardasha) return '';
+  const line = (lord, kindEn, kindHi, end) => tr(
+    `${plName(lord)} ${kindEn} until ${monYr(end)}`,
+    `${plName(lord)} ${kindHi} ${monYr(end)} तक`);
+  let text = line(cur.mahadasha.lord, 'Mahadasha', 'महादशा', cur.mahadasha.end)
+    + ' · ' + line(cur.antardasha.lord, 'Antardasha', 'अंतर्दशा', cur.antardasha.end);
+  if (cur.mahadasha.end === cur.antardasha.end) {
+    text += ' ' + tr(
+      `The ${plName(cur.antardasha.lord)} antardasha ends with the ${plName(cur.mahadasha.lord)} mahadasha.`,
+      `${plName(cur.antardasha.lord)} अंतर्दशा ${plName(cur.mahadasha.lord)} महादशा के साथ समाप्त होती है।`);
+  }
+  return text;
+}
 // ------------------------------------------------------------------ home
+let homeGen = 0;
 async function pageHome() {
   const p = activeProfile();
-  $('#app').innerHTML = header() + `<main class="fit">
+  const gen = ++homeGen;
+  const weekday = new Date().toLocaleDateString(loc(), {weekday: 'long'});
+  $('#app').innerHTML = header() + `<main class="fit home">
     ${gitaBannerHtml()}
-    <div><div class="h1">${tr('Namaste', 'नमस्ते')}, ${esc(p.name)}</div>
-      <p class="sub" id="gsub">${tr('Acharya is an AI astrologer', 'आचार्य एक AI ज्योतिषी हैं')} · ${new Date().toLocaleDateString(loc(), {weekday: 'short', day: 'numeric', month: 'short'})}</p></div>
-    <section class="cta"><p>${tr('Each Acharya question is $0.99. The chart, periods and matching are free.', 'आचार्य का हर प्रश्न $0.99 है। कुंडली, दशा और मिलान मुफ़्त हैं।')}</p>
-      <button class="btn block" id="askBtn">${I.ask(18)} ${tr('Ask Acharya', 'आचार्य से पूछें')}</button>
-      <div class="chips scroll">${chipsHtml()}</div></section>
-    <div id="hDasha">${skel(52, '100%', 0)}</div>
-    <div id="hPanch">${skel(44, '100%', 0)}</div>
-    <div class="chips scroll" id="hDosha"></div>
-    <div id="hHoro">${skel(64, '100%', 0)}</div>
-    <div class="chips scroll" id="hAct"></div></main>`;
+    <div class="home-greet"><div class="h1">${tr('Namaste', 'नमस्ते')}, ${esc(p.name)}</div>
+      <p class="sub" id="gsub">${esc(weekday)}</p></div>
+    <div class="home-tiles" role="group" aria-label="${tr('Home', 'होम')}">
+      <button type="button" class="tile ask" id="tileAsk"><span class="tile-ico">${I.ask(26)}</span><b>${tr('Ask Acharya', 'आचार्य से पूछें')}</b><span class="tile-sub">$0.99 ${tr('a question', 'प्रति प्रश्न')}</span></button>
+      <button type="button" class="tile" id="tileToday"><span class="tile-ico">${I.sun(26)}</span><b>${tr('Today', 'आज')}</b><span class="tile-sub">${tr('Horoscope & panchang', 'राशिफल और पंचांग')}</span></button>
+      <button type="button" class="tile" id="tileChart"><span class="tile-ico">${I.chart(26)}</span><b>${tr('My chart', 'मेरी कुंडली')}</b><span class="tile-sub">${tr('Kundli, periods, yogas', 'कुंडली, दशा, योग')}</span></button>
+      <button type="button" class="tile" id="tileMatch"><span class="tile-ico">${I.match(26)}</span><b>${tr('Match', 'मिलान')}</b><span class="tile-sub">${tr('Guna milan, free', 'गुण मिलान, मुफ़्त')}</span></button>
+    </div></main>`;
   bindHeader();
-  $('#askBtn').onclick = () => go('ask');
-  $$('main [data-q]').forEach(b => b.onclick = () => { S.pendingQ = b.dataset.q; go('ask'); });
-  loadPanchang(p);
   mountGita();
-  let c;
-  try { c = await chartOf(p); } catch (e) { const b = $('#hDasha'); if (b) b.innerHTML = errState(e.message, 'retryH'); const r = $('#retryH'); if (r) r.onclick = () => render(); return; }
-  if (S.tab !== 'home') return;
-  const cur = c.dasha.current;
-  $('#gsub').textContent = `${signName(c.moon_sign)} ${tr('Moon', 'राशि')} · ${c.janma_nakshatra} · ${tr('AI astrologer', 'AI ज्योतिषी')}`;
-  $('#hDasha').innerHTML = cur.mahadasha ? `<button class="card link" id="dashaCard">
-    <div class="minirow"><div class="grow"><b>${tr('Now', 'अभी')}: ${plName(cur.mahadasha.lord)} › ${plName(cur.antardasha.lord)} › ${plName(cur.pratyantardasha.lord)}</b>
-      <div class="small muted">${tr('Mahadasha', 'महादशा')} ${monYr(cur.mahadasha.end)} · ${tr('Antardasha', 'अंतर्दशा')} ${monYr(cur.antardasha.end)}</div>
-      <div class="bar" style="margin-top:6px"><i style="width:${pct(cur.mahadasha)}%"></i></div></div>${I.chev()}</div></button>` : '';
-  const dc = $('#dashaCard'); if (dc) dc.onclick = () => { S.pendingSheet = 'periods'; go('kundli'); };
-  $('#hDosha').innerHTML = doshaChipRow(c) + `<button class="chip" id="yogaChip">${tr('Yogas', 'योग')} · ${c.yogas.filter(y => y.present !== false).length}</button>`;
-  $('#hDosha').querySelectorAll('[data-dosha]').forEach(b => b.onclick = () => openDosha(c, b.dataset.dosha));
-  $('#yogaChip').onclick = () => openDetail(tr('Yogas', 'योग'), yogasHtml(c));
-  $('#hAct').innerHTML = `<button class="chip" id="pdfBtn">${I.file(16)} ${tr('Kundli PDF', 'कुंडली PDF')}</button><button class="chip" id="shareH">${I.share(16)} ${tr('Share horoscope', 'राशिफल साझा करें')}</button>`;
-  $('#pdfBtn').onclick = () => downloadKundli();
-  $('#shareH').onclick = () => shareCard('horoscope');
-  loadHoroscope(c.moon_sign);
+  $('#tileAsk').onclick = () => go('ask');
+  $('#tileMatch').onclick = () => go('match');
+  $('#tileToday').onclick = () => openToday(p);
+  $('#tileChart').onclick = () => openMyChart(p);
+  let tithi = '', period = '';
+  const paint = () => {
+    if (gen !== homeGen || !$('#gsub')) return;
+    const bits = [weekday];
+    if (tithi) bits.push(tithi);
+    if (period) bits.push(period);
+    $('#gsub').textContent = bits.join(' · ');
+  };
+  fetchPanchang(p).then(g => {
+    if (!g || gen !== homeGen) return;
+    S.panchang = g;
+    tithi = g.tithi[hi() ? 'hi' : 'en'];
+    paint();
+  }).catch(() => {});
+  chartOf(p).then(c => {
+    if (gen !== homeGen || !c.dasha || !c.dasha.current || !c.dasha.current.mahadasha) return;
+    const cur = c.dasha.current;
+    period = `${plName(cur.mahadasha.lord)}–${plName(cur.antardasha.lord)} ${tr('period', 'दशा')}`;
+    paint();
+  }).catch(() => {});
 }
-let horoReq = 0;
 function readingForSign(text, sign) {
   const name = hi() ? SIGNS_HI[SIGNS.indexOf(sign)] : sign;
   return !!(name && text && String(text).includes(name));
 }
-async function loadHoroscope(sign) {
-  const box = $('#hHoro'); if (!box) return;
-  const req = ++horoReq;
+function horoscopeHtml(h, sign) {
   const lang = S.lang;
-  try {
-    const h = await api(`/api/horoscope?sign=${encodeURIComponent(sign)}&lang=${lang}`);
-    if (req !== horoReq || !$('#hHoro') || h.sign !== sign || (h.lang && h.lang !== lang)) return;
-    const T = h.transits;
-    const facts = ['Moon', 'Sun', 'Venus', 'Mars'].map(p => `<div><b>${plName(p)} · ${signName(T[p].sign)}</b>${tr(HOUSE_MEAN[T[p].house_from_rashi][0], HOUSE_MEAN[T[p].house_from_rashi][1])}</div>`).join('');
-    const named = !!(h.ai && readingForSign(h.text, sign));
-    if (named) { S.horoText = h.text; S.horoFor = sign + ':' + lang; }
-    else if (S.horoFor !== sign + ':' + lang) { S.horoText = ''; S.horoFor = ''; }
-    const notice = tr('Today’s faster planets, until the AI reading is switched on.', 'AI राशिफल चालू होने तक आज के तेज़ ग्रह।');
-    const factsBlock = `<p class="small muted" style="margin:4px 0 0">${notice}</p><div class="facts">${facts}</div>`;
-    const full = named ? md(h.text) : factsBlock;
-    const preview = named
-      ? `<div class="clamp3">${esc(String(h.text).replace(/[*_#>`]/g, '').replace(/\s+/g, ' ').trim())}</div>`
-      : factsBlock;
-    box.innerHTML = `<button class="card link horo" id="horoOpen"><div class="sec" style="margin:0"><h3>${tr("Today's horoscope", 'आज का राशिफल')}</h3><span class="sk">${signName(sign)}</span></div>${preview}</button>`;
-    $('#horoOpen').onclick = () => openDetail(tr("Today's horoscope", 'आज का राशिफल'), full + `<p class="small muted">${tr('Free. Not a prediction.', 'मुफ़्त। यह भविष्यवाणी नहीं।')}</p>`);
-  } catch (e) { if (req !== horoReq || !$('#hHoro')) return; box.innerHTML = errState(e.message, 'retryHoro'); const r = $('#retryHoro'); if (r) r.onclick = () => loadHoroscope(sign); }
+  const T = h.transits || {};
+  const facts = ['Moon', 'Sun', 'Venus', 'Mars'].filter(p => T[p]).map(p => `<div><b>${plName(p)} · ${signName(T[p].sign)}</b>${tr(HOUSE_MEAN[T[p].house_from_rashi][0], HOUSE_MEAN[T[p].house_from_rashi][1])}</div>`).join('');
+  const named = !!(h.ai && readingForSign(h.text, sign));
+  if (named) { S.horoText = h.text; S.horoFor = sign + ':' + lang; }
+  else if (S.horoFor !== sign + ':' + lang) { S.horoText = ''; S.horoFor = ''; }
+  const notice = tr('Today’s faster planets, until the AI reading is switched on.', 'AI राशिफल चालू होने तक आज के तेज़ ग्रह।');
+  const factsBlock = `<p class="small muted" style="margin:4px 0 0">${notice}</p><div class="facts">${facts}</div>`;
+  const body = named ? md(h.text) : factsBlock;
+  return `<h3 style="margin:0 0 6px">${tr("Today's horoscope", 'आज का राशिफल')} · ${signName(sign)}</h3>${body}<p class="small muted">${tr('Free. Not a prediction.', 'मुफ़्त। यह भविष्यवाणी नहीं।')}</p>`;
 }
-async function loadPanchang(p) {
-  const box = $('#hPanch'); if (!box || !p.place) return;
+async function fetchPanchang(p) {
+  if (!p || !p.place) return null;
+  const day = localISODate();
+  return api(`/api/panchang?lat=${p.place.lat}&lon=${p.place.lon}&tz=${encodeURIComponent(p.place.tz)}&date=${encodeURIComponent(day)}`);
+}
+async function openToday(p) {
+  openDetail(tr('Today', 'आज'), skel(80));
   try {
-    const g = await api(`/api/panchang?lat=${p.place.lat}&lon=${p.place.lon}&tz=${encodeURIComponent(p.place.tz)}`);
-    if (!$('#hPanch') || S.tab !== 'home') return;
+    const c = await chartOf(p);
+    const day = localISODate();
+    const lang = S.lang;
+    const [h, g] = await Promise.all([
+      api(`/api/horoscope?sign=${encodeURIComponent(c.moon_sign)}&lang=${lang}&date=${encodeURIComponent(day)}`),
+      fetchPanchang(p),
+    ]);
+    if (!$('#sheet') || $('#sheet').hidden || S.tab !== 'home') return;
+    if (h.sign !== c.moon_sign || (h.lang && h.lang !== lang)) return;
     S.panchang = g;
-    const lang = hi() ? 'hi' : 'en';
-    box.innerHTML = `<button class="card link" id="panBtn"><div class="minirow"><div class="grow"><b>${tr("Today's panchang", 'आज का पंचांग')}</b><div class="small muted">${esc(g.vaar[lang])} · ${esc(g.tithi[lang])} · ${esc(g.nakshatra[lang])}</div></div>${I.chev()}</div></button>`;
-    $('#panBtn').onclick = () => openDetail(tr("Today's panchang", 'आज का पंचांग'), panchangHtml(g, p));
-  } catch (e) { box.innerHTML = `<button class="card link" id="panRetry"><b>${tr('Panchang', 'पंचांग')}</b><div class="small muted">${esc(e.message)}</div></button>`; const r = $('#panRetry'); if (r) r.onclick = () => loadPanchang(p); }
+    openDetail(tr('Today', 'आज'), horoscopeHtml(h, c.moon_sign) + `<h3 style="margin:14px 0 6px">${tr("Today's panchang", 'आज का पंचांग')}</h3>` + panchangHtml(g, p) + `<button class="btn sec2" id="shareH" style="margin-top:12px">${I.share(16)} ${tr('Share horoscope', 'राशिफल साझा करें')}</button>`);
+    const share = $('#shareH'); if (share) share.onclick = () => shareCard('horoscope');
+  } catch (e) {
+    if ($('#sheet') && !$('#sheet').hidden) openDetail(tr('Today', 'आज'), `<p>${esc(e.message)}</p>`);
+  }
+}
+async function openMyChart(p) {
+  openDetail(tr('My chart', 'मेरी कुंडली'), skel(80));
+  try {
+    const c = await chartOf(p);
+    if (!$('#sheet') || $('#sheet').hidden || S.tab !== 'home') return;
+    const cur = c.dasha.current;
+    const dasha = cur.mahadasha ? `<div class="card" style="box-shadow:none"><b>${tr('Now', 'अभी')}: ${plName(cur.mahadasha.lord)} › ${plName(cur.antardasha.lord)} › ${plName(cur.pratyantardasha.lord)}</b><p class="small muted">${esc(dashaUntil(cur))}</p><div class="bar" style="margin-top:8px"><i style="width:${pct(cur.mahadasha)}%"></i></div></div>` : '';
+    const yogas = c.yogas.filter(y => y.present !== false).length;
+    openDetail(tr('My chart', 'मेरी कुंडली'), dasha + `<div class="chips" style="margin-top:10px">${doshaChipRow(c)}<button class="chip" id="yogaChip">${tr('Yogas', 'योग')} · ${yogas}</button></div><div class="chips" style="margin-top:10px"><button class="chip" id="pdfBtn">${I.file(16)} ${tr('Kundli PDF', 'कुंडली PDF')}</button><button class="chip" id="openChart">${tr('Open the chart', 'कुंडली खोलें')}</button></div>`);
+    $('#sheet').querySelectorAll('[data-dosha]').forEach(b => b.onclick = () => openDosha(c, b.dataset.dosha));
+    const yoga = $('#yogaChip'); if (yoga) yoga.onclick = () => openDetail(tr('Yogas', 'योग'), yogasHtml(c));
+    const pdf = $('#pdfBtn'); if (pdf) pdf.onclick = () => downloadKundli();
+    const chart = $('#openChart'); if (chart) chart.onclick = () => { closeSheet(); go('kundli'); };
+  } catch (e) {
+    if ($('#sheet') && !$('#sheet').hidden) openDetail(tr('My chart', 'मेरी कुंडली'), `<p>${esc(e.message)}</p>`);
+  }
 }
 function clock(iso) { try { return new Date(iso).toLocaleTimeString(loc(), {hour: 'numeric', minute: '2-digit'}); } catch { return iso || ''; } }
 function panchangHtml(g, p) {

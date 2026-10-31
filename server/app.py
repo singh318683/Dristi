@@ -611,8 +611,27 @@ def _horo_json(payload: dict) -> JSONResponse:
     return JSONResponse(payload, headers={"Cache-Control": "private, no-store"})
 
 
+def _reading_day(date: str | None) -> str:
+    """The civil date on the phone, not UTC and not the birth-place clock.
+
+    A local evening can still be the previous UTC day, or already the next day
+    in Asia/Kolkata. Callers send the device date. Anything further than one
+    day from UTC is ignored so the cache cannot be filled for arbitrary days.
+    """
+    today = datetime.now(timezone.utc).date()
+    if not date:
+        return today.isoformat()
+    try:
+        wanted = datetime.strptime(date, "%Y-%m-%d").date()
+    except ValueError:
+        raise HTTPException(400, "date must be YYYY-MM-DD")
+    if abs((wanted - today).days) > 1:
+        return today.isoformat()
+    return wanted.isoformat()
+
+
 @app.get("/api/horoscope")
-async def api_horoscope(sign: str, lang: str = "en"):
+async def api_horoscope(sign: str, lang: str = "en", date: str | None = None):
     if sign not in engine.SIGNS:
         raise HTTPException(400, "unknown sign")
     lang = lang if lang in llm.LANG_RULES else "en"
@@ -621,7 +640,7 @@ async def api_horoscope(sign: str, lang: str = "en"):
     tr = engine.transits(now, s, s)
     facts = {p: {"sign": v["sign"], "house_from_rashi": v["house_from_moon"], "retrograde": v["retrograde"]}
              for p, v in tr["planets"].items()}
-    day = now.date().isoformat()
+    day = _reading_day(date)
     base = {"sign": sign, "lang": lang, "date": day, "transits": facts}
     if not llm.configured():
         return _horo_json(base | {"ai": False, "text": None})
