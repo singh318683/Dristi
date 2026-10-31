@@ -1,4 +1,4 @@
-"""Drishti backend: chart engine API, city search, AI chat (SSE), matching, horoscope, wallet stub."""
+"""Drishti backend: chart engine API, city search, AI chat (SSE), matching, horoscope, Play Billing."""
 from __future__ import annotations
 
 import hashlib
@@ -21,26 +21,57 @@ import db
 import engine
 import gita
 import llm
+import playbilling
 from matching import milan
+from playbilling import PlayError
 
 APP_NAME = "Drishti"
 ROOT = os.path.dirname(os.path.abspath(__file__))
 WEB = os.path.join(os.path.dirname(ROOT), "web")
-FREE_QUESTIONS = int(os.environ.get("FREE_QUESTIONS", "3"))
-QUESTION_COST = int(os.environ.get("QUESTION_COST", "15"))  # credits per question after free quota
-PACKS = {"p100": {"credits": 100, "price": "₹99"}, "p300": {"credits": 330, "price": "₹249"},
-         "p1000": {"credits": 1200, "price": "₹699"}}
+QUESTION_PRICE = "0.99"
+QUESTION_CURRENCY = "USD"
+QUESTION_PRICE_LABEL = "$0.99"
+# A crashed request must not lock a purchase forever, and a double-tap must not
+# spend one purchase on two answers.
+RESERVE_SECONDS = 120
+_UNSET = object()
+_play_override = _UNSET
 
 
-def referral_bonus() -> int:
-    return int(os.environ.get("REFERRAL_BONUS", "15"))
+def set_play_client(client):
+    """Tests inject a fake Play client. None means Play is not configured."""
+    global _play_override
+    _play_override = client
 
 
-def payment_provider() -> str:
-    """'razorpay' only when both keys exist. Charging is still not implemented."""
-    if os.environ.get("RAZORPAY_KEY_ID", "").strip() and os.environ.get("RAZORPAY_KEY_SECRET", "").strip():
-        return "razorpay"
-    return "demo"
+def clear_play_client():
+    """Return to reading Play credentials from the environment."""
+    global _play_override
+    _play_override = _UNSET
+
+
+def play_backend():
+    if _play_override is not _UNSET:
+        return _play_override
+    return playbilling.client_from_env()
+
+
+def billing_public() -> dict:
+    configured = False
+    try:
+        configured = play_backend() is not None
+    except PlayError:
+        configured = False
+    return {
+        "billing": "google_play",
+        "package_name": playbilling.package_name(),
+        "product_id": playbilling.product_id(),
+        "price": QUESTION_PRICE,
+        "currency": QUESTION_CURRENCY,
+        "price_label": QUESTION_PRICE_LABEL,
+        "free_questions": 0,
+        "play_configured": configured,
+    }
 
 app = FastAPI(title=APP_NAME)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
@@ -56,64 +87,193 @@ def _ensure_wallet(con, device: str):
 def wallet(device: str) -> dict:
     with _lock, db.connect() as con:
         _ensure_wallet(con, device)
-        c, u, email = con.execute("select credits, used_free, email from wallet where device=?", (device,)).fetchone()
-    return {"credits": c, "free_left": max(0, FREE_QUESTIONS - u), "free_total": FREE_QUESTIONS,
-            "question_cost": QUESTION_COST, "packs": PACKS, "email": email,
-            "payment": payment_provider()}
+        email = con.execute("select email from wallet where device=?", (device,)).fetchone()[0]
+    # credits, free_left and packs stay at zero so an old copy of the app cannot
+    # treat a balance as permission to ask. The server ignores them.
+    return billing_public() | {
+        "email": email, "credits": 0, "free_left": 0, "free_total": 0,
+        "question_cost": 0, "packs": {},
+    }
 
 
-def _grant_referral(con, device: str, used_free: int):
-    """On the invitee's first charged question, credit both devices once."""
-    if used_free > 0:
-        return
-    if con.execute("select 1 from referral_grants where invitee=?", (device,)).fetchone():
-        return
-    pend = con.execute("select code from referral_pending where device=?", (device,)).fetchone()
-    if not pend:
-        return
-    ref = con.execute("select device from referral_codes where code=?", (pend[0],)).fetchone()
-    if not ref or ref[0] == device:
-        return
-    bonus = referral_bonus()
-    now = datetime.now(timezone.utc).isoformat()
-    for who in (device, ref[0]):
-        _ensure_wallet(con, who)
-        con.execute("update wallet set credits = credits + ? where device=?", (bonus, who))
-        con.execute("insert into ledger(device, ts, delta, reason) values(?,?,?,?)",
-                    (who, now, bonus, "referral bonus"))
-    con.execute("insert into referral_grants(invitee, referrer, code, ts) values(?,?,?,?)",
-                (device, ref[0], pend[0], now))
+def _token_hash(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
-def charge(device: str) -> str | None:
-    """Reserve one question. Returns 'free' / 'paid' or None if insufficient."""
+def _check_token_shape(token: str) -> str:
+    token = (token or "").strip()
+    if not token or len(token) < 16 or len(token) > 4096 or any(ch.isspace() for ch in token):
+        raise PlayError("payment_invalid", "Google Play did not accept this purchase. The question was not answered.")
+    return token
+
+
+def _consume_now(token_hash: str, token: str | None):
+    if not token:
+        return
+    backend = play_backend()
+    if backend is None:
+        return
+    try:
+        backend.consume(token)
+    except Exception:
+        return
+    with _lock, db.connect() as con:
+        con.execute(
+            "update play_purchases set consumed_at=?, token=null where token_hash=?",
+            (datetime.now(timezone.utc).isoformat(), token_hash))
+
+
+def redeem_purchase(device: str, token: str) -> str:
+    """Verify a Play purchase and reserve it for one in-flight question.
+
+    Returns the token hash. Raises PlayError without calling the AI when the
+    purchase is missing, unpaid, already used, or Play cannot be reached.
+    The purchase is not consumed here. ``finish_purchase`` consumes it only
+    after an answer has started, so a failed answer can be retried for free.
+    """
+    device = (device or "").strip()
+    token = _check_token_shape(token)
+    if not device or len(device) > 200:
+        raise PlayError("payment_invalid", "Google Play did not accept this purchase. The question was not answered.")
+    try:
+        backend = play_backend()
+    except PlayError:
+        raise
+    if backend is None:
+        raise PlayError(
+            "billing_not_configured",
+            "Play Billing is not set up on the server yet. The question was not answered, and you were not charged again.")
+    try:
+        payload = backend.fetch(token)
+    except PlayError:
+        raise
+    except Exception as e:
+        raise PlayError(
+            "billing_unavailable",
+            "Google Play could not be reached. The question was not answered. Try again with the same purchase.") from e
+    info = playbilling.validate_purchase(payload, playbilling.product_id())
+    account = info["obfuscated_account"]
+    if account and account != device:
+        raise PlayError(
+            "payment_invalid",
+            "This purchase belongs to a different device. The question was not answered.")
+    token_hash = _token_hash(token)
+    now = datetime.now(timezone.utc)
+    now_s = now.isoformat()
+    stale_before = (now - timedelta(seconds=RESERVE_SECONDS)).isoformat()
+    reject: PlayError | None = None
     with _lock, db.connect() as con:
         _ensure_wallet(con, device)
-        c, u = con.execute("select credits, used_free from wallet where device=?", (device,)).fetchone()
-        now = datetime.now(timezone.utc).isoformat()
-        if u < FREE_QUESTIONS:
-            _grant_referral(con, device, u)
-            con.execute("update wallet set used_free=used_free+1 where device=?", (device,))
-            con.execute("insert into ledger(device, ts, delta, reason) values(?,?,?,?)", (device, now, 0, "free question"))
-            return "free"
-        if c >= QUESTION_COST:
-            _grant_referral(con, device, u)
-            con.execute("update wallet set credits=credits-? where device=?", (QUESTION_COST, device))
-            con.execute("insert into ledger(device, ts, delta, reason) values(?,?,?,?)",
-                        (device, now, -QUESTION_COST, "question"))
-            return "paid"
-    return None
-
-
-def refund(device: str, kind: str):
-    with _lock, db.connect() as con:
-        if kind == "free":
-            con.execute("update wallet set used_free=max(0,used_free-1) where device=?", (device,))
+        row = con.execute(
+            "select device, state, ts, consumed_at from play_purchases where token_hash=?",
+            (token_hash,)).fetchone()
+        if row is None:
+            taken = con.execute(
+                "select token_hash from play_purchases where order_id=?", (info["order_id"],)).fetchone()
+            if taken:
+                reject = PlayError(
+                    "payment_used",
+                    "That purchase was already used for a question. Each new question is $0.99.")
+            else:
+                state = "spent" if info["consumption_state"] == 1 else "reserved"
+                # A unique clash must not abort the Postgres transaction.
+                con.execute("savepoint play_insert")
+                try:
+                    con.execute(
+                        "insert into play_purchases(token_hash, order_id, token, product_id, package_name, device, state, ts, consumed_at) "
+                        "values(?,?,?,?,?,?,?,?,?)",
+                        (token_hash, info["order_id"], None if state == "spent" else token,
+                         playbilling.product_id(), playbilling.package_name(), device, state, now_s,
+                         now_s if state == "spent" else None))
+                    con.execute("release savepoint play_insert")
+                except Exception as e:
+                    con.execute("rollback to savepoint play_insert")
+                    con.execute("release savepoint play_insert")
+                    if "unique" in str(e).lower() or "duplicate" in str(e).lower():
+                        reject = PlayError(
+                            "payment_used",
+                            "That purchase was already used for a question. Each new question is $0.99.")
+                    else:
+                        raise
+                if state == "spent" and reject is None:
+                    reject = PlayError(
+                        "payment_used",
+                        "That purchase was already used for a question. Each new question is $0.99.")
         else:
-            con.execute("update wallet set credits=credits+? where device=?", (QUESTION_COST, device))
-        con.execute("insert into ledger(device, ts, delta, reason) values(?,?,?,?)",
-                    (device, datetime.now(timezone.utc).isoformat(),
-                     0 if kind == "free" else QUESTION_COST, "refund (AI error)"))
+            owner, state, ts, consumed_at = row
+            if owner != device or state == "spent":
+                reject = PlayError(
+                    "payment_used",
+                    "That purchase was already used for a question. Each new question is $0.99.")
+                if state == "spent" and not consumed_at:
+                    # Consumed below, outside the database lock.
+                    pass
+            elif state == "reserved" and ts >= stale_before:
+                reject = PlayError(
+                    "payment_in_progress",
+                    "That purchase is already being used for a question. Wait a moment, then try again. You were not charged again.")
+            elif info["consumption_state"] == 1:
+                con.execute(
+                    "update play_purchases set state='spent', consumed_at=?, token=null, ts=? where token_hash=?",
+                    (now_s, now_s, token_hash))
+                reject = PlayError(
+                    "payment_used",
+                    "That purchase was already used for a question. Each new question is $0.99.")
+            else:
+                con.execute(
+                    "update play_purchases set state='reserved', token=?, ts=? where token_hash=? and device=?",
+                    (token, now_s, token_hash, device))
+        if reject is None and info["consumption_state"] == 1:
+            reject = PlayError(
+                "payment_used",
+                "That purchase was already used for a question. Each new question is $0.99.")
+        leftover = None
+        if reject is not None and reject.code == "payment_used":
+            leftover = con.execute(
+                "select token from play_purchases where token_hash=? and state='spent' and consumed_at is null",
+                (token_hash,)).fetchone()
+    if leftover and leftover[0]:
+        _consume_now(token_hash, leftover[0])
+    if reject is not None:
+        raise reject
+    return token_hash
+
+
+def finish_purchase(token_hash: str):
+    """The answer started. This purchase cannot pay for a second question."""
+    token = None
+    with _lock, db.connect() as con:
+        row = con.execute(
+            "select device, token, state, consumed_at from play_purchases where token_hash=?",
+            (token_hash,)).fetchone()
+        if not row:
+            return
+        device, token, state, consumed_at = row
+        now = datetime.now(timezone.utc).isoformat()
+        if state != "spent":
+            con.execute("update play_purchases set state='spent', ts=? where token_hash=?", (now, token_hash))
+            con.execute(
+                "insert into ledger(device, ts, delta, reason) values(?,?,?,?)",
+                (device, now, 0, "acharya question"))
+        if consumed_at:
+            token = None
+    _consume_now(token_hash, token)
+
+
+def release_purchase(token_hash: str):
+    """The answer never started. The same purchase may be used once more."""
+    with _lock, db.connect() as con:
+        row = con.execute(
+            "select device, state from play_purchases where token_hash=?", (token_hash,)).fetchone()
+        if not row or row[1] != "reserved":
+            return
+        now = datetime.now(timezone.utc).isoformat()
+        con.execute(
+            "update play_purchases set state='released', ts=? where token_hash=? and state='reserved'",
+            (now, token_hash))
+        con.execute(
+            "insert into ledger(device, ts, delta, reason) values(?,?,?,?)",
+            (row[0], now, 0, "acharya question released"))
 
 
 def referral_info(device: str) -> dict:
@@ -134,7 +294,7 @@ def referral_info(device: str) -> dict:
                 break
             if not code:
                 raise HTTPException(500, "could not assign a referral code")
-    return {"code": code, "bonus": referral_bonus(), "path": "/?ref=" + code}
+    return {"code": code, "bonus": 0, "path": "/?ref=" + code}
 
 
 def attach_referral(device: str, code: str) -> dict:
@@ -150,13 +310,15 @@ def attach_referral(device: str, code: str) -> dict:
             return {"ok": False, "reason": "already"}
         used = con.execute("select used_free from wallet where device=?", (device,)).fetchone()[0]
         asked = con.execute(
-            "select 1 from ledger where device=? and reason in ('free question', 'question')", (device,)).fetchone()
+            "select 1 from ledger where device=? and reason in ('free question', 'question', 'acharya question')",
+            (device,)).fetchone()
         if used or asked:
             return {"ok": False, "reason": "not_new"}
         con.execute(
             "insert into referral_pending(device, code) values(?,?) on conflict(device) do update set code=excluded.code",
             (device, code))
-    return {"ok": True, "bonus": referral_bonus()}
+    # An invite never includes a question. Each question is a separate $0.99 purchase.
+    return {"ok": True, "bonus": 0}
 
 
 def re_code(code: str) -> bool:
@@ -311,8 +473,7 @@ def api_match(m: MatchReq):
 def status():
     c = llm.config()
     return {"app": APP_NAME, "ai_configured": llm.configured(), "model": c["model"] if llm.configured() else None,
-            "free_questions": FREE_QUESTIONS, "question_cost": QUESTION_COST,
-            "payment": payment_provider(), "referral_bonus": referral_bonus()}
+            "referral_bonus": 0} | billing_public()
 
 
 @app.get("/api/wallet")
@@ -321,44 +482,25 @@ def api_wallet(device: str):
 
 
 class Topup(BaseModel):
-    device: str
-    pack: str
+    device: str = ""
+    pack: str = ""
 
 
 @app.post("/api/wallet/topup")
 def api_topup(t: Topup):
-    """STUB: no real payment. In production this is called by the payment webhook
-    (Razorpay / Stripe / App Store / Play Billing) after verifying the receipt."""
-    if t.pack not in PACKS:
-        raise HTTPException(400, "unknown pack")
-    with _lock, db.connect() as con:
-        _ensure_wallet(con, t.device)
-        con.execute("update wallet set credits=credits+? where device=?", (PACKS[t.pack]["credits"], t.device))
-        con.execute("insert into ledger(device, ts, delta, reason) values(?,?,?,?)",
-                    (t.device, datetime.now(timezone.utc).isoformat(),
-                     PACKS[t.pack]["credits"], f"DEMO top-up {t.pack}"))
-    return wallet(t.device) | {"demo": True, "provider": payment_provider()}
+    """Credit packs are not sold. A question is one Play consumable."""
+    raise HTTPException(410, "Credit packs are not sold. Each Acharya question is $0.99 on Google Play.")
 
 
 class OrderReq(BaseModel):
-    device: str
-    pack: str
+    device: str = ""
+    pack: str = ""
 
 
 @app.post("/api/wallet/order")
 def api_order(t: OrderReq):
-    """Razorpay-shaped stub. Does not create an order or add credits."""
-    if t.pack not in PACKS:
-        raise HTTPException(400, "unknown pack")
-    if payment_provider() != "razorpay":
-        raise HTTPException(
-            501,
-            "Razorpay is not configured. Set RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET. "
-            "TODO: create a Razorpay order and credit the wallet only after the payment signature is verified. "
-            "Until then, POST /api/wallet/topup adds demo credits and does not take payment.")
-    raise HTTPException(
-        501,
-        "TODO: create a Razorpay order for this pack and return order_id. Do not credit the wallet in this request.")
+    """No Razorpay order and no bundle. Questions are Play consumables."""
+    raise HTTPException(410, "Credit packs are not sold. Each Acharya question is $0.99 on Google Play.")
 
 
 # --------------------------------------------------------------- chat -----
@@ -372,27 +514,41 @@ class ChatReq(BaseModel):
     profile: Profile
     messages: list[Msg]
     lang: str = "en"
+    purchase_token: str | None = Field(default=None, max_length=4096)
 
 
 def sse(obj) -> str:
     return f"data: {json.dumps(obj, ensure_ascii=False)}\n\n"
 
 
+def _sse_error(code: str, message: str):
+    async def gen():
+        yield sse({"type": "error", "code": code, "message": message, "wallet": None})
+    return StreamingResponse(gen(), media_type="text/event-stream")
+
+
 @app.post("/api/chat")
 async def api_chat(r: ChatReq):
     lang = r.lang if r.lang in llm.LANG_RULES else "en"
+    # Refuse before taking a purchase when the astrologer cannot answer.
     if not llm.configured():
-        async def nokey():
-            yield sse({"type": "error", "code": "ai_not_configured",
-                       "message": "AI not configured yet. The astrologer will answer once an LLM API key is added on the server."})
-        return StreamingResponse(nokey(), media_type="text/event-stream")
-    kind = charge(r.device)
-    if kind is None:
-        async def broke():
-            yield sse({"type": "error", "code": "insufficient_credits",
-                       "message": f"You've used your free questions. Each question costs {QUESTION_COST} credits."})
-        return StreamingResponse(broke(), media_type="text/event-stream")
-    chart = chart_for(r.profile)
+        return _sse_error(
+            "ai_not_configured",
+            "AI not configured yet. The astrologer will answer once an LLM API key is added on the server. You were not charged.")
+    if not (r.purchase_token or "").strip():
+        return _sse_error(
+            "payment_required",
+            "Each Acharya question is $0.99, paid through Google Play. This question was not answered. "
+            "The chart, periods, dosha, panchang, matching, horoscope and kundli PDF stay free.")
+    try:
+        redemption = redeem_purchase(r.device, r.purchase_token or "")
+    except PlayError as e:
+        return _sse_error(e.code, e.message)
+    try:
+        chart = chart_for(r.profile)
+    except HTTPException:
+        release_purchase(redemption)
+        raise
     ctx = llm.compact_chart(r.profile.model_dump() | {"place": r.profile.place.name}, chart)
     system = llm.SYSTEM_PROMPT.format(app=APP_NAME, lang_rule=llm.LANG_RULES[lang])
     facts = llm.chart_facts(ctx)
@@ -407,15 +563,32 @@ async def api_chat(r: ChatReq):
 
     async def gen():
         got = False
+        settled = False
         try:
             async for tok in llm.stream_chat(msgs):
                 got = True
                 yield sse({"type": "token", "text": tok})
-            yield sse({"type": "done", "charged": kind, "wallet": wallet(r.device)})
+            finish_purchase(redemption)
+            settled = True
+            yield sse({"type": "done", "charged": "play", "price": QUESTION_PRICE_LABEL, "wallet": wallet(r.device)})
         except Exception as e:
-            if not got:
-                refund(r.device, kind)
-            yield sse({"type": "error", "code": "llm_error", "message": f"The astrologer is unavailable right now ({str(e)[:160]})."})
+            if not settled:
+                if got:
+                    finish_purchase(redemption)
+                else:
+                    release_purchase(redemption)
+                settled = True
+            yield sse({"type": "error", "code": "llm_error",
+                       "message": "The answer could not be completed. " + (
+                           "This purchase was used because an answer had already started." if got
+                           else "You were not charged again. Ask once more with the same purchase."),
+                       "detail": str(e)[:160]})
+        finally:
+            if not settled:
+                if got:
+                    finish_purchase(redemption)
+                else:
+                    release_purchase(redemption)
     return StreamingResponse(gen(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 

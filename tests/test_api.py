@@ -23,7 +23,9 @@ def client(tmp_path, monkeypatch):
     monkeypatch.delenv("SMTP_HOST", raising=False)
     monkeypatch.delenv("RAZORPAY_KEY_ID", raising=False)
     monkeypatch.delenv("RAZORPAY_KEY_SECRET", raising=False)
-    monkeypatch.setenv("REFERRAL_BONUS", "15")
+    monkeypatch.delenv("PLAY_SERVICE_ACCOUNT_JSON", raising=False)
+    monkeypatch.delenv("PLAY_SERVICE_ACCOUNT_FILE", raising=False)
+    app.clear_play_client()
     from fastapi.testclient import TestClient
     return TestClient(app.app)
 
@@ -36,33 +38,28 @@ def test_adapt_placeholders():
     assert db.dialect_of("postgresql://u:p@localhost/db") == "postgres"
 
 
-def test_referral_bonus_on_first_question(client):
-    code = client.get("/api/referral", params={"device": "device-a"}).json()["code"]
-    assert len(code) == 8
+def test_referral_does_not_grant_a_question(client):
+    info = client.get("/api/referral", params={"device": "device-a"}).json()
+    code = info["code"]
+    assert len(code) == 8 and info["bonus"] == 0
     bad = client.post("/api/referral/attach", json={"device": "device-a", "code": code}).json()
     assert bad["ok"] is False and bad["reason"] == "invalid"
     assert client.post("/api/referral/attach", json={"device": "device-b", "code": "NOPE"}).json()["ok"] is False
     ok = client.post("/api/referral/attach", json={"device": "device-b", "code": code}).json()
-    assert ok["ok"] is True and ok["bonus"] == 15
-    assert app.charge("device-b") == "free"
-    assert app.wallet("device-a")["credits"] == 15
-    assert app.wallet("device-b")["credits"] == 15
-    assert app.charge("device-b") == "free"
-    assert app.wallet("device-a")["credits"] == 15
-    assert app.wallet("device-b")["credits"] == 15
-    late = client.post("/api/referral/attach", json={"device": "device-c", "code": code}).json()
-    assert late["ok"] is True
-    app.charge("device-c")
-    app.charge("device-c")
-    # a second attach after the first question cannot stack another bonus
-    again = app.attach_referral("device-c", code)
-    assert again["ok"] is False
-    assert app.wallet("device-a")["credits"] == 30  # b and c
+    assert ok == {"ok": True, "bonus": 0}
+    # An invite does not add credits or a free question.
+    assert app.wallet("device-a")["credits"] == 0
+    assert app.wallet("device-b")["free_left"] == 0
+    assert app.wallet("device-b")["packs"] == {}
+    assert app.wallet("device-b")["price"] == "0.99"
 
 
-def test_attach_rejected_after_first_question(client):
+def test_attach_rejected_after_a_paid_question(client):
     code = app.referral_info("owner")["code"]
-    assert app.charge("late") == "free"
+    with db.connect() as con:
+        con.execute(
+            "insert into ledger(device, ts, delta, reason) values(?,?,?,?)",
+            ("late", "2026-10-31T00:00:00+00:00", 0, "acharya question"))
     got = app.attach_referral("late", code)
     assert got == {"ok": False, "reason": "not_new"}
     assert app.wallet("owner")["credits"] == 0
@@ -89,14 +86,16 @@ def test_magic_link_roundtrip_without_smtp(client):
     assert client.get("/api/auth/verify", params={"token": token, "device": "phone-1"}).status_code == 400
 
 
-def test_otp_and_razorpay_are_stubs(client):
+def test_otp_is_a_stub_and_packs_are_gone(client):
     otp = client.post("/api/auth/otp", json={"phone": "+910000000000", "device": "d"})
     assert otp.status_code == 501 and "TODO" in otp.json()["detail"]
     order = client.post("/api/wallet/order", json={"device": "d", "pack": "p100"})
-    assert order.status_code == 501 and "RAZORPAY_KEY_ID" in order.json()["detail"]
-    assert app.payment_provider() == "demo"
     top = client.post("/api/wallet/topup", json={"device": "d", "pack": "p100"})
-    assert top.status_code == 200 and top.json()["demo"] is True and top.json()["credits"] == 100
+    assert order.status_code == top.status_code == 410
+    assert "0.99" in order.json()["detail"] and "0.99" in top.json()["detail"]
+    wallet = client.get("/api/wallet", params={"device": "d"}).json()
+    assert wallet["credits"] == 0 and wallet["free_left"] == 0 and wallet["packs"] == {}
+    assert wallet["price_label"] == "$0.99" and wallet["product_id"] == "acharya_question"
 
 
 def test_panchang_and_pdf_endpoints(client):
