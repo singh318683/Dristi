@@ -25,10 +25,14 @@ def test_page_uses_wheels_not_native_pickers():
     assert "birthpicker.js" in html
     assert "wheel-y" in html and "wheel-ap" in html
     assert 'id="dob"' in html and 'id="tob"' in html
+    assert 'id="open-date"' in html and 'id="open-time"' in html and 'id="when-done"' in html
+    assert "That's okay, many people don't know" not in html
 
 
 def test_empty_date_lands_on_15_june_1990_and_roundtrips():
     assert picker("return P.formatDate(P.resolveDate('', today));") == "1990-06-15"
+    assert picker("return P.labelDateShort(P.resolveDate('', today), 'en');") == "15 Jun 1990"
+    assert picker("return P.labelTime(P.resolveTime(''), 'en');") == "12:00 PM"
     assert picker("return P.formatDate(P.resolveDate('1994-03-14', today));") == "1994-03-14"
     assert picker("return P.formatTime(P.resolveTime('06:45'));") == "06:45"
     assert picker("return P.formatTime(P.resolveTime(''));") == "12:00"
