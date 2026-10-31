@@ -133,6 +133,23 @@ select.input{appearance:none;-webkit-appearance:none;background-image:url("data:
 .onb h1{font-weight:700;font-size:26px;line-height:1.25;letter-spacing:-.01em;margin:20px 0 6px}
 .onb .lead{color:var(--muted);margin:0;font-size:16px}
 .onb .actions{margin-top:auto;padding-top:28px;display:flex;gap:10px}
+.onb-when h1{margin:12px 0 4px;font-size:24px}
+.onb-when .lead{font-size:15px}
+.onb-when label.f{margin:12px 0 4px}
+.onb-when .actions{padding-top:14px}
+.picker-caps,.picker-body{display:grid;grid-template-columns:.72fr 1.45fr .95fr;gap:4px}
+.picker.time .picker-caps,.picker.time .picker-body{grid-template-columns:1fr 1fr 1.2fr}
+.picker-caps span{text-align:center;font-size:12px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
+.picker-body{position:relative;height:calc(var(--wheel, 36px) * 3);background:var(--sunk);border:1.5px solid var(--line-strong);border-radius:14px;overflow:hidden}
+.picker-band{position:absolute;left:4px;right:4px;top:var(--wheel, 36px);height:var(--wheel, 36px);border-radius:10px;background:var(--surface);border:1px solid var(--primary-line);box-shadow:var(--shadow);pointer-events:none;z-index:0}
+.wheel-view{position:relative;z-index:1;height:100%;overflow-y:auto;scroll-snap-type:y mandatory;overscroll-behavior:contain;touch-action:pan-y;scrollbar-width:none;-webkit-mask-image:linear-gradient(to bottom,transparent,#000 20%,#000 80%,transparent);mask-image:linear-gradient(to bottom,transparent,#000 20%,#000 80%,transparent)}
+.wheel-view::-webkit-scrollbar{display:none}
+.wheel-pad,.wheel-item{height:var(--wheel, 36px);scroll-snap-align:center}
+.wheel-item{display:grid;place-items:center;font-size:16px;font-weight:600;color:var(--faint);user-select:none}
+.wheel-item.on{color:var(--ink);font-weight:700;font-size:17px}
+.picker-read{margin:6px 0 0;text-align:center;font-weight:700;font-size:15px;min-height:22px}
+.picker.off{opacity:.42}
+.picker.off .wheel-view{pointer-events:none}
 .onb .actions .btn{flex:1}
 .onb .actions .btn.sec2{flex:0 0 auto}
 .hero-art{display:flex;justify-content:center;margin:28px 0 6px}
@@ -538,6 +555,7 @@ window.GITA_VERSES = window.__GITA_INJECTED__ || null;
 <div id="root"></div>
 <div id="sheet" class="sheet-bg" hidden></div>
 <div id="toast" class="toast" role="status" hidden></div>
+<script src="birthpicker.js"></script>
 <script>
 'use strict';
 // ------------------------------------------------------------------ config
@@ -749,11 +767,33 @@ function onboarding() {
     <div class="relgrid" id="gen">${[['Female', 'महिला'], ['Male', 'पुरुष'], ['Other', 'अन्य']].map(([g, h]) => `<button type="button" data-v="${g}" aria-pressed="${o.gender === g}">${tr(g, h)}</button>`).join('')}</div>
     <p class="help">${tr('Only used for traditional bride/groom matching.', 'केवल पारंपरिक वर-वधू मिलान के लिए।')}</p>
     <div class="actions"><button class="btn block" id="go2">${tr('Continue', 'आगे बढ़ें')}</button></div></div>`;
-  if (o.step === 2) return `<div class="onb">${head(2)}
+  if (o.step === 2) return `<div class="onb onb-when">${head(2)}
     <h1>${tr(`When was ${esc(o.name)} born?`, `${esc(o.name)} का जन्म कब हुआ?`)}</h1>
     <p class="lead">${tr('The exact time sets the rising sign (Lagna). A birth certificate is the best source.', 'सटीक समय से लग्न तय होता है। जन्म प्रमाणपत्र सबसे अच्छा स्रोत है।')}</p>
-    <label class="f" for="dob">${tr('Date of birth', 'जन्म तिथि')}</label><input class="input" type="date" id="dob" value="${o.date || ''}" max="${new Date().toISOString().slice(0, 10)}" min="1800-01-01">
-    <label class="f" for="tob">${tr('Time of birth', 'जन्म समय')}</label><input class="input" type="time" step="60" id="tob" value="${o.unknown ? '' : (o.time || '')}" ${o.unknown ? 'disabled' : ''}>
+    <label class="f" id="dob-label">${tr('Date of birth', 'जन्म तिथि')}</label>
+    <input type="hidden" id="dob" value="${esc(o.date || '')}">
+    <div class="picker" role="group" aria-labelledby="dob-label">
+      <div class="picker-caps"><span>${tr('Day', 'दिन')}</span><span>${tr('Month', 'महीना')}</span><span>${tr('Year', 'वर्ष')}</span></div>
+      <div class="picker-body">
+        <div class="picker-band" aria-hidden="true"></div>
+        <div class="wheel-view" id="wheel-d" tabindex="0" role="listbox" aria-label="${tr('Day', 'दिन')}"></div>
+        <div class="wheel-view" id="wheel-m" tabindex="0" role="listbox" aria-label="${tr('Month', 'महीना')}"></div>
+        <div class="wheel-view" id="wheel-y" tabindex="0" role="listbox" aria-label="${tr('Year', 'वर्ष')}"></div>
+      </div>
+      <p class="picker-read" id="dob-read" aria-live="polite"></p>
+    </div>
+    <label class="f" id="tob-label">${tr('Time of birth', 'जन्म समय')}</label>
+    <input type="hidden" id="tob" value="${o.unknown ? '' : esc(o.time || '')}">
+    <div class="picker time ${o.unknown ? 'off' : ''}" id="tob-picker" role="group" aria-labelledby="tob-label" ${o.unknown ? 'aria-disabled="true"' : ''}>
+      <div class="picker-caps"><span>${tr('Hour', 'घंटा')}</span><span>${tr('Minute', 'मिनट')}</span><span>${tr('AM/PM', 'पूर्वाह्न/अपराह्न')}</span></div>
+      <div class="picker-body">
+        <div class="picker-band" aria-hidden="true"></div>
+        <div class="wheel-view" id="wheel-h" tabindex="0" role="listbox" aria-label="${tr('Hour', 'घंटा')}"></div>
+        <div class="wheel-view" id="wheel-min" tabindex="0" role="listbox" aria-label="${tr('Minute', 'मिनट')}"></div>
+        <div class="wheel-view" id="wheel-ap" tabindex="0" role="listbox" aria-label="${tr('AM/PM', 'पूर्वाह्न/अपराह्न')}"></div>
+      </div>
+      <p class="picker-read" id="tob-read" aria-live="polite"></p>
+    </div>
     <label class="toggle ${o.unknown ? 'on' : ''}"><input type="checkbox" id="unk" ${o.unknown ? 'checked' : ''}><span>${tr("I don't know the birth time", 'मुझे जन्म का समय नहीं पता')}</span></label>
     ${o.unknown ? `<div class="notice" style="margin-top:10px">${I.info()}<div><b>${tr("That's okay, many people don't know it.", 'कोई बात नहीं, बहुत लोगों को नहीं पता होता।')}</b><br>${tr("We'll read the chart from the Moon sign (Chandra kundli). It still gives good answers on timing and life themes; only house-based details are less precise. You can add the time later.", 'हम चंद्र कुंडली से पढ़ेंगे। समय और मुख्य विषयों पर अच्छे उत्तर मिलेंगे; केवल भाव संबंधी बातें कम सटीक होंगी। समय बाद में जोड़ सकते हैं।')}</div></div>` : `<p class="help">${tr('Not sure of the minute? The nearest 15 minutes still helps.', 'मिनट पता नहीं? लगभग 15 मिनट तक का समय भी मदद करता है।')}</p>`}
     <div class="actions"><button class="btn sec2" id="back">${tr('Back', 'पीछे')}</button><button class="btn" id="go3">${tr('Continue', 'आगे बढ़ें')}</button></div></div>`;
@@ -780,6 +820,131 @@ async function refreshOffset() {
   try { o.offInfo = await api(`/api/offset?date=${o.date}&tz=${encodeURIComponent(o.place.tz)}&lon=${o.place.lon}${o.time && !o.unknown ? '&time=' + o.time : ''}`); } catch { o.offInfo = null; }
   const r = $('#resolved'); if (r) r.innerHTML = resolvedHtml(o);
 }
+const WHEEL = 36;
+function mountWheel(view, getItems, getValue, onPick) {
+  if (!view) return {paint() {}};
+  let timer = 0;
+  const paint = () => {
+    const items = getItems();
+    const value = getValue();
+    let idx = items.findIndex(it => String(it.value) === String(value));
+    if (idx < 0) idx = 0;
+    view._lock = performance.now() + 160;
+    view._value = String(items[idx] ? items[idx].value : '');
+    const pad = '<div class="wheel-pad"></div>';
+    view.innerHTML = pad + items.map((it, i) => `<div class="wheel-item${i === idx ? ' on' : ''}" role="option" id="${view.id}-o${i}" data-v="${esc(it.value)}" aria-selected="${i === idx}">${esc(it.label)}</div>`).join('') + pad;
+    const snap = () => { view.scrollTop = idx * WHEEL; };
+    snap();
+    requestAnimationFrame(() => { snap(); requestAnimationFrame(snap); });
+  };
+  const chosen = () => {
+    const items = [...view.querySelectorAll('.wheel-item')];
+    if (!items.length) return;
+    if (performance.now() < (view._lock || 0)) {
+      clearTimeout(timer);
+      timer = setTimeout(chosen, 40);
+      return;
+    }
+    let idx = Math.round(view.scrollTop / WHEEL);
+    idx = Math.max(0, Math.min(items.length - 1, idx));
+    if (Math.abs(view.scrollTop - idx * WHEEL) > 1) view.scrollTop = idx * WHEEL;
+    items.forEach((el, i) => { el.classList.toggle('on', i === idx); el.setAttribute('aria-selected', i === idx); });
+    const val = items[idx].dataset.v;
+    if (val === view._value) return;
+    view._value = val;
+    onPick(val);
+  };
+  view.addEventListener('scroll', () => { clearTimeout(timer); timer = setTimeout(chosen, 80); }, {passive: true});
+  view.addEventListener('click', e => {
+    const item = e.target.closest('.wheel-item');
+    if (!item) return;
+    const items = [...view.querySelectorAll('.wheel-item')];
+    const idx = items.indexOf(item);
+    view._lock = 0;
+    view.scrollTop = idx * WHEEL;
+    chosen();
+  });
+  view.addEventListener('keydown', e => {
+    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+    e.preventDefault();
+    const items = [...view.querySelectorAll('.wheel-item')];
+    let idx = items.findIndex(el => el.classList.contains('on'));
+    idx = Math.max(0, Math.min(items.length - 1, idx + (e.key === 'ArrowDown' ? 1 : -1)));
+    view._lock = 0;
+    view.scrollTop = idx * WHEEL;
+    chosen();
+  });
+  return {paint};
+}
+function mountBirthWheels(dob, tob) {
+  const o = S.onb;
+  const lang = () => hi() ? 'hi' : 'en';
+  const today = () => new Date();
+  const floor = BirthPicker.parseDate(o.date || dob.value);
+  const minYear = floor && floor.y < BirthPicker.YEAR_FLOOR ? floor.y : BirthPicker.YEAR_FLOOR;
+  const model = {
+    date: BirthPicker.resolveDate(dob.value || o.date, today()),
+    time: BirthPicker.resolveTime(tob.value || o.time || ''),
+  };
+  const read = (id, text) => { const el = $('#' + id); if (el) el.textContent = text; };
+  const writeDate = () => {
+    const next = BirthPicker.formatDate(model.date);
+    dob.value = next;
+    o.date = next;
+    read('dob-read', BirthPicker.labelDate(model.date, lang()));
+  };
+  const writeTime = () => {
+    const next = BirthPicker.formatTime(model.time);
+    if (!o.unknown) { tob.value = next; o.time = next; }
+    read('tob-read', o.unknown ? '' : BirthPicker.labelTime(model.time, lang()));
+  };
+  const years = mountWheel($('#wheel-y'),
+    () => BirthPicker.yearOptions(today(), minYear).map(y => ({value: y, label: String(y)})),
+    () => model.date.y,
+    v => {
+      if (+v === model.date.y) return;
+      model.date = BirthPicker.clampDate({y: +v, m: model.date.m, d: model.date.d}, today());
+      months.paint(); days.paint(); writeDate();
+    });
+  const months = mountWheel($('#wheel-m'),
+    () => BirthPicker.monthOptions(model.date.y, today(), lang()),
+    () => model.date.m,
+    v => {
+      if (+v === model.date.m) return;
+      model.date = BirthPicker.clampDate({y: model.date.y, m: +v, d: model.date.d}, today());
+      days.paint(); writeDate();
+    });
+  const days = mountWheel($('#wheel-d'),
+    () => BirthPicker.dayOptions(model.date.y, model.date.m, today()),
+    () => model.date.d,
+    v => {
+      if (+v === model.date.d) return;
+      model.date = BirthPicker.clampDate({y: model.date.y, m: model.date.m, d: +v}, today());
+      writeDate();
+    });
+  const hours = mountWheel($('#wheel-h'),
+    () => BirthPicker.hourOptions(),
+    () => model.time.h12,
+    v => { if (+v === model.time.h12) return; model.time = {...model.time, h12: +v}; writeTime(); });
+  const mins = mountWheel($('#wheel-min'),
+    () => BirthPicker.minuteOptions(),
+    () => model.time.min,
+    v => { if (+v === model.time.min) return; model.time = {...model.time, min: +v}; writeTime(); });
+  const ap = mountWheel($('#wheel-ap'),
+    () => BirthPicker.ampmOptions(lang()),
+    () => model.time.ap,
+    v => { if (v === model.time.ap) return; model.time = {...model.time, ap: v}; writeTime(); });
+  const paintAll = () => { years.paint(); months.paint(); days.paint(); hours.paint(); mins.paint(); ap.paint(); writeDate(); writeTime(); };
+  paintAll();
+  dob.addEventListener('change', () => {
+    model.date = BirthPicker.resolveDate(dob.value, today());
+    paintAll();
+  });
+  tob.addEventListener('change', () => {
+    model.time = BirthPicker.resolveTime(tob.value || o.time || '');
+    hours.paint(); mins.paint(); ap.paint(); writeTime();
+  });
+}
 function bindOnb() {
   const o = S.onb, on = (id, f) => { const e = $('#' + id); if (e) e.onclick = f; };
   const step = n => { o.step = n; render(); window.scrollTo(0, 0); };
@@ -791,14 +956,19 @@ function bindOnb() {
   on('go2', () => { const n = $('#nm').value.trim(); if (!n) { toast(tr('Please enter a name', 'कृपया नाम लिखें')); $('#nm').focus(); return; } o.name = n; step(2); });
   const dob = $('#dob'), tob = $('#tob'), unk = $('#unk');
   if (dob) {
-    dob.onchange = () => { o.date = dob.value; };
-    tob.onchange = () => { o.time = tob.value; };
-    unk.onchange = () => { o.unknown = unk.checked; o.date = dob.value; if (!o.unknown) o.time = tob.value; render(); };
+    mountBirthWheels(dob, tob);
+    unk.onchange = () => {
+      o.unknown = unk.checked;
+      o.date = dob.value;
+      if (tob.value) o.time = tob.value;
+      render();
+    };
     on('back', () => step(1));
     on('go3', () => {
-      o.date = dob.value; if (!o.unknown) o.time = tob.value;
-      if (!o.date) { toast(tr('Please choose the date of birth', 'कृपया जन्म तिथि चुनें')); return; }
-      if (!o.unknown && !o.time) { toast(tr('Add the time, or tick "I don\'t know"', 'समय डालें या "नहीं पता" चुनें')); return; }
+      o.date = dob.value;
+      if (!o.unknown) o.time = tob.value;
+      if (!BirthPicker.parseDate(o.date)) { toast(tr('Please choose the date of birth', 'कृपया जन्म तिथि चुनें')); return; }
+      if (!o.unknown && !BirthPicker.parseTime(o.time)) { toast(tr('Add the time, or tick "I don\'t know"', 'समय डालें या "नहीं पता" चुनें')); return; }
       step(3);
     });
   }
