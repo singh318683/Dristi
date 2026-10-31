@@ -737,6 +737,7 @@ function onboarding() {
       <li><span class="bi">${I.ask(22)}</span><div><b>${tr('Answers in plain words', 'सरल भाषा में उत्तर')}</b><span>${tr('Career, marriage, money and health, in English or Hindi', 'करियर, विवाह, धन, स्वास्थ्य, हिंदी या अंग्रेज़ी में')}</span></div></li>
       <li><span class="bi">${I.match(22)}</span><div><b>${tr('Compatibility and daily horoscope', 'कुंडली मिलान और दैनिक राशिफल')}</b><span>${tr('36-guna matching for the whole family', 'पूरे परिवार के लिए 36 गुण मिलान')}</span></div></li></ul>
     <div class="actions" style="flex-direction:column"><button class="btn block" id="go1">${tr('Get started', 'शुरू करें')}</button>
+      <p class="small muted" style="text-align:center;margin:6px 0 0">${tr('Each Acharya question is $0.99 on Google Play. The chart, matching and horoscope are free.', 'आचार्य का हर प्रश्न Google Play पर $0.99 है। कुंडली, मिलान और राशिफल मुफ़्त हैं।')}</p>
       <p class="small muted" style="text-align:center;margin:6px 0 0">${tr('3 quick steps. Your details stay on this phone.', '3 छोटे चरण। आपकी जानकारी इसी फ़ोन पर रहती है।')} <a href="privacy.html">${tr('Privacy', 'गोपनीयता')}</a></p></div></div>`;
   const head = n => `<div class="spread" style="min-height:44px"><span class="stepl">${tr(`Step ${n} of 3`, `चरण ${n} / 3`)} · ${[tr('About', 'परिचय'), tr('Birth date & time', 'जन्म तिथि और समय'), tr('Birth place', 'जन्म स्थान')][n - 1]}</span>${S.profiles.length ? `<button class="btn quiet" id="cancel">${tr('Cancel', 'रद्द करें')}</button>` : ''}</div><div class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="3" aria-valuenow="${n}"><i style="width:${n / 3 * 100}%"></i></div>`;
   if (o.step === 1) return `<div class="onb">${head(1)}
@@ -909,7 +910,7 @@ async function pageHome() {
     ${gitaBannerHtml()}
     <div><div class="h1">${tr('Namaste', 'नमस्ते')}, ${esc(p.name)}</div>
       <p class="sub" id="gsub">${tr('Acharya is an AI astrologer', 'आचार्य एक AI ज्योतिषी हैं')} · ${new Date().toLocaleDateString(loc(), {weekday: 'short', day: 'numeric', month: 'short'})}</p></div>
-    <section class="cta"><p>${tr('Ask about this chart. The cost is shown before you send.', 'इस कुंडली के बारे में पूछें। भेजने से पहले शुल्क दिखेगा।')}</p>
+    <section class="cta"><p>${tr('Each Acharya question is $0.99. The chart, periods and matching are free.', 'आचार्य का हर प्रश्न $0.99 है। कुंडली, दशा और मिलान मुफ़्त हैं।')}</p>
       <button class="btn block" id="askBtn">${I.ask(18)} ${tr('Ask Acharya', 'आचार्य से पूछें')}</button>
       <div class="chips scroll">${chipsHtml()}</div></section>
     <div id="hDasha">${skel(52, '100%', 0)}</div>
@@ -1445,14 +1446,23 @@ async function pullSync() {
   if (local.length) await pushSync();
   return false;
 }
-const creditsLabel = () => { const w = S.wallet; if (!w) return ''; return w.free_left ? tr(`${w.free_left} free left`, `${w.free_left} मुफ़्त शेष`) : tr(`${w.credits} credits`, `${w.credits} क्रेडिट`); };
+const priceLabel = () => (S.wallet && S.wallet.price_label) || (S.status && S.status.price_label) || '$0.99';
+const playProductId = () => (S.wallet && S.wallet.product_id) || (S.status && S.status.product_id) || 'acharya_question';
 const ERR = {
-  ai_not_configured: () => [tr('The astrologer is not switched on yet', 'AI ज्योतिषी अभी चालू नहीं है'), tr('Answers will start once the app owner adds an AI key on the server. Your chart, life periods and matching already work.', 'सर्वर पर AI कुंजी जुड़ते ही उत्तर मिलने लगेंगे। कुंडली, दशा और मिलान अभी भी काम करते हैं।')],
-  insufficient_credits: () => [tr("You're out of free questions", 'मुफ़्त प्रश्न समाप्त'), tr('Add credits to keep asking. Your question was not charged.', 'प्रश्न पूछते रहने के लिए क्रेडिट जोड़ें। इस प्रश्न का शुल्क नहीं लगा।')],
-  network: () => [tr("Couldn't reach the astrologer", 'ज्योतिषी से संपर्क नहीं हो सका'), tr('Check your connection and try again. You were not charged.', 'कनेक्शन जाँचें और फिर कोशिश करें। कोई शुल्क नहीं लगा।')],
-  llm_error: () => [tr('Something went wrong', 'कुछ गड़बड़ हुई'), tr('The answer could not be completed. You were not charged; please try again.', 'उत्तर पूरा नहीं हो सका। शुल्क नहीं लगा; फिर कोशिश करें।')],
+  ai_not_configured: () => [tr('The astrologer is not switched on yet', 'AI ज्योतिषी अभी चालू नहीं है'), tr('Answers will start once the app owner adds an AI key on the server. Your chart, life periods and matching already work. You were not charged.', 'सर्वर पर AI कुंजी जुड़ते ही उत्तर मिलने लगेंगे। कुंडली, दशा और मिलान अभी भी काम करते हैं। शुल्क नहीं लगा।')],
+  payment_required: () => [tr('This question is $0.99', 'यह प्रश्न $0.99 का है'), tr('Pay with Google Play to ask. There is no free question. Your chart and the other tools stay free, and this question was not answered.', 'पूछने के लिए Google Play से भुगतान करें। कोई मुफ़्त प्रश्न नहीं। कुंडली और बाकी उपकरण मुफ़्त हैं, और इस प्रश्न का उत्तर नहीं दिया गया।')],
+  payment_invalid: () => [tr('Google Play did not accept that purchase', 'Google Play ने यह खरीदारी स्वीकार नहीं की'), tr('The question was not answered. You can try the purchase again.', 'प्रश्न का उत्तर नहीं दिया गया। खरीदारी फिर से कोशिश कर सकते हैं।')],
+  payment_used: () => [tr('That purchase was already used', 'वह खरीदारी पहले ही इस्तेमाल हो चुकी है'), tr('Each question needs its own $0.99 purchase.', 'हर प्रश्न के लिए अलग $0.99 खरीदारी चाहिए।')],
+  payment_pending: () => [tr('Google Play is still processing the payment', 'Google Play अभी भुगतान पूरा कर रहा है'), tr('The question was not answered. Try again in a moment. You were not charged twice.', 'प्रश्न का उत्तर नहीं दिया गया। थोड़ी देर बाद कोशिश करें। दोबारा शुल्क नहीं लगा।')],
+  payment_in_progress: () => [tr('That purchase is already in use', 'वह खरीदारी पहले से इस्तेमाल हो रही है'), tr('Wait a moment, then ask again. You were not charged again.', 'थोड़ी देर रुककर फिर पूछें। दोबारा शुल्क नहीं लगा।')],
+  billing_not_configured: () => [tr('Play Billing is not ready on the server', 'सर्वर पर Play Billing तैयार नहीं है'), tr('The question was not answered, and the purchase was not used. The chart and the other tools still work.', 'प्रश्न का उत्तर नहीं दिया गया, और खरीदारी इस्तेमाल नहीं हुई। कुंडली और बाकी उपकरण काम करते हैं।')],
+  billing_unavailable: () => [tr('Google Play could not be reached', 'Google Play तक नहीं पहुँच सके'), tr('The question was not answered. Try again with the same purchase.', 'प्रश्न का उत्तर नहीं दिया गया। उसी खरीदारी के साथ फिर कोशिश करें।')],
+  play_unavailable: () => [tr('Google Play is not available here', 'यहाँ Google Play उपलब्ध नहीं है'), tr('Each Acharya question is $0.99 inside the Android app. This browser cannot start a Play purchase. Your chart, periods, dosha, panchang, matching, horoscope and kundli PDF stay free.', 'आचार्य का हर प्रश्न Android ऐप में $0.99 है। यह ब्राउज़र Play खरीदारी शुरू नहीं कर सकता। कुंडली, दशा, दोष, पंचांग, मिलान, राशिफल और कुंडली PDF मुफ़्त हैं।')],
+  payment_cancelled: () => [tr('Purchase cancelled', 'खरीदारी रद्द'), tr('The question was not sent.', 'प्रश्न नहीं भेजा गया।')],
+  network: () => [tr("Couldn't reach the astrologer", 'ज्योतिषी से संपर्क नहीं हो सका'), tr('Check your connection and try again. If you already paid, use that purchase again. You were not charged a second time.', 'कनेक्शन जाँचें और फिर कोशिश करें। अगर भुगतान हो चुका है, तो वही खरीदारी फिर इस्तेमाल करें। दूसरी बार शुल्क नहीं लगा।')],
+  llm_error: () => [tr('Something went wrong', 'कुछ गड़बड़ हुई'), tr('If the answer never started, the same purchase can be used again.', 'अगर उत्तर शुरू नहीं हुआ, तो वही खरीदारी फिर इस्तेमाल हो सकती है।')],
 };
-const errBubble = code => { const [t, m] = (ERR[code] || ERR.llm_error)(); return `<div class="bub err"><b>${t}</b>${m}${code === 'insufficient_credits' ? `<div><button class="btn sm" style="margin-top:10px" data-go="me">${tr('Add credits', 'क्रेडिट जोड़ें')}</button></div>` : ''}</div>`; };
+const errBubble = code => { const [t, m] = (ERR[code] || ERR.llm_error)(); return `<div class="bub err"><b>${t}</b>${m}</div>`; };
 const SIMPLE_RE = /(?:^|\n)\s*(?:\*\*|__)?(In simple words|सरल शब्दों में)(?:\*\*|__)?\s*:?\s*(?:\n|$)/i;
 function splitAnswer(text) {
   const raw = String(text || '');
@@ -1499,7 +1509,7 @@ function pageAsk() {
   $('#app').innerHTML = `<div class="chat">
     <header class="top"><div class="bot ${on ? 'on' : ''}"><span class="dev">ॐ</span><i></i></div>
       <div class="ttl"><b>${tr('Acharya', 'आचार्य')}</b><small>${tr('AI astrologer', 'AI ज्योतिषी')}${on ? '' : ' · ' + tr('not on yet', 'अभी चालू नहीं')}</small></div>
-      ${S.wallet ? `<button class="iconbtn credits" id="credBtn" aria-label="${tr('Credits', 'क्रेडिट')}">${creditsLabel()}</button>` : ''}
+      <button class="iconbtn credits" id="credBtn" aria-label="${tr('Question price', 'प्रश्न का मूल्य')}">${priceLabel()}</button>
       <button class="iconbtn langbtn" id="langBtn">${hi() ? 'English' : 'हिंदी'}</button></header>
     <button class="asking" id="whoBtn" aria-haspopup="dialog">${tr('Reading the chart of', 'इनकी कुंडली पढ़ रहे हैं:')} <span class="avatar sm">${initial(p.name)}</span><b style="color:var(--ink)">${esc(p.name)}</b>${I.chev()}</button>
     <div class="msgs" id="msgs" aria-live="polite"></div>
@@ -1509,7 +1519,7 @@ function pageAsk() {
       <div class="quota" id="quota"></div>
       <div class="quota">${tr('Remedies, if offered, are optional and free.', 'उपाय हों तो वैकल्पिक और मुफ़्त।')}</div></div></div>`;
   bindHeader();
-  const c = $('#credBtn'); if (c) c.onclick = () => go('me');
+  const c = $('#credBtn'); if (c) c.onclick = openPrice;
   const box = $('#msgs');
   box.innerHTML = hist.length ? hist.map(bubble).join('') : `<div class="welcome"><div class="bot ${on ? 'on' : ''}"><span class="dev">ॐ</span><i></i></div>
       <h4>${tr('Acharya · AI astrologer', 'आचार्य · AI ज्योतिषी')}</h4>
@@ -1530,30 +1540,95 @@ function pageAsk() {
 }
 const bindGo = () => $$('[data-go]').forEach(b => b.onclick = () => go(b.dataset.go));
 function updateQuota() {
-  const q = $('#quota'), w = S.wallet; if (!q || !w) return;
-  const cost = $('#costline');
-  if (w.free_left) {
-    q.textContent = tr(`${w.free_left} of ${w.free_total} free questions left`, `${w.free_total} में से ${w.free_left} मुफ़्त प्रश्न शेष`);
-    if (cost) cost.textContent = tr(`Sending uses 1 free question (${w.free_left} of ${w.free_total} left).`, `भेजने पर 1 मुफ़्त प्रश्न लगेगा (${w.free_total} में से ${w.free_left} शेष)।`);
-  } else {
-    q.textContent = tr(`${w.question_cost} credits per question · ${w.credits} left`, `प्रति प्रश्न ${w.question_cost} क्रेडिट · ${w.credits} शेष`);
-    if (cost) cost.textContent = tr(`Sending costs ${w.question_cost} credits (${w.credits} left).`, `भेजने पर ${w.question_cost} क्रेडिट लगेंगे (${w.credits} शेष)।`);
+  const q = $('#quota'), cost = $('#costline');
+  if (q) q.textContent = tr('Each question is $0.99 through Google Play. There is no free question.', 'हर प्रश्न Google Play से $0.99 है। कोई मुफ़्त प्रश्न नहीं।');
+  if (cost) cost.textContent = tr('Sending buys one $0.99 question. If the answer does not start, that purchase can be used again.', 'भेजने पर एक $0.99 का प्रश्न खरीदा जाएगा। उत्तर शुरू न हो तो वही खरीदारी फिर इस्तेमाल हो सकती है।');
+  const c = $('#credBtn'); if (c) c.textContent = priceLabel();
+}
+function openPrice() {
+  openDetail(tr('Acharya questions', 'आचार्य प्रश्न'), `<p><b>$0.99</b> ${tr('each, through Google Play. One purchase, one question. There is no free question and no bundle.', 'प्रत्येक, Google Play से। एक खरीदारी, एक प्रश्न। कोई मुफ़्त प्रश्न नहीं और कोई पैक नहीं।')}</p><p class="small muted">${tr('The chart, life periods, dosha, panchang, matching, daily horoscope and kundli PDF stay free. If an answer fails before it starts, the same purchase can be used again.', 'कुंडली, दशा, दोष, पंचांग, मिलान, दैनिक राशिफल और कुंडली PDF मुफ़्त हैं। उत्तर शुरू होने से पहले असफल हो तो वही खरीदारी फिर इस्तेमाल हो सकती है।')}</p>`);
+}
+const PLAY_BILLING = 'https://play.google.com/billing';
+function purchaseTokenOf(row) {
+  if (!row) return '';
+  return row.purchaseToken || row.purchase_token || row.token || '';
+}
+async function buyPlayQuestion() {
+  const sku = playProductId();
+  const bridge = window.DrishtiPlay;
+  if (bridge && typeof bridge.purchase === 'function') {
+    if (typeof bridge.listPurchases === 'function') {
+      const owned = await bridge.listPurchases();
+      const hit = (owned || []).find(p => (p.itemId || p.productId || p.sku) === sku && purchaseTokenOf(p));
+      if (hit) return purchaseTokenOf(hit);
+    }
+    const result = await bridge.purchase(sku);
+    const token = purchaseTokenOf(result);
+    if (!token) { const err = new Error('cancelled'); err.code = 'payment_cancelled'; throw err; }
+    return token;
   }
-  const c = $('#credBtn'); if (c) c.textContent = creditsLabel();
+  if (typeof window.getDigitalGoodsService !== 'function') {
+    const err = new Error('play'); err.code = 'play_unavailable'; throw err;
+  }
+  const service = await window.getDigitalGoodsService(PLAY_BILLING);
+  if (!service) { const err = new Error('play'); err.code = 'play_unavailable'; throw err; }
+  try {
+    const owned = await service.listPurchases();
+    const hit = (owned || []).find(p => p.itemId === sku && p.purchaseToken);
+    if (hit) return hit.purchaseToken;
+  } catch { /* a new purchase can still be started */ }
+  if (typeof PaymentRequest !== 'function') { const err = new Error('play'); err.code = 'play_unavailable'; throw err; }
+  const request = new PaymentRequest(
+    [{supportedMethods: PLAY_BILLING, data: {sku}}],
+    {total: {label: 'Acharya question', amount: {currency: 'USD', value: '0.99'}}});
+  let response;
+  try { response = await request.show(); }
+  catch (e) {
+    if (e && e.name === 'AbortError') { const err = new Error('cancelled'); err.code = 'payment_cancelled'; throw err; }
+    throw e;
+  }
+  const token = response.details && response.details.purchaseToken;
+  // The server consumes the purchase after the answer starts. The page must not.
+  try { await response.complete('success'); } catch { /* the sheet may already be closed */ }
+  if (!token) { const err = new Error('cancelled'); err.code = 'payment_cancelled'; throw err; }
+  return token;
+}
+function noteAskError(q, code) {
+  const key = chatKey(), hist = store.get(key, []), box = $('#msgs');
+  if (!box) return;
+  const welcome = box.querySelector('.welcome'); if (welcome) welcome.remove();
+  box.insertAdjacentHTML('beforeend', bubble({role: 'user', content: q}) + errBubble(code));
+  hist.push({role: 'user', content: q}, {role: 'error', code: code || 'llm_error', content: ''});
+  store.set(key, hist.slice(-40));
+  scheduleSync();
+  box.scrollTop = box.scrollHeight;
 }
 async function ask(q) {
   if (S.streaming) return;
+  if (!(S.status && S.status.ai_configured)) { noteAskError(q, 'ai_not_configured'); return; }
+  S.streaming = true;
+  let purchaseToken = '';
+  try { purchaseToken = await buyPlayQuestion(); }
+  catch (e) {
+    S.streaming = false;
+    if (e && (e.name === 'AbortError' || e.code === 'payment_cancelled')) {
+      const ci = $('#ci'); if (ci && !ci.value) ci.value = q;
+      return;
+    }
+    noteAskError(q, (e && e.code) || 'play_unavailable');
+    return;
+  }
   const p = activeProfile(), key = chatKey(), hist = store.get(key, []);
   const box = $('#msgs');
+  if (!box) { S.streaming = false; return; }
   const w = box.querySelector('.welcome'); if (w) w.remove();
   box.insertAdjacentHTML('beforeend', bubble({role: 'user', content: q}));
   const aiEl = document.createElement('div'); aiEl.className = 'bub ai'; aiEl.innerHTML = `<span class="typing" aria-label="${tr('Reading your chart', 'कुंडली पढ़ रहे हैं')}"><i></i><i></i><i></i></span>`;
   box.appendChild(aiEl); box.scrollTop = box.scrollHeight;
-  S.streaming = true;
   const msgs = hist.filter(m => m.role !== 'error').slice(-8).map(m => ({role: m.role, content: m.content})).concat([{role: 'user', content: q}]);
   let text = '', err = null;
   try {
-    const r = await fetch(API + '/api/chat', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({device: DEVICE, profile: profileBody(p), messages: msgs, lang: S.lang})});
+    const r = await fetch(API + '/api/chat', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({device: DEVICE, profile: profileBody(p), messages: msgs, lang: S.lang, purchase_token: purchaseToken})});
     if (!r.ok || !r.body) throw new Error('HTTP ' + r.status);
     const reader = r.body.getReader(), dec = new TextDecoder(); let buf = '';
     for (;;) {
@@ -1573,7 +1648,6 @@ async function ask(q) {
   if (err) {
     aiEl.outerHTML = errBubble(err.code);
     hist.push({role: 'user', content: q}, {role: 'error', code: err.code || 'llm_error', content: ''});
-    bindGo();
   } else { hist.push({role: 'user', content: q}, {role: 'assistant', content: text}); aiEl.outerHTML = bubble({role: 'assistant', content: text}); }
   store.set(key, hist.slice(-40));
   scheduleSync();
@@ -1648,36 +1722,21 @@ function bindPeople() {
   const add = $('#addP2'); if (add) add.onclick = () => startOnb();
 }
 function openPeople() { openDetail(tr('People', 'लोग'), peopleHtml()); bindPeople(); }
-function packsHtml() {
-  const w = S.wallet || {packs: {}, question_cost: 15};
-  return `<p class="small muted">${tr(`After the free questions, each answer uses ${w.question_cost} credits.`, `मुफ़्त प्रश्नों के बाद प्रति उत्तर ${w.question_cost} क्रेडिट।`)}</p>
-    <div class="packs">${Object.entries(w.packs || {}).map(([k, v]) => `<button class="pack" data-pack="${k}"><b>${v.credits}</b><small>${tr('credits', 'क्रेडिट')}</small><small style="color:var(--ink);font-weight:700;margin-top:4px">${esc(v.price)}</small></button>`).join('')}</div>
-    <p class="small muted">${tr('Demo only: no UPI or card is charged. Razorpay can be connected later with RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET.', 'केवल डेमो: UPI या कार्ड से भुगतान नहीं। Razorpay बाद में RAZORPAY_KEY_ID और RAZORPAY_KEY_SECRET से जुड़ सकता है।')}</p>`;
-}
-function openPacks() {
-  openDetail(tr('Credits', 'क्रेडिट'), packsHtml());
-  $$('#sheet [data-pack]').forEach(b => b.onclick = async () => {
-    try { S.wallet = await api('/api/wallet/topup', {device: DEVICE, pack: b.dataset.pack}); toast(tr(`Added ${S.wallet.packs[b.dataset.pack].credits} demo credits`, `${S.wallet.packs[b.dataset.pack].credits} डेमो क्रेडिट जोड़े गए`)); render(); }
-    catch (e) { toast(e.message); }
-  });
-}
 function pageMe() {
-  const w = S.wallet || {credits: 0, free_left: 0, free_total: 3, question_cost: 15, packs: {}, email: null}, cur = activeProfile();
-  const bonus = (S.status && S.status.referral_bonus) || 15;
+  const w = S.wallet || {email: null, price_label: '$0.99'}, cur = activeProfile();
   $('#app').innerHTML = header() + `<main class="fit"><div><div class="h1">${tr('Profile', 'प्रोफ़ाइल')}</div><p class="sub">${tr('Acharya is an AI astrologer. Sign-in is optional.', 'आचार्य एक AI ज्योतिषी हैं। साइन-इन वैकल्पिक है।')}</p></div>
     <button class="card link" id="personRow"><div class="minirow"><span class="avatar lg">${initial(cur.name)}</span><span class="grow"><b>${esc(cur.name)}</b><span class="small muted" style="display:block">${esc(relName(cur.relation))} · ${fmtDate(cur.date)} · ${esc(cur.place.name.split(',')[0])}</span></span>${I.chev()}</div></button>
-    <section class="card"><div class="spread"><div><b id="credN">${w.credits}</b> <span class="muted">${tr('credits', 'क्रेडिट')}</span></div><span class="tag">${w.free_left}/${w.free_total} ${tr('free left', 'मुफ़्त शेष')}</span></div>
+    <section class="card"><div class="spread"><div><b id="credN">${esc(w.price_label || '$0.99')}</b> <span class="muted">${tr('per Acharya question', 'प्रति आचार्य प्रश्न')}</span></div></div>
+      <p class="small muted">${tr('Paid on Google Play, one question at a time. There is no free question and no credit pack. The chart, periods, dosha, panchang, matching, horoscope and kundli PDF stay free.', 'Google Play पर भुगतान, एक बार में एक प्रश्न। कोई मुफ़्त प्रश्न नहीं और कोई क्रेडिट पैक नहीं। कुंडली, दशा, दोष, पंचांग, मिलान, राशिफल और कुंडली PDF मुफ़्त हैं।')}</p>
       <div class="setrow"><span class="small">${tr('Invite link', 'आमंत्रण')}</span><button class="btn quiet" id="copyRef">${tr('Copy', 'कॉपी')} · <span id="refCode">…</span></button></div>
-      <p class="small muted" style="margin:0">${tr(`You and a new person each get ${bonus} credits when they ask their first question.`, `नया व्यक्ति पहला प्रश्न पूछे तो आप दोनों को ${bonus} क्रेडिट।`)}</p>
-      <button class="btn sec2 block" style="margin-top:8px" id="packsBtn">${tr('Credit packs', 'क्रेडिट पैक')}</button></section>
+      <p class="small muted" style="margin:0">${tr('The link opens Drishti. It does not include a free question.', 'लिंक दृष्टि खोलता है। इसमें मुफ़्त प्रश्न शामिल नहीं है।')}</p></section>
     <section class="card"><div class="sec" style="margin:0 0 6px"><h3>${w.email ? esc(w.email) : tr('Optional sign-in', 'वैकल्पिक साइन-इन')}</h3></div>
-      ${w.email ? `<p class="small muted" style="margin:0">${tr('Signed in on this device. Credits stay on this device for now.', 'इस डिवाइस पर साइन इन है। क्रेडिट अभी इसी डिवाइस पर रहते हैं।')}</p>` : `<form id="magicForm" class="minirow"><input class="input" id="magicEmail" type="email" autocomplete="email" placeholder="${tr('Email for a sign-in link', 'साइन-इन लिंक के लिए ईमेल')}"><button class="btn sm" type="submit">${tr('Email link', 'लिंक भेजें')}</button></form><p class="small muted" id="magicMsg" style="margin:6px 0 0"></p><button class="btn quiet" id="otpBtn" type="button">${tr('Phone OTP', 'फ़ोन OTP')}</button>`}
+      ${w.email ? `<p class="small muted" style="margin:0">${tr('Signed in on this device. Charts and chats follow this sign-in. Each question is paid on the device that asks it.', 'इस डिवाइस पर साइन इन है। कुंडली और चैट इस साइन-इन के साथ रहती हैं। हर प्रश्न उसी डिवाइस पर भुगतान होता है जो पूछती है।')}</p>` : `<form id="magicForm" class="minirow"><input class="input" id="magicEmail" type="email" autocomplete="email" placeholder="${tr('Email for a sign-in link', 'साइन-इन लिंक के लिए ईमेल')}"><button class="btn sm" type="submit">${tr('Email link', 'लिंक भेजें')}</button></form><p class="small muted" id="magicMsg" style="margin:6px 0 0"></p><button class="btn quiet" id="otpBtn" type="button">${tr('Phone OTP', 'फ़ोन OTP')}</button>`}
       <div class="setrow"><span>${tr('Language', 'भाषा')}</span><div class="seg" id="setLang"><button data-v="en" aria-pressed="${!hi()}">EN</button><button data-v="hi" aria-pressed="${hi()}">हि</button></div></div>
       <div class="setrow"><span>${tr('Chart', 'कुंडली')}</span><div class="seg" id="setSty"><button data-v="north" aria-pressed="${S.style === 'north'}">${tr('North', 'उत्तर')}</button><button data-v="south" aria-pressed="${S.style === 'south'}">${tr('South', 'दक्षिण')}</button></div></div></section>
     <div class="chips scroll"><button class="chip" id="aboutBtn">${tr('About', 'जानकारी')}</button><button class="chip" id="clr">${tr('Clear chat', 'चैट मिटाएँ')}</button></div></main>`;
   bindHeader();
   $('#personRow').onclick = openPeople;
-  $('#packsBtn').onclick = openPacks;
   $('#copyRef').onclick = copyReferral;
   const form = $('#magicForm');
   if (form) form.onsubmit = async e => {
@@ -1713,7 +1772,7 @@ async function captureLink() {
   let dirty = false;
   const ref = (u.searchParams.get('ref') || '').trim();
   if (ref) {
-    try { const r = await api('/api/referral/attach', {device: DEVICE, code: ref}); if (r.ok) toast(tr(`Invite saved. You both get ${r.bonus} credits after your first question.`, `आमंत्रण सहेजा गया। पहले प्रश्न के बाद दोनों को ${r.bonus} क्रेडिट।`)); } catch { /* ignore a bad link */ }
+    try { const r = await api('/api/referral/attach', {device: DEVICE, code: ref}); if (r.ok) toast(tr('Invite saved. It does not include a free question.', 'आमंत्रण सहेजा गया। इसमें मुफ़्त प्रश्न शामिल नहीं है।')); } catch { /* ignore a bad link */ }
     u.searchParams.delete('ref'); dirty = true;
   }
   const magic = u.searchParams.get('magic');

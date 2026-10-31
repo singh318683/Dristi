@@ -130,6 +130,16 @@ def _schema(dialect: str) -> list[str]:
             owner text primary key,
             active text,
             updated text not null)""",
+        """create table if not exists play_purchases(
+            token_hash text primary key,
+            order_id text not null unique,
+            token text,
+            product_id text not null,
+            package_name text not null,
+            device text not null,
+            state text not null,
+            ts text not null,
+            consumed_at text)""",
         "create index if not exists profiles_owner on profiles(owner)",
     ]
 
