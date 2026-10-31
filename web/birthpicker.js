@@ -6,6 +6,7 @@
   root.BirthPicker = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   const MONTHS_EN = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+  const MONTHS_EN_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   const MONTHS_HI = ['जनवरी', 'फ़रवरी', 'मार्च', 'अप्रैल', 'मई', 'जून', 'जुलाई', 'अगस्त', 'सितंबर', 'अक्टूबर', 'नवंबर', 'दिसंबर'];
   const YEAR_FLOOR = 1900;
 
@@ -86,6 +87,11 @@
     return p.d + ' ' + names[p.m - 1] + ' ' + p.y;
   }
 
+  function labelDateShort(p, lang) {
+    const name = lang === 'hi' ? MONTHS_HI[p.m - 1] : MONTHS_EN_SHORT[p.m - 1];
+    return p.d + ' ' + name + ' ' + p.y;
+  }
+
   function parseTime(hhmm) {
     const m = /^(\d{2}):(\d{2})$/.exec(String(hhmm || '').trim());
     if (!m) return null;
@@ -133,7 +139,7 @@
 
   return {
     YEAR_FLOOR, MONTHS_EN, MONTHS_HI, daysInMonth, parseDate, formatDate, clampDate, resolveDate,
-    yearOptions, monthOptions, dayOptions, labelDate, parseTime, formatTime, resolveTime, labelTime,
+    yearOptions, monthOptions, dayOptions, labelDate, labelDateShort, parseTime, formatTime, resolveTime, labelTime,
     hourOptions, minuteOptions, ampmOptions,
   };
 });
