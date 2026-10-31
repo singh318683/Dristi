@@ -5,6 +5,8 @@ plugins {
 android {
     namespace = "com.ikshana.drishti"
     compileSdk = 36
+    // AGP 9.1's default and minimum build-tools. Supports compileSdk 36.
+    buildToolsVersion = "36.0.0"
 
     defaultConfig {
         applicationId = "com.ikshana.drishti"
