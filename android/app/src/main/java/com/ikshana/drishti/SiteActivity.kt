@@ -38,24 +38,40 @@ class SiteActivity : AppCompatActivity(), PurchasesUpdatedListener {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        web = WebView(this)
+        try {
+            web = WebView(this)
+        } catch (error: Exception) {
+            // Some images have no WebView provider. Show the offline screen
+            // instead of dying in onCreate.
+            android.util.Log.e("Drishti", "WebView unavailable", error)
+            startActivity(android.content.Intent(this, OfflineActivity::class.java))
+            finish()
+            return
+        }
         setContentView(web)
         configureWeb()
-        billing = BillingClient.newBuilder(this)
-            .setListener(this)
-            .enablePendingPurchases(
-                PendingPurchasesParams.newBuilder().enableOneTimeProducts().build(),
-            )
-            .build()
-        billing.startConnection(object : BillingClientStateListener {
-            override fun onBillingSetupFinished(result: BillingResult) {
-                billingReady = result.responseCode == BillingClient.BillingResponseCode.OK
-            }
+        try {
+            billing = BillingClient.newBuilder(this)
+                .setListener(this)
+                .enablePendingPurchases(
+                    PendingPurchasesParams.newBuilder().enableOneTimeProducts().build(),
+                )
+                .build()
+            billing.startConnection(object : BillingClientStateListener {
+                override fun onBillingSetupFinished(result: BillingResult) {
+                    billingReady = result.responseCode == BillingClient.BillingResponseCode.OK
+                }
 
-            override fun onBillingServiceDisconnected() {
-                billingReady = false
-            }
-        })
+                override fun onBillingServiceDisconnected() {
+                    billingReady = false
+                }
+            })
+        } catch (error: Exception) {
+            // Play Store is not on every device. The page still loads; purchase
+            // resolves as cancelled because billingReady stays false.
+            android.util.Log.e("Drishti", "Play Billing unavailable", error)
+            billingReady = false
+        }
         web.loadUrl(ORIGIN)
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
