@@ -152,6 +152,11 @@ def test_dasha_structure():
     for m in md:
         assert m["antardashas"][0]["lord"] == m["lord"]
         assert m["antardashas"][0]["start"] == m["start"] and m["antardashas"][-1]["end"] == m["end"]
+        # The ninth antardasha (eight lords later) closes on the mahadasha's last day.
+        # Saturn's is Jupiter, so both can read "until May 2027" without a date bug.
+        last = m["antardashas"][-1]
+        expect = engine.DASHA_ORDER[(engine.DASHA_ORDER.index(m["lord"]) + 8) % 9]
+        assert last["lord"] == expect and last["end"] == m["end"]
     cur = c["dasha"]["current"]
     assert cur["antardasha"]["start"] <= "2026-10-23" <= cur["antardasha"]["end"]
     pds = cur["pratyantardashas"]

@@ -2,6 +2,7 @@
 import json
 import os
 import sys
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -96,6 +97,35 @@ def test_otp_is_a_stub_and_packs_are_gone(client):
     wallet = client.get("/api/wallet", params={"device": "d"}).json()
     assert wallet["credits"] == 0 and wallet["free_left"] == 0 and wallet["packs"] == {}
     assert wallet["price_label"] == "$0.99" and wallet["product_id"] == "acharya_question"
+
+
+def test_panchang_honours_the_callers_civil_date(client):
+    sat = client.get("/api/panchang", params={"lat": 28.65195, "lon": 77.23149, "tz": "Asia/Kolkata", "date": "2026-10-31"})
+    sun = client.get("/api/panchang", params={"lat": 40.71, "lon": -74.0, "tz": "America/New_York", "date": "2026-10-31"})
+    assert sat.status_code == sun.status_code == 200
+    assert sat.json()["vaar"]["en"] == "Saturday"
+    assert sun.json()["vaar"]["en"] == "Saturday"
+    assert sat.json()["date"] == sun.json()["date"] == "2026-10-31"
+
+
+def test_horoscope_date_follows_the_device_within_one_day(client):
+    utc = datetime.now(timezone.utc).date()
+    local = (utc - timedelta(days=1)).isoformat()
+    near = client.get("/api/horoscope", params={"sign": "Cancer", "lang": "en", "date": local})
+    assert near.status_code == 200 and near.json()["date"] == local
+    far = (utc - timedelta(days=10)).isoformat()
+    kept = client.get("/api/horoscope", params={"sign": "Cancer", "lang": "en", "date": far})
+    assert kept.status_code == 200 and kept.json()["date"] == utc.isoformat()
+    bad = client.get("/api/horoscope", params={"sign": "Cancer", "lang": "en", "date": "31-10-2026"})
+    assert bad.status_code == 400
+
+
+def test_home_asks_for_the_device_date():
+    html = open(os.path.join(os.path.dirname(__file__), "..", "web", "index.html"), encoding="utf-8").read()
+    assert "function localISODate" in html
+    assert html.count("localISODate()") >= 2
+    assert 'id="tileAsk"' in html and 'id="tileToday"' in html and 'id="tileChart"' in html and 'id="tileMatch"' in html
+    assert 'id="hDasha"' not in html and 'id="hHoro"' not in html and 'id="hPanch"' not in html
 
 
 def test_panchang_and_pdf_endpoints(client):
