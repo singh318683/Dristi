@@ -70,6 +70,32 @@
             android:exported="false"
             android:screenOrientation="portrait" />
 
+        <!--
+          android-browser-helper's LauncherActivity calls
+          PackageManager.setComponentEnabledSetting on this exact class during
+          onCreate (ManageDataLauncherActivity.addSiteSettingsShortcut). The
+          library does not merge the activity into the app. On Android 12 that
+          call throws when the component is missing, and the process is killed
+          before the site opens. Declaring it here is what makes the toggle valid.
+          It is not a launcher icon. The shortcut the library adds uses
+          ACTION_MANAGE_TRUSTED_WEB_ACTIVITY_DATA, and the system launcher
+          (a different app) is what starts it, so the activity is exported.
+        -->
+        <activity
+            android:name="com.google.androidbrowserhelper.trusted.ManageDataLauncherActivity"
+            android:enabled="true"
+            android:excludeFromRecents="true"
+            android:exported="true"
+            android:theme="@android:style/Theme.DeviceDefault.Light.NoActionBar">
+            <intent-filter>
+                <action android:name="android.support.customtabs.action.ACTION_MANAGE_TRUSTED_WEB_ACTIVITY_DATA" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+            <meta-data
+                android:name="android.support.customtabs.trusted.MANAGE_SPACE_URL"
+                android:value="https://dristi-six.vercel.app/" />
+        </activity>
+
         <!-- Digital Goods / Payment Request. Chrome calls these; the purchase token
              goes back to the page. Nothing here consumes the purchase. -->
         <activity

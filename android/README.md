@@ -16,7 +16,7 @@ No keystore and no password belong in this folder. `local.properties` is created
 2. Choose File, then Open, and select this `android` folder (the folder that contains `settings.gradle.kts`).
 3. After pulling a new version, choose File, then Sync Project with Gradle Files. The first sync downloads Gradle 9.3.1 and the libraries. If Studio still mentions AGP 9.5, sync again after the pull so it reads 9.1.0.
 4. Plug in a phone with USB debugging, or create an emulator with a Play Store system image (API 24 or newer).
-5. Press Run. The app opens the live site. With no network, it shows an offline screen and a Try again button.
+5. If Drishti from an older build is already on the phone, uninstall it first, then press Run. The app opens the live site. With no network, it shows an offline screen and a Try again button. A build from before the site-settings activity was declared crashed on open on Android 12; uninstalling clears that install.
 
 A debug build can show the site. A $0.99 purchase works only after the app is installed from a Play testing track, the product exists, and you are a license tester. That is a Play rule, not something the debug button can skip.
 
