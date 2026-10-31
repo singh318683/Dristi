@@ -6,7 +6,7 @@ An Acharya question is the Play consumable `acharya_question` at $0.99. Chrome s
 
 If the phone has no browser that can run a Trusted Web Activity, the app opens the site in a WebView and sets `window.DrishtiPlay.purchase` and `window.DrishtiPlay.listPurchases`. That path does not consume the purchase either.
 
-The project uses Android Gradle Plugin 9.5.0 and Gradle 9.6.0, which current stable Android Studio (Rabbit 2, 2026.2.2) can sync. `minSdk` is 24. `targetSdk` is 36, which is what Google Play asks of new apps from 31 August 2026. The screen is portrait. Colours match the website: cream `#FAF7F2`, saffron `#B35A00`, indigo `#1F1A4D`.
+The project uses Android Gradle Plugin 9.1.0 and Gradle 9.3.1, which is the Gradle version the AGP 9.1 release notes list as both the minimum and the default. Kotlin is the built-in compiler from AGP 9.1 (Kotlin Gradle plugin 2.2.10 on that compatibility table). `minSdk` is 24. `compileSdk` and `targetSdk` are 36, with build-tools 36.0.0. The screen is portrait. Colours match the website: cream `#FAF7F2`, saffron `#B35A00`, indigo `#1F1A4D`.
 
 No keystore and no password belong in this folder. `local.properties` is created by Android Studio on your machine and is not committed.
 
@@ -14,7 +14,7 @@ No keystore and no password belong in this folder. `local.properties` is created
 
 1. Install current stable Android Studio. On first launch, let it install Android SDK 36.
 2. Choose File, then Open, and select this `android` folder (the folder that contains `settings.gradle.kts`).
-3. Wait until Gradle sync finishes. The first sync downloads the wrapper and the libraries.
+3. After pulling a new version, choose File, then Sync Project with Gradle Files. The first sync downloads Gradle 9.3.1 and the libraries. If Studio still mentions AGP 9.5, sync again after the pull so it reads 9.1.0.
 4. Plug in a phone with USB debugging, or create an emulator with a Play Store system image (API 24 or newer).
 5. Press Run. The app opens the live site. With no network, it shows an offline screen and a Try again button.
 
