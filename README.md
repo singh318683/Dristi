@@ -47,6 +47,7 @@ Other env: `DRISHTI_DB` (sqlite path, used when `DATABASE_URL` is unset), `LLM_R
 | `PLAY_SERVICE_ACCOUNT_FILE` | local only | Path to that key file. Ignored when `PLAY_SERVICE_ACCOUNT_JSON` is set. |
 | `PLAY_PACKAGE_NAME` | no | Default `com.ikshana.drishti`. Must match the Play app. |
 | `PLAY_PRODUCT_ID` | no | Default `acharya_question`. Must match the consumable. |
+| `ANDROID_SHA256_FINGERPRINTS` | to hide the URL bar | Comma-separated SHA-256 certificate fingerprints for `/.well-known/assetlinks.json`. Use both the upload key and the Play app-signing key. See `android/README.md`. |
 
 No secret belongs in source. `POST /api/wallet/topup` and `POST /api/wallet/order` return 410. They do not add credits.
 
@@ -70,20 +71,9 @@ The phone starts a Play purchase, then `POST /api/chat` sends the purchase token
 
 Until `PLAY_SERVICE_ACCOUNT_JSON` is set, the server refuses every question. It does not answer for free.
 
-In the Android app, either:
+The Android project in `android/` is that wrapper. It opens the site as a Trusted Web Activity and turns on Play Billing for `https://play.google.com/billing`. The app does not consume the purchase. If the phone has no browser that can run a Trusted Web Activity, a WebView fallback sets `window.DrishtiPlay` with `purchase` and `listPurchases`, and that path does not consume either. How to open the project, sign a bundle, and publish it is in `android/README.md`.
 
-* install Drishti as a Trusted Web Activity, so the page can use the Play Billing Digital Goods API (`https://play.google.com/billing`), or
-* wrap the page in a WebView and set `window.DrishtiPlay` before the page loads:
-
-```javascript
-window.DrishtiPlay = {
-  // Resolve {purchaseToken} for "acharya_question". Reject if the person cancels.
-  // Do not consume the purchase here. The server consumes it after the answer starts.
-  purchase(productId) {},
-  // Resolve [{itemId, purchaseToken}] for purchases Google has not consumed yet.
-  listPurchases() {},
-};
-```
+`GET /.well-known/assetlinks.json` serves the statement for package `com.ikshana.drishti`. It stays an empty list until `ANDROID_SHA256_FINGERPRINTS` is set, and until then the Android app shows the browser bar.
 
 A desktop browser cannot open Play Billing. The page says so, and it does not send the question.
 
@@ -103,7 +93,7 @@ A desktop browser cannot open Play Billing. The page says so, and it does not se
 ## Stubbed
 * Phone OTP: interface only (`OtpProvider`). Email magic link works without a provider key, and sends mail only when `SMTP_HOST` is set.
 * Birth profiles and Acharya chats are stored for the account once `DATABASE_URL` is set.
-* Web app only (no native Android project in this repo). Play Billing is reached through the Digital Goods API or `window.DrishtiPlay`.
+* Android wrapper: `android/`. It is a Trusted Web Activity around the hosted site. Signing keys stay on your machine.
 
 ## Now, in the app
 Single-viewport screens (detail opens in a sheet). Acharya is labelled an AI astrologer. The $0.99 price is shown before a question is sent. Answers can expand a "Why" line of houses, planets and dasha. Dosha, Sade Sati and panchang cards are free. Kundli PDF is `POST /api/kundli.pdf?lang=en|hi`. Share cards are drawn in the browser (1080×1920) and use the Web Share API, with a download fallback.

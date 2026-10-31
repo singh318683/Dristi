@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Drishti</string>
+    <string name="offline_title">You\'re offline</string>
+    <string name="offline_body">Drishti needs a connection to open your chart. The chart and Acharya both live on the server.</string>
+    <string name="offline_body_hi">दृष्टि खोलने के लिए इंटरनेट चाहिए।</string>
+    <string name="offline_retry">Try again</string>
+</resources>

@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import secrets
 import smtplib
 import threading
@@ -931,6 +932,49 @@ def api_kundli_pdf(p: Profile, lang: str = "en"):
 
 
 # -------------------------------------------------------------- static ----
+_SHA256_PREFIX = re.compile(r"(?i)^sha-?256\s*[:=]\s*")
+
+
+def normalize_sha256_fingerprint(value: str) -> str | None:
+    """Turn a keytool or Play Console fingerprint into AA:BB:… uppercase form."""
+    text = _SHA256_PREFIX.sub("", (value or "").strip())
+    hexes = re.sub(r"[^0-9a-fA-F]", "", text)
+    if len(hexes) != 64:
+        return None
+    return ":".join(hexes[i:i + 2].upper() for i in range(0, 64, 2))
+
+
+def asset_link_fingerprints() -> list[str]:
+    raw = os.environ.get("ANDROID_SHA256_FINGERPRINTS", "")
+    found: list[str] = []
+    for part in raw.split(","):
+        fp = normalize_sha256_fingerprint(part)
+        if fp and fp not in found:
+            found.append(fp)
+    return found
+
+
+@app.get("/.well-known/assetlinks.json")
+def assetlinks():
+    """Digital Asset Links so the Android wrapper can hide the URL bar.
+
+    Fingerprints come from ANDROID_SHA256_FINGERPRINTS (comma-separated).
+    Until that is set, the file is an empty list and the wrapper shows Chrome's bar.
+    """
+    prints = asset_link_fingerprints()
+    body = []
+    if prints:
+        body.append({
+            "relation": ["delegate_permission/common.handle_all_urls"],
+            "target": {
+                "namespace": "android_app",
+                "package_name": "com.ikshana.drishti",
+                "sha256_cert_fingerprints": prints,
+            },
+        })
+    return JSONResponse(body, headers={"Cache-Control": "public, max-age=300"})
+
+
 @app.get("/")
 def index():
     """Home page. The verse list is inlined so the splash can paint before any fetch."""
