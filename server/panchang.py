@@ -156,6 +156,10 @@ def panchang(date: str, lat: float, lon: float, tz: str) -> dict:
     eighth = RAHU_EIGHTH[wd]
     rk0 = rise + (eighth - 1) * part
     rk1 = rk0 + part
+    # Abhijit is the 8th of the 15 daytime muhurtas, the one around local midday.
+    muhurta = (sett - rise) / 15
+    ab0 = rise + 7 * muhurta
+    ab1 = ab0 + muhurta
 
     def ends(pred):
         hit = _until(rise, pred)
@@ -178,4 +182,5 @@ def panchang(date: str, lat: float, lon: float, tz: str) -> dict:
         "karana": {"index": ki + 1, "en": k_en, "hi": k_hi,
                    "end": ends(lambda jd: karana_index(_elongation(jd)) == ki)},
         "rahu_kaal": {"start": _iso(rk0, zone), "end": _iso(rk1, zone), "eighth": eighth},
+        "abhijit": {"start": _iso(ab0, zone), "end": _iso(ab1, zone)},
     }

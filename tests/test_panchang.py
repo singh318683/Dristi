@@ -58,6 +58,13 @@ def test_delhi_tuesday_rahu_is_seventh_eighth():
     assert engine.nak_info(moon)["nakshatra"] == p["nakshatra"]["en"]
     assert p["nakshatra"]["en"] == "Bharani"
     assert p["tithi"]["en"] == "Krishna Pratipada"
+    rise_dt = datetime.fromisoformat(p["sunrise"])
+    sett_dt = datetime.fromisoformat(p["sunset"])
+    ab0 = datetime.fromisoformat(p["abhijit"]["start"])
+    ab1 = datetime.fromisoformat(p["abhijit"]["end"])
+    assert rise_dt < ab0 < ab1 < sett_dt
+    assert abs((ab1 - ab0) - (sett_dt - rise_dt) / 15) < timedelta(seconds=2)
+    assert abs((ab0 - rise_dt) - (sett_dt - rise_dt) * 7 / 15) < timedelta(seconds=2)
 
 
 def test_civil_date_sets_the_weekday_not_the_place_clock():

@@ -161,7 +161,7 @@ body.when-open{overflow:hidden}
 .wheel-view{position:relative;z-index:1;height:100%;overflow-y:auto;scroll-snap-type:y mandatory;overscroll-behavior:contain;touch-action:pan-y;scrollbar-width:none;-webkit-mask-image:linear-gradient(to bottom,transparent,#000 18%,#000 82%,transparent);mask-image:linear-gradient(to bottom,transparent,#000 18%,#000 82%,transparent)}
 .wheel-view::-webkit-scrollbar{display:none}
 .wheel-pad,.wheel-item{height:var(--wheel, 36px);scroll-snap-align:center}
-.wheel-item{display:grid;place-items:center;font-size:17px;font-weight:600;color:var(--faint);user-select:none}
+.wheel-item{display:grid;place-items:center;font-size:17px;font-weight:600;color:var(--faint);user-select:none;overflow:hidden;padding:0 2px;text-align:center}
 .wheel-item.on{color:var(--ink);font-weight:700;font-size:18px}
 .onb .actions .btn{flex:1}
 .onb .actions .btn.sec2{flex:0 0 auto}
@@ -172,11 +172,11 @@ body.when-open{overflow:hidden}
 .benefits b{display:block}
 .benefits span{color:var(--muted);font-size:14.5px}
 .relgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
-.relgrid button{min-height:48px;border:1.5px solid var(--line-strong);background:var(--surface);border-radius:12px;font-weight:600;font-size:15px}
+.relgrid button{min-height:48px;min-width:0;border:1.5px solid var(--line-strong);background:var(--surface);border-radius:12px;font-weight:600;font-size:14px;padding:6px 4px;white-space:normal;line-height:1.2}
 .relgrid button[aria-pressed=true]{border-color:var(--primary);background:var(--primary-tint);color:var(--on-tint)}
 nav.bottom{position:fixed;left:0;right:0;bottom:0;z-index:30;background:var(--surface);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom)}
 nav.bottom .in{max-width:560px;margin:0 auto;display:grid;grid-template-columns:repeat(5,1fr);height:var(--nav-h)}
-nav.bottom button{background:none;border:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font-size:12px;font-weight:400;color:var(--muted);min-height:44px}
+nav.bottom button{background:none;border:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font-size:11px;font-weight:400;color:var(--muted);min-height:44px;min-width:0;padding:0 2px;line-height:1.15;text-align:center;white-space:normal}
 nav.bottom .ico{width:56px;height:30px;border-radius:15px;display:grid;place-items:center}
 nav.bottom svg{width:24px;height:24px}
 nav.bottom button[aria-current=page]{color:var(--ink);font-weight:700}
@@ -204,7 +204,7 @@ nav.bottom button[aria-current=page] .ico{background:var(--primary-tint);color:v
 .info{margin-top:12px;border-radius:12px;background:var(--sunk);padding:12px 14px;min-height:68px;font-size:14.5px}
 .info b.t{display:block;font-size:15.5px;margin-bottom:2px}
 .info .m{color:var(--muted)}
-.legend{display:flex;flex-wrap:wrap;gap:4px 12px;margin-top:12px;font-size:13px;color:var(--muted)}
+.legend{display:flex;flex-wrap:wrap;gap:2px 8px;margin-top:8px;font-size:13px;color:var(--muted);max-width:100%;min-width:0}
 .legend b{color:var(--ink);font-weight:700}
 .plist2{list-style:none;margin:0;padding:0}
 .plist2 li button{display:grid;grid-template-columns:44px 1fr auto;gap:12px;align-items:center;width:100%;min-height:60px;border:0;background:none;text-align:left;padding:6px 0;border-top:1px solid var(--line)}
@@ -241,7 +241,8 @@ table.t tr:last-child td{border-bottom:0}
 .chat .ttl b{display:block}
 .chat .ttl small{display:block;color:var(--muted);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .credits{font-size:13.5px;color:var(--muted);font-weight:600;white-space:nowrap}
-.asking{display:flex;align-items:center;gap:8px;padding:4px 16px;border:0;border-bottom:1px solid var(--line);font-size:14px;color:var(--muted);background:var(--bg);width:100%;min-height:48px;text-align:left}
+.asking{display:flex;align-items:center;gap:8px;padding:4px 16px;border:0;border-bottom:1px solid var(--line);font-size:14px;color:var(--muted);background:var(--bg);width:100%;max-width:100%;min-width:0;min-height:48px;text-align:left;overflow:hidden}
+.asking b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .msgs{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px}
 .bub{max-width:88%;padding:11px 14px;border-radius:18px;font-size:15.5px;line-height:1.55;word-wrap:break-word}
 html[lang=hi] .bub{line-height:1.7}
@@ -265,7 +266,8 @@ html[lang=hi] .bub{line-height:1.7}
 .qgrid button svg{color:var(--primary);flex:none}
 .composer{background:var(--surface);border-top:1px solid var(--line);padding:10px 12px}
 .composer .chips{margin-bottom:10px}
-.composer form{display:flex;gap:8px;align-items:flex-end}
+.composer{max-width:100%;min-width:0;overflow-x:hidden;box-sizing:border-box}
+.composer form.ask-bar{display:flex;flex-direction:column;align-items:stretch;gap:8px;width:100%;min-width:0;max-width:100%}
 .composer textarea{flex:1;resize:none;min-height:48px;border:1.5px solid var(--line-strong);border-radius:24px;padding:11px 16px;max-height:120px;background:var(--bg);font-size:16px}
 .composer textarea:focus{outline:none;border-color:var(--primary)}
 .send{width:48px;height:48px;border-radius:50%;border:0;background:var(--primary);color:var(--on-primary);display:grid;place-items:center;flex:none}
@@ -280,16 +282,18 @@ html[lang=hi] .bub{line-height:1.7}
 .ask-card textarea{width:100%;border:0;background:transparent;resize:none;min-height:64px;padding:0;font-size:16px;line-height:1.4}
 .ask-card textarea:focus{outline:none}
 .ask-sample{position:absolute;inset:0 auto auto 0;max-width:100%;border:0;background:none;color:var(--faint);font-size:16px;line-height:1.4;text-align:left;padding:0;min-height:44px}
-.ask-actions{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:8px}
+.ask-actions{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-top:8px;min-width:0}
+.ask-card,.ask-field,.ask-stage{max-width:100%;min-width:0}
+.ask-actions .btn{flex:1 1 9rem;max-width:100%}
 .ask-dots{display:flex;align-items:center;gap:2px}
 .ask-dots button{width:28px;height:28px;border:0;background:transparent;padding:0;display:grid;place-items:center;min-height:28px}
 .ask-dots button i{width:7px;height:7px;border-radius:50%;background:var(--line-strong);display:block}
 .ask-dots button[aria-current=true] i{background:var(--primary);width:8px;height:8px}
 .ask-note{margin:12px 0 0;text-align:center;color:var(--muted);font-size:13.5px}
-.ask-bar{display:flex;gap:8px;align-items:flex-end}
-.ask-bar textarea{flex:1;resize:none;min-height:48px;border:1.5px solid var(--line-strong);border-radius:16px;padding:11px 14px;max-height:96px;background:var(--bg);font-size:16px}
+.ask-bar{display:flex;flex-direction:column;align-items:stretch;gap:8px;width:100%;min-width:0;max-width:100%}
+.ask-bar textarea{width:100%;max-width:100%;min-width:0;flex:none;resize:none;min-height:48px;border:1.5px solid var(--line-strong);border-radius:16px;padding:11px 14px;max-height:96px;background:var(--bg);font-size:16px;box-sizing:border-box}
 .ask-bar textarea:focus{outline:none;border-color:var(--primary)}
-.ask-bar .btn{min-height:48px;padding:0 14px;white-space:nowrap;border-radius:14px}
+.ask-bar .btn{width:100%;max-width:100%;min-height:48px;padding:0 14px;white-space:normal;border-radius:14px}
 .ask-remedy{margin:6px 0 0;text-align:center;color:var(--faint);font-size:12px}
 @media (max-height:700px){
   .ask-om{width:64px;height:64px;margin-bottom:8px}
@@ -299,7 +303,8 @@ html[lang=hi] .bub{line-height:1.7}
   .ask-note{margin-top:8px}
 }
 .pair{display:grid;grid-template-columns:1fr 28px 1fr;gap:6px;align-items:center}
-.pick{border:1.5px solid var(--line-strong);border-radius:14px;padding:12px 10px;background:var(--surface);text-align:center;display:flex;flex-direction:column;align-items:center;gap:3px;min-width:0}
+.pick{border:1.5px solid var(--line-strong);border-radius:14px;padding:12px 8px;background:var(--surface);text-align:center;display:flex;flex-direction:column;align-items:center;gap:3px;min-width:0;max-width:100%}
+.pick b,.pick span.d{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pick small{color:var(--muted);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.08em}
 .pick span.d{color:var(--muted);font-size:13px}
 .amp{display:grid;place-items:center;color:var(--primary)}
@@ -325,7 +330,8 @@ html[lang=hi] .bub{line-height:1.7}
 .pack b{display:block;font-size:20px}
 .pack small{display:block;color:var(--muted);font-size:12.5px}
 .pack:hover{border-color:var(--primary)}
-.setrow{display:flex;justify-content:space-between;align-items:center;gap:10px;min-height:58px;border-top:1px solid var(--line)}
+.setrow{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;min-height:58px;border-top:1px solid var(--line);min-width:0}
+.setrow .seg{max-width:100%}
 .setrow:first-of-type{border-top:0}
 .toast{position:fixed;left:50%;bottom:calc(var(--nav-h) + 20px);transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:12px 18px;border-radius:12px;font-size:14.5px;z-index:80;max-width:90%}
 .avatar.sm{width:26px;height:26px;font-size:12px}
@@ -430,12 +436,22 @@ body.app-fit .welcome h4{font-size:17px;margin:0 0 2px}
 body.app-fit .welcome p{margin:0 auto 8px;font-size:13.5px}
 body.app-fit .qgrid{gap:6px}
 body.app-fit .qgrid button{min-height:40px;font-size:14px;padding:6px 8px}
-body.app-fit main.fit > .chartcard{flex:1 1 160px;min-height:160px;display:flex;flex-direction:column;overflow:hidden;padding:8px 10px}
+body.app-fit main.fit > .chartcard{flex:1 1 160px;min-height:160px;display:flex;flex-direction:column;overflow-x:hidden;overflow-y:visible;padding:8px 10px}
+.ktools{display:flex;flex-direction:column;gap:8px;min-width:0;max-width:100%}
+.ktools-grid,.ktools-acts{display:grid;gap:6px;min-width:0;max-width:100%}
+.ktools-grid{grid-template-columns:1fr 1fr}
+.ktools-acts{grid-template-columns:1fr 1fr 1fr}
+.ktools .chip{width:100%;min-width:0;justify-content:center;white-space:normal;text-align:center;padding:6px 4px;line-height:1.2}
+#magicForm{flex-direction:column;align-items:stretch;width:100%}
+#magicForm .input,#magicForm .btn{width:100%;min-width:0;max-width:100%}
+.chips.wrap{flex-wrap:wrap}
+.sheet.tall,.when-sheet,.onb,.gita-center{max-width:100%;min-width:0}
+.gita-mean{overflow-wrap:anywhere;max-width:100%}
 body.app-fit .chartwrap{flex:1;min-height:0;margin-top:4px;overflow:hidden}
 body.app-fit .chartwrap svg{width:100%;height:100%;max-width:none;max-height:100%}
 body.app-fit .info{margin-top:4px;padding:6px 8px;min-height:0;max-height:58px;overflow:hidden;font-size:13px}
 body.app-fit .info .m{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-body.app-fit .legend{flex-wrap:nowrap;overflow-x:auto;margin-top:2px;scrollbar-width:none;gap:0}
+body.app-fit .legend{flex-wrap:wrap;overflow-x:hidden;margin-top:2px;gap:0}
 body.app-fit .legend .note{display:none}
 body.app-fit .pair .pick{padding:8px 6px}
 body.app-fit .ring{width:84px;height:84px}
@@ -446,7 +462,9 @@ body.app-fit .reveal{opacity:1;transform:none}
 .clamp3{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;line-height:1.45;max-height:4.35em}
 .sheet-bg.as-bottom{align-items:flex-end;padding:0}
 .sheet.tall{width:min(100%,560px);max-height:min(78dvh,720px);border-radius:18px 18px 0 0;display:flex;flex-direction:column;padding:8px 14px 16px}
-.sheet.tall .sheet-body{overflow:auto;min-height:0}
+.sheet.tall .sheet-body{overflow:auto;overflow-x:hidden;min-height:0;max-width:100%}
+.sheet-body .chips{max-width:100%;min-width:0}
+.sheet-body .chip,.sheet-body .tag{max-width:100%;white-space:normal;height:auto}
 .why{margin-top:8px;border-top:1px solid var(--line);padding-top:4px}
 .why summary{cursor:pointer;font-size:13px;font-weight:700;color:var(--on-tint);list-style:none}
 .why summary::-webkit-details-marker{display:none}
@@ -460,22 +478,54 @@ body.app-fit .reveal{opacity:1;transform:none}
 .gita-banner{flex:0 0 auto;display:flex;align-items:center;gap:8px;width:100%;height:44px;min-height:44px;max-height:44px;margin:0;padding:0 12px;border:1px solid var(--primary-line);background:var(--primary-tint);color:var(--ink);border-radius:14px;text-align:left;font-size:14px;line-height:1.2;font-weight:600}
 .gita-banner .gita-m{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .gita-banner .gita-go{flex:none;color:var(--on-tint);display:grid;transform:rotate(-90deg)}
-.home-greet{flex:none;min-width:0}
-.home-tiles{flex:1;min-height:0;display:grid;grid-template-columns:1fr 1fr;grid-template-rows:minmax(0,1fr) minmax(0,1fr);gap:10px}
-.tile{display:flex;flex-direction:column;align-items:flex-start;justify-content:flex-start;gap:4px;width:100%;min-height:0;overflow:hidden;text-align:left;background:var(--surface);border:1.5px solid var(--line-strong);border-radius:18px;padding:14px 12px;box-shadow:var(--shadow);color:var(--ink)}
-.tile .tile-ico{color:var(--primary);display:grid;margin-bottom:4px}
-.tile b{font-size:18px;line-height:1.2;font-weight:700}
-.tile .tile-sub{font-size:13.5px;line-height:1.3;font-weight:500;color:var(--muted);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.home-greet{flex:none;min-width:0;text-align:center}
+.home-greet .h1,.home-greet .sub{text-align:center}
+.glance{flex:none;width:100%;max-width:100%;min-width:0;text-align:center;border:1.5px solid var(--line);background:var(--surface);border-radius:14px;padding:8px 12px;box-shadow:var(--shadow);color:var(--ink)}
+.glance-h,.glance-p{display:block;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.glance-h{font-weight:650;font-size:14.5px}
+.glance-p{margin-top:2px;color:var(--muted);font-size:12.5px}
+.home-tiles{flex:0 0 auto;min-height:0;display:grid;grid-template-columns:1fr 1fr;gap:8px;max-width:100%}
+.tile{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;width:100%;min-width:0;min-height:0;overflow:hidden;text-align:center;background:var(--surface);border:1.5px solid var(--line-strong);border-radius:16px;padding:10px 8px;box-shadow:var(--shadow);color:var(--ink)}
+.tile .tile-ico{color:var(--primary);display:grid;margin-bottom:2px}
+.tile .tile-ico svg{width:28px;height:28px}
+.tile b{font-size:16px;line-height:1.2;font-weight:700;max-width:100%}
+.tile .tile-sub{font-size:12.5px;line-height:1.25;font-weight:500;color:var(--muted);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;max-width:100%}
+.tile .tile-chev{color:var(--faint);display:grid;transform:rotate(-90deg);margin-top:1px}
 .tile.ask{background:var(--primary);border-color:transparent;color:var(--on-primary)}
-.tile.ask .tile-ico,.tile.ask .tile-sub{color:var(--on-primary)}
-body.app-fit main.home{overflow:hidden;gap:10px}
-body.app-fit main.home .h1{font-size:26px}
-body.app-fit main.home > .home-tiles{flex:1 1 auto}
+.tile.ask .tile-ico,.tile.ask .tile-sub,.tile.ask .tile-chev{color:var(--on-primary)}
+.tile:active{transform:scale(.98)}
+main.home.part-morning{background:linear-gradient(180deg,rgba(253,236,208,.95),transparent 78%)}
+main.home.part-afternoon{background:linear-gradient(180deg,rgba(253,241,222,.75),transparent 72%)}
+main.home.part-evening{background:linear-gradient(180deg,rgba(244,214,184,.8),transparent 74%)}
+main.home.part-night{background:linear-gradient(180deg,rgba(214,210,240,.55),transparent 70%)}
+@media (prefers-color-scheme:dark){
+  main.home.part-morning{background:linear-gradient(180deg,rgba(90,58,24,.55),transparent 76%)}
+  main.home.part-afternoon{background:linear-gradient(180deg,rgba(74,52,24,.4),transparent 72%)}
+  main.home.part-evening{background:linear-gradient(180deg,rgba(92,48,28,.5),transparent 74%)}
+  main.home.part-night{background:linear-gradient(180deg,rgba(36,40,78,.65),transparent 72%)}
+}
+@keyframes homeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+main.home.home-in > *{animation:homeIn .45s ease both}
+main.home.home-in > *:nth-child(2){animation-delay:.06s}
+main.home.home-in > *:nth-child(3){animation-delay:.12s}
+main.home.home-in > *:nth-child(4){animation-delay:.18s}
+@media (prefers-reduced-motion:reduce){
+  main.home.home-in > *{animation:none}
+  .tile:active{transform:none}
+}
+body.app-fit main.home{overflow:hidden;gap:8px}
+body.app-fit main.home .h1{font-size:24px}
+body.app-fit main.home > .home-tiles{flex:0 0 auto}
 @media (max-height:700px){
   body.app-fit main.home{gap:6px}
-  body.app-fit main.home .h1{font-size:22px}
-  .tile{padding:10px}
-  .tile b{font-size:16px}
+  body.app-fit main.home .h1{font-size:21px}
+  .tile{padding:8px 6px}
+  .tile b{font-size:15px}
+  .ask-om{width:64px;height:64px;margin-bottom:8px}
+  .ask-om .dev{font-size:32px}
+  .ask-hero{margin-bottom:10px}
+  .ask-hero h1{font-size:22px}
+  .ask-note{margin-top:8px}
 }
 body.gita-lock{overflow:hidden}
 .gita-splash{position:fixed;inset:0;z-index:90;display:flex;align-items:center;justify-content:center;padding:calc(env(safe-area-inset-top) + 20px) 20px calc(env(safe-area-inset-bottom) + 20px);background:linear-gradient(165deg,#E8A04A 0%,#F6D7A8 26%,#FAF7F2 58%,#FFF8EE 100%);color:#1F1B16;color-scheme:light;overflow:auto}
@@ -489,7 +539,7 @@ body.gita-lock{overflow:hidden}
 .gita-brand small{font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:#8F4700;font-weight:700}
 .gita-share{position:absolute;right:0;top:0;width:44px;height:44px;border:0;background:transparent;color:#8F4700;border-radius:12px;display:grid;place-items:center}
 .gita-splash .gita-kicker{margin:0;font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#8F4700}
-.gita-splash .gita-sa{margin:0;font-size:clamp(22px,6.4vw,34px);line-height:1.65;font-weight:650;white-space:pre-wrap}
+.gita-splash .gita-sa{margin:0;font-size:clamp(22px,6.4vw,34px);line-height:1.65;font-weight:650;white-space:pre-wrap;max-width:100%;overflow-wrap:anywhere}
 .gita-splash .gita-mean{margin:0;font-size:17px;line-height:1.55;color:#3A332C}
 .gita-go{min-height:44px;padding:0 18px;border:0;background:transparent;color:#8F4700;font-weight:700;font-size:16px}
 .gita-progress{position:relative;width:100%;height:3px;background:rgba(179,90,0,.16);border-radius:3px}
@@ -1231,27 +1281,95 @@ function dashaUntil(cur) {
   }
   return text;
 }
+function dayPart(d) {
+  const h = (d || new Date()).getHours();
+  if (h >= 5 && h < 12) return 'morning';
+  if (h >= 12 && h < 17) return 'afternoon';
+  if (h >= 17 && h < 21) return 'evening';
+  return 'night';
+}
+function greetLine(name, d) {
+  const part = dayPart(d);
+  if (part === 'morning') return tr(`Good morning, ${name}`, `शुभ प्रभात, ${name}`);
+  if (part === 'afternoon') return tr(`Good afternoon, ${name}`, `नमस्ते, ${name}`);
+  return tr(`Good evening, ${name}`, `शुभ संध्या, ${name}`);
+}
+function relWhen(start, end, now) {
+  const t = (now || new Date()).getTime();
+  const a = new Date(start).getTime(), b = new Date(end).getTime();
+  if (Number.isNaN(a) || Number.isNaN(b)) return '';
+  if (t >= a && t <= b) return tr('now', 'अभी');
+  if (t < a) {
+    const mins = Math.max(1, Math.round((a - t) / 60000));
+    if (mins < 60) return tr(`in ${mins}m`, `${mins} मि`);
+    return tr(`in ${Math.round(mins / 60)}h`, `${Math.round(mins / 60)} घं`);
+  }
+  return '';
+}
+function goodTimeLine(g, now) {
+  if (!g) return '';
+  const windows = [
+    g.abhijit && {name: tr('Abhijit', 'अभिजित'), start: g.abhijit.start, end: g.abhijit.end},
+    g.rahu_kaal && {name: tr('Rahu kaal', 'राहु काल'), start: g.rahu_kaal.start, end: g.rahu_kaal.end},
+  ].filter(Boolean);
+  const live = windows.map(w => ({...w, when: relWhen(w.start, w.end, now)})).filter(w => w.when);
+  const current = live.find(w => w.when === tr('now', 'अभी'));
+  const next = live.find(w => w.when !== tr('now', 'अभी'));
+  const pick = current || next;
+  if (!pick) return '';
+  return `${pick.name} ${pick.when} · ${clock(pick.start)}–${clock(pick.end)}`;
+}
+function glanceHoroLine(h, sign) {
+  if (!h) return '';
+  if (h.ai && readingForSign(h.text, sign)) return String(h.text).replace(/[*_#>`]/g, '').replace(/\s+/g, ' ').trim();
+  const moon = h.transits && h.transits.Moon;
+  if (!moon) return '';
+  return tr(`Moon in ${signName(moon.sign)}`, `चंद्र ${signName(moon.sign)} में`);
+}
 // ------------------------------------------------------------------ home
 let homeGen = 0;
+let homeAskTimer = 0;
+function stopHomeAsk() { if (homeAskTimer) { clearInterval(homeAskTimer); homeAskTimer = 0; } }
 async function pageHome() {
+  stopHomeAsk();
   const p = activeProfile();
   const gen = ++homeGen;
   const weekday = new Date().toLocaleDateString(loc(), {weekday: 'long'});
-  $('#app').innerHTML = header() + `<main class="fit home">
+  const part = dayPart();
+  const chev = `<span class="tile-chev" aria-hidden="true">${I.chev(14)}</span>`;
+  $('#app').innerHTML = header() + `<main class="fit home home-in part-${part}">
     ${gitaBannerHtml()}
-    <div class="home-greet"><div class="h1">${tr('Namaste', 'नमस्ते')}, ${esc(p.name)}</div>
+    <div class="home-greet"><div class="h1">${esc(greetLine(p.name))}</div>
       <p class="sub" id="gsub">${esc(weekday)}</p></div>
+    <button type="button" class="glance" id="glance" aria-label="${tr("Today's glance", 'आज की झलक')}">
+      <span class="glance-h" id="glanceHoro">${tr('Today’s reading', 'आज का पाठ')}</span>
+      <span class="glance-p" id="glancePan"></span>
+    </button>
     <div class="home-tiles" role="group" aria-label="${tr('Home', 'होम')}">
-      <button type="button" class="tile ask" id="tileAsk"><span class="tile-ico">${I.ask(26)}</span><b>${tr('Ask Acharya', 'आचार्य से पूछें')}</b><span class="tile-sub">$0.99 ${tr('a question', 'प्रति प्रश्न')}</span></button>
-      <button type="button" class="tile" id="tileToday"><span class="tile-ico">${I.sun(26)}</span><b>${tr('Today', 'आज')}</b><span class="tile-sub">${tr('Horoscope & panchang', 'राशिफल और पंचांग')}</span></button>
-      <button type="button" class="tile" id="tileChart"><span class="tile-ico">${I.chart(26)}</span><b>${tr('My chart', 'मेरी कुंडली')}</b><span class="tile-sub">${tr('Kundli, periods, yogas', 'कुंडली, दशा, योग')}</span></button>
-      <button type="button" class="tile" id="tileMatch"><span class="tile-ico">${I.match(26)}</span><b>${tr('Match', 'मिलान')}</b><span class="tile-sub">${tr('Guna milan, free', 'गुण मिलान, मुफ़्त')}</span></button>
+      <button type="button" class="tile ask" id="tileAsk"><span class="tile-ico">${I.ask(28)}</span><b>${tr('Ask Acharya', 'आचार्य से पूछें')}</b><span class="tile-sub" id="tileAskSub"></span>${chev}</button>
+      <button type="button" class="tile" id="tileToday"><span class="tile-ico">${I.sun(28)}</span><b>${tr('Today', 'आज')}</b><span class="tile-sub">${tr('Your day: horoscope & panchang', 'आपका दिन: राशिफल और पंचांग')}</span>${chev}</button>
+      <button type="button" class="tile" id="tileChart"><span class="tile-ico">${I.chart(28)}</span><b>${tr('My chart', 'मेरी कुंडली')}</b><span class="tile-sub">${tr('Your kundli, periods & yogas', 'आपकी कुंडली, दशा और योग')}</span>${chev}</button>
+      <button type="button" class="tile" id="tileMatch"><span class="tile-ico">${I.match(28)}</span><b>${tr('Match', 'मिलान')}</b><span class="tile-sub">${tr('Check guna milan · free', 'गुण मिलान देखें · मुफ़्त')}</span>${chev}</button>
     </div></main>`;
   bindHeader();
   mountGita();
-  $('#tileAsk').onclick = () => go('ask');
+  const examples = ASK_EXAMPLES();
+  let askI = 0;
+  const paintAsk = () => {
+    const el = $('#tileAskSub');
+    if (!el) { stopHomeAsk(); return; }
+    el.textContent = examples[askI % examples.length];
+  };
+  paintAsk();
+  if (!RM()) homeAskTimer = setInterval(() => { askI++; paintAsk(); }, 4000);
+  $('#tileAsk').onclick = () => {
+    const q = ($('#tileAskSub') && $('#tileAskSub').textContent) || examples[0];
+    S.pendingDraft = q;
+    go('ask');
+  };
   $('#tileMatch').onclick = () => go('match');
   $('#tileToday').onclick = () => openToday(p);
+  $('#glance').onclick = () => openToday(p);
   $('#tileChart').onclick = () => openMyChart(p);
   let tithi = '', period = '';
   const paint = () => {
@@ -1261,17 +1379,32 @@ async function pageHome() {
     if (period) bits.push(period);
     $('#gsub').textContent = bits.join(' · ');
   };
+  const paintGlance = g => {
+    const pan = $('#glancePan'); if (!pan || !g) return;
+    const lang = hi() ? 'hi' : 'en';
+    const sky = `${g.tithi[lang]} · ${g.nakshatra[lang]}`;
+    const hint = goodTimeLine(g);
+    pan.textContent = hint ? `${sky} · ${hint}` : sky;
+  };
   fetchPanchang(p).then(g => {
     if (!g || gen !== homeGen) return;
     S.panchang = g;
     tithi = g.tithi[hi() ? 'hi' : 'en'];
     paint();
+    paintGlance(g);
   }).catch(() => {});
-  chartOf(p).then(c => {
+  chartOf(p).then(async c => {
     if (gen !== homeGen || !c.dasha || !c.dasha.current || !c.dasha.current.mahadasha) return;
     const cur = c.dasha.current;
     period = `${plName(cur.mahadasha.lord)}–${plName(cur.antardasha.lord)} ${tr('period', 'दशा')}`;
     paint();
+    try {
+      const day = localISODate();
+      const h = await api(`/api/horoscope?sign=${encodeURIComponent(c.moon_sign)}&lang=${S.lang}&date=${encodeURIComponent(day)}`);
+      if (gen !== homeGen || !$('#glanceHoro') || h.sign !== c.moon_sign) return;
+      const line = glanceHoroLine(h, c.moon_sign);
+      if (line) $('#glanceHoro').textContent = line;
+    } catch { /* the glance keeps its quiet fallback */ }
   }).catch(() => {});
 }
 function readingForSign(text, sign) {
@@ -1561,16 +1694,20 @@ async function pageKundli() {
       <div class="info" id="info" aria-live="polite"></div>
       <div class="legend" id="legend"></div>
     </section>
-    <div class="chips scroll" id="ktools" style="flex:none">
-      <button class="chip" data-sheet="planets">${tr('Planets', 'ग्रह')}</button>
-      <button class="chip" data-sheet="houses">${tr('Houses', 'भाव')}</button>
-      <button class="chip" data-sheet="periods">${tr('Periods', 'दशा')}</button>
-      <button class="chip" data-sheet="yogas">${tr('Yogas', 'योग')}</button>
-      <button class="chip" data-sheet="doshas">${tr('Doshas', 'दोष')}</button>
-      <button class="chip" data-sheet="today">${tr('Today', 'आज')}</button>
-      <button class="chip" id="pdfK">${I.file(16)} PDF</button>
-      <button class="chip" id="shareK">${I.share(16)} ${tr('Share', 'साझा')}</button>
-      <button class="chip" id="askK">${I.ask(16)} ${tr('Ask', 'पूछें')}</button>
+    <div class="ktools" id="ktools">
+      <div class="ktools-grid">
+        <button class="chip" data-sheet="planets">${tr('Planets', 'ग्रह')}</button>
+        <button class="chip" data-sheet="houses">${tr('Houses', 'भाव')}</button>
+        <button class="chip" data-sheet="periods">${tr('Periods', 'दशा')}</button>
+        <button class="chip" data-sheet="yogas">${tr('Yogas', 'योग')}</button>
+        <button class="chip" data-sheet="doshas">${tr('Doshas', 'दोष')}</button>
+        <button class="chip" data-sheet="today">${tr('Today', 'आज')}</button>
+      </div>
+      <div class="ktools-acts">
+        <button class="chip" id="pdfK">${I.file(16)} PDF</button>
+        <button class="chip" id="shareK">${I.share(16)} ${tr('Share', 'साझा')}</button>
+        <button class="chip" id="askK">${I.ask(16)} ${tr('Ask', 'पूछें')}</button>
+      </div>
     </div>`;
   const sheets = {planets: [tr('Planets', 'ग्रह'), () => planetsHtml(c)], houses: [tr('Houses', 'भाव'), () => housesHtml(c)], periods: [tr('Life periods', 'दशाएँ'), () => periodsHtml(c)], yogas: [tr('Yogas', 'योग'), () => yogasHtml(c)], doshas: [tr('Doshas', 'दोष'), () => doshasHtml(c)], today: [tr('Planets today', 'आज के ग्रह'), () => transitsHtml(c)]};
   kMain.querySelectorAll('[data-sheet]').forEach(b => b.onclick = () => openDetail(sheets[b.dataset.sheet][0], sheets[b.dataset.sheet][1]()));
@@ -1911,22 +2048,16 @@ function bindAskForm() {
     }, 4000);
   }
 }
+function threadComposerHtml() {
+  return `<div class="composer" id="composer">${askFormHtml(false)}<p class="ask-note" id="askNote">${tr('Charged only when the answer starts', 'शुल्क तभी, जब उत्तर शुरू हो')}</p><p class="ask-remedy" id="askRemedy">${tr('Remedies, if offered, are optional and free.', 'उपाय हों तो वैकल्पिक और मुफ़्त।')}</p></div>`;
+}
 function ensureAskThread() {
   if ($('#msgs') && !$('#askStage')) return $('#msgs');
-  const form = $('#cf'), note = $('#askNote');
+  stopAskRotate();
   const stage = $('#askStage'); if (stage) stage.remove();
   const chat = $('.chat'); if (chat) chat.classList.remove('is-empty');
-  if (!$('#msgs')) chat.insertAdjacentHTML('beforeend', '<div class="msgs" id="msgs" aria-live="polite"></div><div class="composer" id="composer"></div>');
-  const comp = $('#composer');
-  if (form && comp) {
-    form.className = 'ask-bar';
-    const sample = $('#askSample'); if (sample) sample.remove();
-    const dots = $('#askDots'); if (dots) dots.remove();
-    comp.append(form);
-  }
-  if (note && comp && !comp.contains(note)) comp.append(note);
-  if (comp && !$('#askRemedy')) comp.insertAdjacentHTML('beforeend', `<p class="ask-remedy" id="askRemedy">${tr('Remedies, if offered, are optional and free.', 'उपाय हों तो वैकल्पिक और मुफ़्त।')}</p>`);
-  stopAskRotate();
+  if (chat && !$('#msgs')) chat.insertAdjacentHTML('beforeend', `<div class="msgs" id="msgs" aria-live="polite"></div>${threadComposerHtml()}`);
+  bindAskForm();
   const box = $('#msgs');
   if (box && !box.dataset.bound) {
     box.dataset.bound = '1';
@@ -1955,6 +2086,11 @@ function pageAsk() {
   bindHeader();
   bindAskForm();
   bindGo();
+  if (S.pendingDraft) {
+    const q = S.pendingDraft; S.pendingDraft = null;
+    const ci = $('#ci');
+    if (ci) { ci.value = q; const sample = $('#askSample'); if (sample) sample.hidden = true; ci.focus(); }
+  }
   if (S.pendingQ) { const q = S.pendingQ; S.pendingQ = null; ask(q); }
 }
 const bindGo = () => $$('[data-go]').forEach(b => b.onclick = () => go(b.dataset.go));
@@ -2111,7 +2247,7 @@ function showMatch() {
   $('#mres').innerHTML = `<div class="card"><div class="score"><div class="ring" style="--p:${r.total / 36 * 100}"><div><span><b id="mscore">${r.total}</b><br><small>${tr('of 36', '36 में')}</small></span></div></div>
       <div style="min-width:0"><b>${esc(r.girl_name)} & ${esc(r.boy_name)}</b><div style="margin:4px 0"><span class="tag ${good ? 'good' : 'warn'}">${lvl}</span></div>
       <div class="small muted">${signName(r.girl_moon.sign)} · ${signName(r.boy_moon.sign)}</div></div></div>
-      <div class="chips scroll" style="margin-top:8px"><button class="chip" id="kootaBtn">${tr('8 kootas', '8 कूट')}</button><button class="chip" id="shareM">${I.share(16)} ${tr('Share', 'साझा')}</button><button class="chip" id="askMatch">${I.ask(16)} ${tr('Ask', 'पूछें')}</button></div></div>`;
+      <div class="chips wrap" style="margin-top:8px"><button class="chip" id="kootaBtn">${tr('8 kootas', '8 कूट')}</button><button class="chip" id="shareM">${I.share(16)} ${tr('Share', 'साझा')}</button><button class="chip" id="askMatch">${I.ask(16)} ${tr('Ask', 'पूछें')}</button></div></div>`;
   $('#kootaBtn').onclick = () => openDetail(tr('How the 36 points add up', '36 गुण कैसे बने'), detail);
   $('#shareM').onclick = () => shareCard('match');
   $('#askMatch').onclick = () => { S.pendingQ = tr(`I am considering marriage with ${r.boy_name === activeProfile().name ? r.girl_name : r.boy_name}. Our guna milan is ${r.total}/36. What should I keep in mind?`, `मेरा विवाह ${r.boy_name === activeProfile().name ? r.girl_name : r.boy_name} से विचाराधीन है। गुण मिलान ${r.total}/36 है। मुझे किन बातों का ध्यान रखना चाहिए?`); go('ask'); };
@@ -2149,7 +2285,7 @@ function pageMe() {
       ${w.email ? `<p class="small muted" style="margin:0">${tr('Signed in on this device. Charts and chats follow this sign-in. Each question is paid on the device that asks it.', 'इस डिवाइस पर साइन इन है। कुंडली और चैट इस साइन-इन के साथ रहती हैं। हर प्रश्न उसी डिवाइस पर भुगतान होता है जो पूछती है।')}</p>` : `<form id="magicForm" class="minirow"><input class="input" id="magicEmail" type="email" autocomplete="email" placeholder="${tr('Email for a sign-in link', 'साइन-इन लिंक के लिए ईमेल')}"><button class="btn sm" type="submit">${tr('Email link', 'लिंक भेजें')}</button></form><p class="small muted" id="magicMsg" style="margin:6px 0 0"></p><button class="btn quiet" id="otpBtn" type="button">${tr('Phone OTP', 'फ़ोन OTP')}</button>`}
       <div class="setrow"><span>${tr('Language', 'भाषा')}</span><div class="seg" id="setLang"><button data-v="en" aria-pressed="${!hi()}">EN</button><button data-v="hi" aria-pressed="${hi()}">हि</button></div></div>
       <div class="setrow"><span>${tr('Chart', 'कुंडली')}</span><div class="seg" id="setSty"><button data-v="north" aria-pressed="${S.style === 'north'}">${tr('North', 'उत्तर')}</button><button data-v="south" aria-pressed="${S.style === 'south'}">${tr('South', 'दक्षिण')}</button></div></div></section>
-    <div class="chips scroll"><button class="chip" id="aboutBtn">${tr('About', 'जानकारी')}</button><button class="chip" id="clr">${tr('Clear chat', 'चैट मिटाएँ')}</button></div></main>`;
+    <div class="chips wrap"><button class="chip" id="aboutBtn">${tr('About', 'जानकारी')}</button><button class="chip" id="clr">${tr('Clear chat', 'चैट मिटाएँ')}</button></div></main>`;
   bindHeader();
   $('#personRow').onclick = openPeople;
   $('#copyRef').onclick = copyReferral;
