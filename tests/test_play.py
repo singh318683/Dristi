@@ -393,3 +393,7 @@ def test_ui_states_the_price_and_has_no_packs():
     assert "service.consume" not in html
     assert "$0.99" in privacy and "Google Play" in privacy
     assert "demo only" not in privacy.lower()
+    assert "Charged only when the answer starts" in html
+    assert "ask-sample" in html and "ask-dots" in html
+    assert "Sending buys one $0.99 question" not in html
+    assert "priceLabel()" in html
