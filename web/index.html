@@ -237,6 +237,7 @@ table.t tr:last-child td{border-bottom:0}
 .bot i{position:absolute;right:-1px;bottom:-1px;width:12px;height:12px;border-radius:50%;background:var(--faint);border:2px solid var(--bg)}
 .bot.on i{background:var(--good)}
 .chat .ttl{flex:1;min-width:0;line-height:1.25;margin-left:6px}
+.ask-top .ttl{margin-left:0}
 .chat .ttl b{display:block}
 .chat .ttl small{display:block;color:var(--muted);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .credits{font-size:13.5px;color:var(--muted);font-weight:600;white-space:nowrap}
@@ -269,6 +270,34 @@ html[lang=hi] .bub{line-height:1.7}
 .composer textarea:focus{outline:none;border-color:var(--primary)}
 .send{width:48px;height:48px;border-radius:50%;border:0;background:var(--primary);color:var(--on-primary);display:grid;place-items:center;flex:none}
 .quota{font-size:12.5px;color:var(--muted);text-align:center;margin-top:7px}
+.ask-stage{flex:1;min-height:0;display:flex;flex-direction:column;justify-content:center;padding:8px 16px 12px;overflow:hidden}
+.ask-hero{text-align:center;margin-bottom:16px}
+.ask-om{width:84px;height:84px;border-radius:50%;background:var(--primary-tint);color:var(--primary);display:grid;place-items:center;margin:0 auto 14px}
+.ask-om .dev{font-size:42px;line-height:1}
+.ask-hero h1{margin:0;font-size:26px;line-height:1.25;font-weight:700;letter-spacing:-.01em}
+.ask-card{background:var(--surface);border:1.5px solid var(--line-strong);border-radius:18px;padding:14px 14px 12px;box-shadow:var(--shadow)}
+.ask-field{position:relative;min-height:64px}
+.ask-card textarea{width:100%;border:0;background:transparent;resize:none;min-height:64px;padding:0;font-size:16px;line-height:1.4}
+.ask-card textarea:focus{outline:none}
+.ask-sample{position:absolute;inset:0 auto auto 0;max-width:100%;border:0;background:none;color:var(--faint);font-size:16px;line-height:1.4;text-align:left;padding:0;min-height:44px}
+.ask-actions{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:8px}
+.ask-dots{display:flex;align-items:center;gap:2px}
+.ask-dots button{width:28px;height:28px;border:0;background:transparent;padding:0;display:grid;place-items:center;min-height:28px}
+.ask-dots button i{width:7px;height:7px;border-radius:50%;background:var(--line-strong);display:block}
+.ask-dots button[aria-current=true] i{background:var(--primary);width:8px;height:8px}
+.ask-note{margin:12px 0 0;text-align:center;color:var(--muted);font-size:13.5px}
+.ask-bar{display:flex;gap:8px;align-items:flex-end}
+.ask-bar textarea{flex:1;resize:none;min-height:48px;border:1.5px solid var(--line-strong);border-radius:16px;padding:11px 14px;max-height:96px;background:var(--bg);font-size:16px}
+.ask-bar textarea:focus{outline:none;border-color:var(--primary)}
+.ask-bar .btn{min-height:48px;padding:0 14px;white-space:nowrap;border-radius:14px}
+.ask-remedy{margin:6px 0 0;text-align:center;color:var(--faint);font-size:12px}
+@media (max-height:700px){
+  .ask-om{width:64px;height:64px;margin-bottom:8px}
+  .ask-om .dev{font-size:32px}
+  .ask-hero{margin-bottom:10px}
+  .ask-hero h1{font-size:22px}
+  .ask-note{margin-top:8px}
+}
 .pair{display:grid;grid-template-columns:1fr 28px 1fr;gap:6px;align-items:center}
 .pick{border:1.5px solid var(--line-strong);border-radius:14px;padding:12px 10px;background:var(--surface);text-align:center;display:flex;flex-direction:column;align-items:center;gap:3px;min-width:0}
 .pick small{color:var(--muted);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.08em}
@@ -1827,46 +1856,111 @@ const bubble = m => {
   const whyHtml = why ? `<details class="why"><summary>${tr('Why', 'क्यों')}</summary><p>${esc(why)}</p></details>` : '';
   return `<div class="bub ai">${cite(md(parts.body))}${plainBox(parts.heading, parts.simple)}${whyHtml}</div>`;
 };
-function pageAsk() {
-  const p = activeProfile(), hist = store.get(chatKey(), []), on = !!(S.status && S.status.ai_configured);
-  $('#app').innerHTML = `<div class="chat">
-    <header class="top"><div class="bot ${on ? 'on' : ''}"><span class="dev">ॐ</span><i></i></div>
-      <div class="ttl"><b>${tr('Acharya', 'आचार्य')}</b><small>${tr('AI astrologer', 'AI ज्योतिषी')}${on ? '' : ' · ' + tr('not on yet', 'अभी चालू नहीं')}</small></div>
-      <button class="iconbtn credits" id="credBtn" aria-label="${tr('Question price', 'प्रश्न का मूल्य')}">${priceLabel()}</button>
-      <button class="iconbtn langbtn" id="langBtn">${hi() ? 'English' : 'हिंदी'}</button></header>
-    <button class="asking" id="whoBtn" aria-haspopup="dialog">${tr('Reading the chart of', 'इनकी कुंडली पढ़ रहे हैं:')} <span class="avatar sm">${initial(p.name)}</span><b style="color:var(--ink)">${esc(p.name)}</b>${I.chev()}</button>
-    <div class="msgs" id="msgs" aria-live="polite"></div>
-    <div class="composer">${hist.length ? `<div class="chips scroll" id="qchips">${chipsHtml()}</div>` : ''}
-      <div class="costline" id="costline"></div>
-      <form id="cf"><textarea id="ci" rows="1" aria-label="${tr('Your question', 'आपका प्रश्न')}" placeholder="${tr('Ask about career, marriage, health…', 'करियर, विवाह, स्वास्थ्य के बारे में पूछें…')}"></textarea><button class="send" aria-label="${tr('Send', 'भेजें')}">${I.send()}</button></form>
-      <div class="quota" id="quota"></div>
-      <div class="quota">${tr('Remedies, if offered, are optional and free.', 'उपाय हों तो वैकल्पिक और मुफ़्त।')}</div></div></div>`;
-  bindHeader();
-  const c = $('#credBtn'); if (c) c.onclick = openPrice;
-  const box = $('#msgs');
-  box.innerHTML = hist.length ? hist.map(bubble).join('') : `<div class="welcome"><div class="bot ${on ? 'on' : ''}"><span class="dev">ॐ</span><i></i></div>
-      <h4>${tr('Acharya · AI astrologer', 'आचार्य · AI ज्योतिषी')}</h4>
-      <p>${tr(`Namaste, ${esc(p.name)}. I read your chart (${fmtDate(p.date)}, ${esc(p.place.name.split(',')[0])}) and cite the factors I used.`, `नमस्ते, ${esc(p.name)}। मैं आपकी कुंडली (${fmtDate(p.date)}, ${esc(p.place.name.split(',')[0])}) पढ़कर जिन बातों का उपयोग करूँ, उन्हें बताऊँगा।`)}</p>
-      ${on ? '' : `<div class="notice" style="text-align:left;margin-bottom:14px">${I.info()}<div><b>${ERR.ai_not_configured()[0]}.</b> ${ERR.ai_not_configured()[1]}</div></div>`}
-      <div class="qgrid">${chipsHtml('q')}</div></div>`;
-  box.scrollTop = box.scrollHeight;
-  updateQuota();
-  const ci = $('#ci');
-  ci.oninput = () => { ci.style.height = 'auto'; ci.style.height = Math.min(120, ci.scrollHeight) + 'px'; };
+const ASK_EXAMPLES = () => [
+  tr('When will my career grow?', 'मेरा करियर कब आगे बढ़ेगा?'),
+  tr('When is marriage likely for me?', 'मेरी शादी कब हो सकती है?'),
+  tr('What should I take care of in my health?', 'स्वास्थ्य में किन बातों का ध्यान रखूँ?'),
+  tr('How does money look in my chart?', 'मेरी कुंडली में धन कैसा रहेगा?'),
+  tr('What does my chart say about education?', 'पढ़ाई के बारे में कुंडली क्या कहती है?'),
+  tr('What is the tone of this year for me?', 'इस साल का रुख मेरे लिए कैसा है?'),
+];
+let askRotate = 0;
+let askIndex = 0;
+function stopAskRotate() { if (askRotate) { clearInterval(askRotate); askRotate = 0; } }
+function askFormHtml(empty) {
+  const price = `${tr('Ask', 'पूछें')} · ${priceLabel()}`;
+  if (empty) return `<form id="cf" class="ask-card"><div class="ask-field"><textarea id="ci" rows="2" aria-label="${tr('Your question', 'आपका प्रश्न')}"></textarea><button type="button" class="ask-sample" id="askSample"></button></div><div class="ask-actions"><div class="ask-dots" id="askDots" role="tablist" aria-label="${tr('Example questions', 'उदाहरण प्रश्न')}"></div><button type="submit" class="btn" id="askSend">${price}</button></div></form>`;
+  return `<form id="cf" class="ask-bar"><textarea id="ci" rows="1" aria-label="${tr('Your question', 'आपका प्रश्न')}" placeholder="${tr('Ask a question…', 'प्रश्न लिखें…')}"></textarea><button type="submit" class="btn" id="askSend">${price}</button></form>`;
+}
+function bindAskForm() {
+  const ci = $('#ci'); if (!ci) return;
+  ci.oninput = () => {
+    ci.style.height = 'auto';
+    ci.style.height = Math.min(120, ci.scrollHeight) + 'px';
+    const sample = $('#askSample'); if (sample) sample.hidden = !!ci.value.trim();
+  };
+  ci.onfocus = () => { ci.dataset.typing = '1'; };
+  ci.onblur = () => { if (!ci.value.trim()) delete ci.dataset.typing; };
   ci.onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); $('#cf').requestSubmit(); } };
   $('#cf').onsubmit = e => { e.preventDefault(); const q = ci.value.trim(); if (q) { ci.value = ''; ci.style.height = 'auto'; ask(q); } };
-  $$('.chat [data-q]').forEach(b => b.onclick = () => ask(b.dataset.q));
+  const sample = $('#askSample'), dots = $('#askDots');
+  if (!sample || !dots) return;
+  const examples = ASK_EXAMPLES();
+  const show = i => {
+    askIndex = (i + examples.length) % examples.length;
+    const q = examples[askIndex];
+    sample.dataset.q = q;
+    sample.textContent = (hi() ? 'जैसे ' : 'e.g. ') + q;
+    sample.setAttribute('aria-label', tr('Use this example', 'यह उदाहरण लिखें') + ': ' + q);
+    $$('#askDots button').forEach((b, n) => b.setAttribute('aria-current', n === askIndex ? 'true' : 'false'));
+  };
+  dots.innerHTML = examples.map((q, n) => `<button type="button" aria-label="${esc(q)}"><i></i></button>`).join('');
+  $$('#askDots button').forEach((b, n) => b.onclick = () => show(n));
+  sample.onclick = () => {
+    ci.value = sample.dataset.q || '';
+    sample.hidden = true;
+    ci.dataset.typing = '1';
+    ci.focus();
+  };
+  show(askIndex % examples.length);
+  stopAskRotate();
+  if (!RM()) {
+    askRotate = setInterval(() => {
+      if (!sample.isConnected || ci.dataset.typing || ci.value.trim() || document.activeElement === ci) return;
+      show(askIndex + 1);
+    }, 4000);
+  }
+}
+function ensureAskThread() {
+  if ($('#msgs') && !$('#askStage')) return $('#msgs');
+  const form = $('#cf'), note = $('#askNote');
+  const stage = $('#askStage'); if (stage) stage.remove();
+  const chat = $('.chat'); if (chat) chat.classList.remove('is-empty');
+  if (!$('#msgs')) chat.insertAdjacentHTML('beforeend', '<div class="msgs" id="msgs" aria-live="polite"></div><div class="composer" id="composer"></div>');
+  const comp = $('#composer');
+  if (form && comp) {
+    form.className = 'ask-bar';
+    const sample = $('#askSample'); if (sample) sample.remove();
+    const dots = $('#askDots'); if (dots) dots.remove();
+    comp.append(form);
+  }
+  if (note && comp && !comp.contains(note)) comp.append(note);
+  if (comp && !$('#askRemedy')) comp.insertAdjacentHTML('beforeend', `<p class="ask-remedy" id="askRemedy">${tr('Remedies, if offered, are optional and free.', 'उपाय हों तो वैकल्पिक और मुफ़्त।')}</p>`);
+  stopAskRotate();
+  const box = $('#msgs');
+  if (box && !box.dataset.bound) {
+    box.dataset.bound = '1';
+    box.addEventListener('click', e => { const b = e.target.closest('.cite'); if (b) openCite(b.dataset.cp, b.dataset.ch, b.dataset.cs, b.textContent); });
+    box.addEventListener('keydown', e => { const b = e.target.closest('.cite'); if (b && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); openCite(b.dataset.cp, b.dataset.ch, b.dataset.cs, b.textContent); } });
+  }
+  return box;
+}
+function pageAsk() {
+  stopAskRotate();
+  const p = activeProfile(), hist = store.get(chatKey(), []), on = !!(S.status && S.status.ai_configured);
+  const head = `<header class="top ask-top"><div class="ttl"><b>${tr('Acharya', 'आचार्य')}</b><small>${tr('AI astrologer', 'AI ज्योतिषी')}${on ? '' : ' · ' + tr('not on yet', 'अभी चालू नहीं')}</small></div><button class="iconbtn langbtn" id="langBtn">${hi() ? 'English' : 'हिंदी'}</button></header>
+    <button class="asking" id="whoBtn" aria-haspopup="dialog">${tr('Reading the chart of', 'इनकी कुंडली पढ़ रहे हैं:')} <span class="avatar sm">${initial(p.name)}</span><b style="color:var(--ink)">${esc(p.name)}</b>${I.chev()}</button>`;
+  const note = `<p class="ask-note" id="askNote">${tr('Charged only when the answer starts', 'शुल्क तभी, जब उत्तर शुरू हो')}</p>`;
+  if (!hist.length) {
+    $('#app').innerHTML = `<div class="chat is-empty">${head}<div class="ask-stage" id="askStage"><div class="welcome ask-hero"><div class="ask-om" aria-hidden="true"><span class="dev">ॐ</span></div><h1>${tr(`Namaste, ${esc(p.name)}. What would you like to know?`, `नमस्ते, ${esc(p.name)}। आप क्या जानना चाहेंगे?`)}</h1></div>${askFormHtml(true)}${note}</div></div>`;
+  } else {
+    $('#app').innerHTML = `<div class="chat">${head}<div class="msgs" id="msgs" aria-live="polite"></div><div class="composer" id="composer">${askFormHtml(false)}${note}<p class="ask-remedy" id="askRemedy">${tr('Remedies, if offered, are optional and free.', 'उपाय हों तो वैकल्पिक और मुफ़्त।')}</p></div></div>`;
+    const box = $('#msgs');
+    box.innerHTML = hist.map(bubble).join('');
+    box.scrollTop = box.scrollHeight;
+    box.dataset.bound = '1';
+    box.addEventListener('click', e => { const b = e.target.closest('.cite'); if (b) openCite(b.dataset.cp, b.dataset.ch, b.dataset.cs, b.textContent); });
+    box.addEventListener('keydown', e => { const b = e.target.closest('.cite'); if (b && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); openCite(b.dataset.cp, b.dataset.ch, b.dataset.cs, b.textContent); } });
+  }
+  bindHeader();
+  bindAskForm();
   bindGo();
-  box.addEventListener('click', e => { const b = e.target.closest('.cite'); if (b) openCite(b.dataset.cp, b.dataset.ch, b.dataset.cs, b.textContent); });
-  box.addEventListener('keydown', e => { const b = e.target.closest('.cite'); if (b && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); openCite(b.dataset.cp, b.dataset.ch, b.dataset.cs, b.textContent); } });
   if (S.pendingQ) { const q = S.pendingQ; S.pendingQ = null; ask(q); }
 }
 const bindGo = () => $$('[data-go]').forEach(b => b.onclick = () => go(b.dataset.go));
 function updateQuota() {
-  const q = $('#quota'), cost = $('#costline');
-  if (q) q.textContent = tr('Each question is $0.99 through Google Play. There is no free question.', 'हर प्रश्न Google Play से $0.99 है। कोई मुफ़्त प्रश्न नहीं।');
-  if (cost) cost.textContent = tr('Sending buys one $0.99 question. If the answer does not start, that purchase can be used again.', 'भेजने पर एक $0.99 का प्रश्न खरीदा जाएगा। उत्तर शुरू न हो तो वही खरीदारी फिर इस्तेमाल हो सकती है।');
-  const c = $('#credBtn'); if (c) c.textContent = priceLabel();
+  const send = $('#askSend');
+  if (send) send.textContent = `${tr('Ask', 'पूछें')} · ${priceLabel()}`;
 }
 function openPrice() {
   openDetail(tr('Acharya questions', 'आचार्य प्रश्न'), `<p><b>$0.99</b> ${tr('each, through Google Play. One purchase, one question. There is no free question and no bundle.', 'प्रत्येक, Google Play से। एक खरीदारी, एक प्रश्न। कोई मुफ़्त प्रश्न नहीं और कोई पैक नहीं।')}</p><p class="small muted">${tr('The chart, life periods, dosha, panchang, matching, daily horoscope and kundli PDF stay free. If an answer fails before it starts, the same purchase can be used again.', 'कुंडली, दशा, दोष, पंचांग, मिलान, दैनिक राशिफल और कुंडली PDF मुफ़्त हैं। उत्तर शुरू होने से पहले असफल हो तो वही खरीदारी फिर इस्तेमाल हो सकती है।')}</p>`);
@@ -1917,9 +2011,9 @@ async function buyPlayQuestion() {
   return token;
 }
 function noteAskError(q, code) {
-  const key = chatKey(), hist = store.get(key, []), box = $('#msgs');
+  const key = chatKey(), hist = store.get(key, []);
+  const box = ensureAskThread();
   if (!box) return;
-  const welcome = box.querySelector('.welcome'); if (welcome) welcome.remove();
   box.insertAdjacentHTML('beforeend', bubble({role: 'user', content: q}) + errBubble(code));
   hist.push({role: 'user', content: q}, {role: 'error', code: code || 'llm_error', content: ''});
   store.set(key, hist.slice(-40));
@@ -1942,9 +2036,8 @@ async function ask(q) {
     return;
   }
   const p = activeProfile(), key = chatKey(), hist = store.get(key, []);
-  const box = $('#msgs');
+  const box = ensureAskThread();
   if (!box) { S.streaming = false; return; }
-  const w = box.querySelector('.welcome'); if (w) w.remove();
   box.insertAdjacentHTML('beforeend', bubble({role: 'user', content: q}));
   const aiEl = document.createElement('div'); aiEl.className = 'bub ai'; aiEl.innerHTML = `<span class="typing" aria-label="${tr('Reading your chart', 'कुंडली पढ़ रहे हैं')}"><i></i><i></i><i></i></span>`;
   box.appendChild(aiEl); box.scrollTop = box.scrollHeight;
@@ -1974,7 +2067,6 @@ async function ask(q) {
   } else { hist.push({role: 'user', content: q}, {role: 'assistant', content: text}); aiEl.outerHTML = bubble({role: 'assistant', content: text}); }
   store.set(key, hist.slice(-40));
   scheduleSync();
-  if (!$('#qchips')) { $('.composer').insertAdjacentHTML('afterbegin', `<div class="chips scroll" id="qchips">${chipsHtml()}</div>`); $$('#qchips [data-q]').forEach(b => b.onclick = () => ask(b.dataset.q)); }
   box.scrollTop = box.scrollHeight;
   refreshWallet().then(updateQuota);
 }
