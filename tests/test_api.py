@@ -120,6 +120,23 @@ def test_horoscope_date_follows_the_device_within_one_day(client):
     assert bad.status_code == 400
 
 
+def test_background_music_is_one_synthesized_drone():
+    root = os.path.join(os.path.dirname(__file__), "..")
+    html = open(os.path.join(root, "web", "index.html"), encoding="utf-8").read()
+    credits = open(os.path.join(root, "CREDITS.md"), encoding="utf-8").read()
+    assert 'id="musicBtn"' in html
+    assert html.count("function musicBuild") == 1
+    assert "if (musicCtx) return" in html
+    assert "webkitAudioContext" in html
+    assert "MUSIC_LEVEL = 0.25" in html
+    assert "musicStart(3)" in html
+    assert "visibilitychange" in html
+    assert "createPeriodicWave" in html
+    assert ".mp3" not in html and ".ogg" not in html and ".m4a" not in html
+    assert "Web Audio" in credits and "no third-party music license" in credits
+    assert "drishti-v9" in open(os.path.join(root, "web", "sw.js"), encoding="utf-8").read()
+
+
 def test_home_asks_for_the_device_date():
     html = open(os.path.join(os.path.dirname(__file__), "..", "web", "index.html"), encoding="utf-8").read()
     assert "function localISODate" in html

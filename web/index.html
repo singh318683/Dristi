@@ -59,6 +59,10 @@ a{color:var(--primary)}
 .who-btn{max-width:170px}
 .who-btn span.n{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .langbtn{font-size:14px;color:var(--muted);font-weight:600}
+.musicbtn{width:40px;min-width:40px;height:40px;min-height:40px;padding:0;flex:none;color:var(--muted)}
+.musicbtn[aria-pressed=true]{color:var(--faint)}
+.musicbtn svg{display:block}
+.onb-tools{display:flex;align-items:center;gap:2px;flex:none}
 .sheet-bg{position:fixed;inset:0;background:rgba(20,16,10,.32);z-index:60;display:flex;align-items:flex-start;justify-content:center;padding-top:calc(env(safe-area-inset-top) + 64px)}
 .sheet{background:var(--surface);border:1px solid var(--line);border-radius:18px;box-shadow:0 18px 50px -20px rgba(0,0,0,.45);width:min(92vw,380px);padding:8px}
 .sheet h4{margin:8px 10px 6px;font-size:12.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
@@ -129,7 +133,7 @@ select.input{appearance:none;-webkit-appearance:none;background-image:url("data:
 .resolved b{color:var(--ink);font-weight:600}
 .onb{max-width:560px;margin:0 auto;min-height:100dvh;padding:calc(env(safe-area-inset-top) + 8px) 20px 24px;display:flex;flex-direction:column}
 .onb .bar{margin:4px 0 6px}
-.onb .stepl{font-size:13.5px;color:var(--muted);font-weight:600}
+.onb .stepl{font-size:13.5px;color:var(--muted);font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .onb h1{font-weight:700;font-size:26px;line-height:1.25;letter-spacing:-.01em;margin:20px 0 6px}
 .onb .lead{color:var(--muted);margin:0;font-size:16px}
 .onb .actions{margin-top:auto;padding-top:28px;display:flex;gap:10px}
@@ -409,8 +413,13 @@ body.app-fit .app{flex:1;min-height:0;width:100%;max-width:560px;height:auto;dis
 body.app-fit nav.bottom{position:relative;left:auto;right:auto;width:100%;max-width:560px;flex:none;flex-shrink:0;padding-bottom:env(safe-area-inset-bottom)}
 body.app-fit nav.bottom .in{height:56px}
 body.app-fit .top{flex:none;flex-shrink:0;flex-wrap:nowrap;min-height:48px;padding-top:calc(env(safe-area-inset-top) + 2px);padding-bottom:2px}
-body.app-fit .logo small{letter-spacing:.06em;font-size:10px}
-body.app-fit .who-btn{max-width:108px}
+body.app-fit .logo small{letter-spacing:.04em;font-size:10px}
+body.app-fit .who-btn{max-width:100px}
+body.app-fit .musicbtn{width:36px;min-width:36px;height:36px;min-height:36px}
+body.app-fit .langbtn{padding:0 4px}
+@media (max-width:360px){
+  body.app-fit .logo small{display:none}
+}
 body.app-fit main.fit{flex:1;min-height:0;overflow-x:hidden;overflow-y:auto;display:flex;flex-direction:column;gap:6px;padding:6px 12px;-webkit-overflow-scrolling:touch}
 body.app-fit main.fit > *{flex:0 0 auto}
 body.app-fit .chips{flex-shrink:0;min-height:36px}
@@ -767,6 +776,8 @@ const I = {
   share: s => ic('<circle cx="6" cy="12" r="2.2"/><circle cx="17" cy="6.5" r="2.2"/><circle cx="17" cy="17.5" r="2.2"/><path d="M8 11.2l7-3.6M8 12.8l7 3.6"/>', s || 18),
   file: s => ic('<path d="M7 3h7l5 5v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M14 3v5h5"/>', s || 18),
   sun: s => ic('<circle cx="12" cy="12" r="4"/><path d="M12 2.6v2M12 19.4v2M2.6 12h2M19.4 12h2M5.1 5.1l1.4 1.4M17.5 17.5l1.4 1.4M18.9 5.1l-1.4 1.4M6.5 17.5l-1.4 1.4"/>', s || 22),
+  musicOn: s => ic('<path d="M4 10v4h3l4 3V7L7 10z"/><path d="M15 9.2a3.2 3.2 0 0 1 0 5.6"/><path d="M17.2 7a6 6 0 0 1 0 10"/>', s || 20),
+  musicOff: s => ic('<path d="M4 10v4h3l4 3V7L7 10z"/><path d="M16 9.5l4 5M20 9.5l-4 5"/>', s || 20),
   verse: s => ic('<rect x="4" y="4" width="16" height="16" rx="3"/>', s || 16, 1.8),
 };
 const CHIPS = () => [
@@ -798,9 +809,129 @@ function nav() {
   const items = [['home', I.home(), tr('Home', 'होम')], ['kundli', I.chart(), tr('Chart', 'कुंडली')], ['ask', I.ask(), tr('Ask', 'पूछें')], ['match', I.match(), tr('Match', 'मिलान')], ['me', I.me(), tr('Profile', 'प्रोफ़ाइल')]];
   return `<nav class="bottom" aria-label="Main"><div class="in">${items.map(([k, i, l]) => `<button data-t="${k}" ${S.tab === k ? 'aria-current="page"' : ''}><span class="ico">${i}</span>${l}</button>`).join('')}</div></nav>`;
 }
+// One tanpura-style drone for the whole app. Synthesized here, so nothing is fetched
+// and nothing is licensed. See CREDITS.md. The context is created on the first gesture.
+var musicCtx = null, musicGain = null, musicBuilt = 0, musicPlaying = false, musicHeld = false, musicTimer = 0;
+const MUSIC_LEVEL = 0.25;
+function musicOn() { return store.get('music', true) !== false; }
+function musicBtnHtml() {
+  const muted = !musicOn();
+  const label = muted ? tr('Play background music', 'संगीत चालू करें') : tr('Mute background music', 'संगीत बंद करें');
+  return `<button type="button" class="iconbtn musicbtn" id="musicBtn" aria-pressed="${muted ? 'true' : 'false'}" aria-label="${label}">${muted ? I.musicOff(20) : I.musicOn(20)}</button>`;
+}
+function musicPaint() {
+  const b = document.getElementById('musicBtn');
+  if (!b) return;
+  const muted = !musicOn();
+  b.setAttribute('aria-pressed', muted ? 'true' : 'false');
+  b.setAttribute('aria-label', muted ? tr('Play background music', 'संगीत चालू करें') : tr('Mute background music', 'संगीत बंद करें'));
+  b.innerHTML = muted ? I.musicOff(20) : I.musicOn(20);
+}
+function musicRamp(to, seconds, done) {
+  clearTimeout(musicTimer);
+  if (!musicCtx || !musicGain) return;
+  const g = musicGain.gain, now = musicCtx.currentTime;
+  g.cancelScheduledValues(now);
+  g.setValueAtTime(g.value, now);
+  g.linearRampToValueAtTime(to, now + seconds);
+  if (done) musicTimer = setTimeout(done, seconds * 1000 + 40);
+}
+function musicBuild() {
+  if (musicCtx) return;
+  const AC = window.AudioContext || window.webkitAudioContext;
+  if (!AC) return;
+  musicCtx = new AC();
+  musicBuilt += 1;
+  const master = musicCtx.createGain();
+  master.gain.value = 0;
+  const breath = musicCtx.createGain();
+  breath.gain.value = 0.92;
+  const filter = musicCtx.createBiquadFilter();
+  filter.type = 'lowpass';
+  filter.frequency.value = 1280;
+  filter.Q.value = 0.35;
+  const lfo = musicCtx.createOscillator();
+  lfo.frequency.value = 0.07;
+  const lfoAmt = musicCtx.createGain();
+  lfoAmt.gain.value = 0.05;
+  lfo.connect(lfoAmt);
+  lfoAmt.connect(breath.gain);
+  lfo.start();
+  filter.connect(breath);
+  breath.connect(master);
+  master.connect(musicCtx.destination);
+  musicGain = master;
+  const real = new Float32Array(12), imag = new Float32Array(12);
+  [0, 1, 0.58, 0.34, 0.22, 0.14, 0.09, 0.055, 0.035, 0.02, 0.012, 0.008].forEach((amp, i) => { imag[i] = amp; });
+  const wave = musicCtx.createPeriodicWave(real, imag);
+  const sa = 146.83;
+  [[sa / 2, 0.08, -6], [sa / 2, 0.08, 5], [sa, 0.11, -4], [sa, 0.11, 7], [sa * 1.5, 0.08, -5], [sa * 1.5, 0.08, 8], [sa * 2, 0.04, -3], [sa * 2, 0.04, 4]].forEach(([freq, gain, cents]) => {
+    const osc = musicCtx.createOscillator();
+    osc.setPeriodicWave(wave);
+    osc.frequency.value = freq;
+    osc.detune.value = cents;
+    const vg = musicCtx.createGain();
+    vg.gain.value = gain;
+    osc.connect(vg);
+    vg.connect(filter);
+    osc.start();
+  });
+}
+function musicStart(seconds) {
+  if (!musicOn() || document.hidden) return;
+  musicBuild();
+  if (!musicCtx) return;
+  const resumed = musicCtx.resume();
+  if (resumed && resumed.catch) resumed.catch(() => {});
+  musicHeld = false;
+  musicPlaying = true;
+  musicRamp(MUSIC_LEVEL, seconds);
+}
+function musicSilence(seconds, andSuspend) {
+  if (!musicCtx) return;
+  musicHeld = true;
+  musicRamp(0, seconds, () => {
+    if (musicHeld && musicCtx && musicCtx.state === 'running' && (andSuspend || !musicOn())) musicCtx.suspend();
+  });
+}
+function musicToggle() {
+  if (musicOn()) {
+    store.set('music', false);
+    musicPlaying = false;
+    musicSilence(0.45, true);
+  } else {
+    store.set('music', true);
+    musicStart(3);
+  }
+  musicPaint();
+}
+function musicOnPointer(e) {
+  if (e.target && e.target.closest && e.target.closest('#musicBtn')) return;
+  if (musicPlaying || !musicOn()) return;
+  musicStart(3);
+}
+function musicOnVisible() {
+  if (document.hidden) {
+    if (musicCtx && musicPlaying) musicSilence(0.6, true);
+    return;
+  }
+  if (!musicPlaying || !musicOn() || !musicCtx) return;
+  musicHeld = false;
+  const resumed = musicCtx.resume();
+  if (resumed && resumed.catch) resumed.catch(() => {});
+  musicRamp(MUSIC_LEVEL, 1.5);
+}
+function bindMusic() {
+  const b = document.getElementById('musicBtn');
+  if (b) b.onclick = e => { e.preventDefault(); e.stopPropagation(); musicToggle(); };
+}
+document.addEventListener('pointerdown', musicOnPointer, true);
+document.addEventListener('visibilitychange', musicOnVisible);
+window.addEventListener('pagehide', () => { if (musicCtx && musicPlaying) musicSilence(0.4, true); });
 function header() {
   const p = activeProfile();
   return `<header class="top"><a class="logo" href="#" id="logo" aria-label="${tr('Drishti, AI astrologer', 'दृष्टि, AI ज्योतिषी')}"><span class="dev">दृष्टि</span><small>${tr('AI astrologer', 'AI ज्योतिषी')}</small></a>
+    ${musicBtnHtml()}
     <button class="iconbtn langbtn" id="langBtn" aria-label="${tr('Switch to Hindi', 'Switch to English')}">${hi() ? 'English' : 'हिंदी'}</button>
     <button class="iconbtn who-btn" id="whoBtn" aria-haspopup="dialog" aria-label="${tr('Switch person', 'व्यक्ति बदलें')}"><span class="avatar">${initial(p.name)}</span><span class="n">${esc(p.name)}</span>${I.chev()}</button></header>`;
 }
@@ -808,6 +939,7 @@ function bindHeader() {
   const l = $('#langBtn'); if (l) l.onclick = () => { S.lang = hi() ? 'en' : 'hi'; store.set('lang', S.lang); render(); };
   const w = $('#whoBtn'); if (w) w.onclick = openSwitcher;
   const g = $('#logo'); if (g) g.onclick = e => { e.preventDefault(); go('home'); };
+  bindMusic();
 }
 const REL = {Self: 'स्वयं', Spouse: 'जीवनसाथी', Child: 'संतान', Parent: 'माता-पिता', Family: 'परिवार', Friend: 'मित्र'};
 const relName = r => hi() ? (REL[r] || r || '') : (r || '');
@@ -861,7 +993,7 @@ function artSVG() {
 function onboarding() {
   const o = S.onb || (S.onb = {step: 0, relation: 'Self', unknown: false});
   if (o.step === 0) return `<div class="onb">
-    <div class="spread"><span></span><button class="btn quiet" id="langOnb">${hi() ? 'English' : 'हिंदी'}</button></div>
+    <div class="spread"><span></span><span class="onb-tools">${musicBtnHtml()}<button class="btn quiet" id="langOnb">${hi() ? 'English' : 'हिंदी'}</button></span></div>
     <div class="hero-art">${artSVG()}</div>
     <div style="text-align:center"><div class="dev" style="font-size:40px;color:var(--primary);line-height:1.2">दृष्टि</div>
     <h1 style="margin-top:4px">${tr('Your birth chart, explained simply', 'आपकी कुंडली, सरल भाषा में')}</h1>
@@ -873,7 +1005,7 @@ function onboarding() {
     <div class="actions" style="flex-direction:column"><button class="btn block" id="go1">${tr('Get started', 'शुरू करें')}</button>
       <p class="small muted" style="text-align:center;margin:6px 0 0">${tr('Each Acharya question is $0.99 on Google Play. The chart, matching and horoscope are free.', 'आचार्य का हर प्रश्न Google Play पर $0.99 है। कुंडली, मिलान और राशिफल मुफ़्त हैं।')}</p>
       <p class="small muted" style="text-align:center;margin:6px 0 0">${tr('3 quick steps. Your details stay on this phone.', '3 छोटे चरण। आपकी जानकारी इसी फ़ोन पर रहती है।')} <a href="privacy.html">${tr('Privacy', 'गोपनीयता')}</a></p></div></div>`;
-  const head = n => `<div class="spread" style="min-height:44px"><span class="stepl">${tr(`Step ${n} of 3`, `चरण ${n} / 3`)} · ${[tr('About', 'परिचय'), tr('Birth date & time', 'जन्म तिथि और समय'), tr('Birth place', 'जन्म स्थान')][n - 1]}</span>${S.profiles.length ? `<button class="btn quiet" id="cancel">${tr('Cancel', 'रद्द करें')}</button>` : ''}</div><div class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="3" aria-valuenow="${n}"><i style="width:${n / 3 * 100}%"></i></div>`;
+  const head = n => `<div class="spread" style="min-height:44px"><span class="stepl">${tr(`Step ${n} of 3`, `चरण ${n} / 3`)} · ${[tr('About', 'परिचय'), tr('Birth date & time', 'जन्म तिथि और समय'), tr('Birth place', 'जन्म स्थान')][n - 1]}</span><span class="onb-tools">${musicBtnHtml()}${S.profiles.length ? `<button class="btn quiet" id="cancel">${tr('Cancel', 'रद्द करें')}</button>` : ''}</span></div><div class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="3" aria-valuenow="${n}"><i style="width:${n / 3 * 100}%"></i></div>`;
   if (o.step === 1) return `<div class="onb">${head(1)}
     <h1>${o.edit ? tr('Edit details', 'विवरण बदलें') : S.profiles.length ? tr('Who is this chart for?', 'यह कुंडली किसकी है?') : tr("Let's start with you", 'पहले आपके बारे में')}</h1>
     <p class="lead">${tr('A first name is enough. The astrologer uses it to greet you.', 'केवल पहला नाम काफ़ी है।')}</p>
@@ -1143,6 +1275,7 @@ function bindOnb() {
   const step = n => { o.step = n; render(); window.scrollTo(0, 0); };
   on('go1', () => step(1));
   on('langOnb', () => { S.lang = hi() ? 'en' : 'hi'; store.set('lang', S.lang); render(); });
+  bindMusic();
   on('cancel', () => { S.onb = null; render(); });
   $$('#rel button').forEach(b => b.onclick = () => { o.relation = b.dataset.v; $$('#rel button').forEach(x => x.setAttribute('aria-pressed', x === b)); });
   $$('#gen button').forEach(b => b.onclick = () => { o.gender = o.gender === b.dataset.v ? null : b.dataset.v; $$('#gen button').forEach(x => x.setAttribute('aria-pressed', x.dataset.v === o.gender)); });
@@ -2069,7 +2202,7 @@ function ensureAskThread() {
 function pageAsk() {
   stopAskRotate();
   const p = activeProfile(), hist = store.get(chatKey(), []), on = !!(S.status && S.status.ai_configured);
-  const head = `<header class="top ask-top"><div class="ttl"><b>${tr('Acharya', 'आचार्य')}</b><small>${tr('AI astrologer', 'AI ज्योतिषी')}${on ? '' : ' · ' + tr('not on yet', 'अभी चालू नहीं')}</small></div><button class="iconbtn langbtn" id="langBtn">${hi() ? 'English' : 'हिंदी'}</button></header>
+  const head = `<header class="top ask-top"><div class="ttl"><b>${tr('Acharya', 'आचार्य')}</b><small>${tr('AI astrologer', 'AI ज्योतिषी')}${on ? '' : ' · ' + tr('not on yet', 'अभी चालू नहीं')}</small></div>${musicBtnHtml()}<button class="iconbtn langbtn" id="langBtn">${hi() ? 'English' : 'हिंदी'}</button></header>
     <button class="asking" id="whoBtn" aria-haspopup="dialog">${tr('Reading the chart of', 'इनकी कुंडली पढ़ रहे हैं:')} <span class="avatar sm">${initial(p.name)}</span><b style="color:var(--ink)">${esc(p.name)}</b>${I.chev()}</button>`;
   const note = `<p class="ask-note" id="askNote">${tr('Charged only when the answer starts', 'शुल्क तभी, जब उत्तर शुरू हो')}</p>`;
   if (!hist.length) {
