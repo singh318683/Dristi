@@ -128,13 +128,19 @@ def test_background_music_is_one_synthesized_drone():
     assert html.count("function musicBuild") == 1
     assert "if (musicCtx) return" in html
     assert "webkitAudioContext" in html
-    assert "MUSIC_LEVEL = 0.25" in html
-    assert "musicStart(3)" in html
-    assert "visibilitychange" in html
-    assert "createPeriodicWave" in html
+    assert "return musicPhone() ? 0.55 : 0.25" in html
+    assert "musicRamp(musicLevel(), fresh ? 3 : 0.8)" in html
+    assert "visibilitychange" in html and "pageshow" in html
+    assert "createPeriodicWave" in html and "const sa = 196" in html
+    assert "createMediaStreamDestination" in html and "playsinline" in html
+    assert "audioSession" in html and "interrupted" in html
+    assert "createBuffer(1, 1" in html
+    assert "touchstart" in html and "touchend" in html
+    assert "audiodebug=1" in html and "audioDebug" in html
+    assert "drishtiUnlockAudio" in html
     assert ".mp3" not in html and ".ogg" not in html and ".m4a" not in html
     assert "Web Audio" in credits and "no third-party music license" in credits
-    assert "drishti-v9" in open(os.path.join(root, "web", "sw.js"), encoding="utf-8").read()
+    assert "drishti-v10" in open(os.path.join(root, "web", "sw.js"), encoding="utf-8").read()
 
 
 def test_home_asks_for_the_device_date():
@@ -161,7 +167,7 @@ def test_home_periods_card_and_local_clock():
     assert "Good evening" in greet and "clock.getHours() < 5" in greet
     assert "function glanceTitle" in html and "function horoGlanceSentence" in html
     assert "glanceHoroLine" not in html
-    assert "drishti-v9" in open(os.path.join(os.path.dirname(__file__), "..", "web", "sw.js"), encoding="utf-8").read()
+    assert "drishti-v10" in open(os.path.join(os.path.dirname(__file__), "..", "web", "sw.js"), encoding="utf-8").read()
 
 
 def test_panchang_and_pdf_endpoints(client):
