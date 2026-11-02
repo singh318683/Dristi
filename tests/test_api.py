@@ -128,6 +128,25 @@ def test_home_asks_for_the_device_date():
     assert 'id="hDasha"' not in html and 'id="hHoro"' not in html and 'id="hPanch"' not in html
 
 
+def test_home_periods_card_and_local_clock():
+    html = open(os.path.join(os.path.dirname(__file__), "..", "web", "index.html"), encoding="utf-8").read()
+    assert 'id="periods"' in html and 'id="periodsGo"' in html
+    assert "S.pendingSheet = 'periods'" in html
+    assert "\\uFE0E" in html
+    assert "learning and growth" in html and "सीखना और विकास" in html
+    assert "study and trade" in html and "अध्ययन और व्यापार" in html
+    assert "new Mahadasha" in html and "next Antardasha" in html
+    assert "Late night" in html and "Good night" in html and "शुभ रात्रि" in html
+    assert "part === 'evening'" in html
+    day = html.split("function dayPart", 1)[1].split("function greetLine", 1)[0]
+    greet = html.split("function greetLine", 1)[1].split("function relWhen", 1)[0]
+    assert "getHours()" in day and "getUTCHours" not in day
+    assert "Good evening" in greet and "clock.getHours() < 5" in greet
+    assert "function glanceTitle" in html and "function horoGlanceSentence" in html
+    assert "glanceHoroLine" not in html
+    assert "drishti-v9" in open(os.path.join(os.path.dirname(__file__), "..", "web", "sw.js"), encoding="utf-8").read()
+
+
 def test_panchang_and_pdf_endpoints(client):
     pan = client.get("/api/panchang", params={"lat": 28.65195, "lon": 77.23149, "tz": "Asia/Kolkata", "date": "2026-10-27"})
     assert pan.status_code == 200

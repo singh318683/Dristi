@@ -475,15 +475,40 @@ body.app-fit .reveal{opacity:1;transform:none}
 .costline{font-size:12.5px;font-weight:700;color:var(--on-tint);background:var(--primary-tint);border-radius:10px;padding:6px 10px;margin-bottom:6px;text-align:center}
 .minirow{display:flex;gap:8px;align-items:center;min-width:0}
 .minirow .grow{flex:1;min-width:0}
-.gita-banner{flex:0 0 auto;display:flex;align-items:center;gap:8px;width:100%;height:44px;min-height:44px;max-height:44px;margin:0;padding:0 12px;border:1px solid var(--primary-line);background:var(--primary-tint);color:var(--ink);border-radius:14px;text-align:left;font-size:14px;line-height:1.2;font-weight:600}
+.gita-banner{flex:0 0 auto;display:flex;align-items:center;gap:8px;width:100%;height:44px;min-height:44px;max-height:44px;margin:0;padding:0 12px;border:1px solid var(--primary-line);background:var(--primary-tint);color:var(--ink);border-radius:14px;text-align:left;font-size:14px;line-height:1.2;font-weight:600;overflow:hidden}
 .gita-banner .gita-m{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .gita-banner .gita-go{flex:none;color:var(--on-tint);display:grid;transform:rotate(-90deg)}
 .home-greet{flex:none;min-width:0;text-align:center}
 .home-greet .h1,.home-greet .sub{text-align:center}
 .glance{flex:none;width:100%;max-width:100%;min-width:0;text-align:center;border:1.5px solid var(--line);background:var(--surface);border-radius:14px;padding:8px 12px;box-shadow:var(--shadow);color:var(--ink)}
-.glance-h,.glance-p{display:block;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.glance-h,.glance-s,.glance-p{display:block;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .glance-h{font-weight:650;font-size:14.5px}
+.glance-s{margin-top:1px;font-size:13px;font-weight:500}
 .glance-p{margin-top:2px;color:var(--muted);font-size:12.5px}
+.periods{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:8px 10px 8px;box-shadow:var(--shadow);margin:0}
+.periods-hd{display:flex;align-items:center;justify-content:space-between;gap:8px;min-width:0}
+.periods-hd h3{margin:0;font-size:11px;letter-spacing:.12em;text-transform:uppercase;font-weight:700;color:var(--muted)}
+.periods-go{border:0;background:none;color:var(--on-tint);font-size:13px;font-weight:700;padding:2px 0;min-height:28px;flex:none}
+.periods-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;min-width:0;margin-top:6px;flex:1 1 auto;min-height:0}
+.period{min-width:0;border-radius:12px;padding:7px 8px 6px;display:flex;flex-direction:column;gap:1px;background:var(--sunk);overflow:hidden}
+.period.now{background:var(--primary-tint)}
+.period-k{display:flex;align-items:center;gap:5px;font-size:10px;letter-spacing:.08em;font-weight:700;color:var(--muted);text-transform:uppercase}
+.now-dot{width:8px;height:8px;border-radius:50%;background:var(--good);flex:none;transform-origin:center;animation:periodPulse 2s ease-in-out infinite}
+.period-name{display:flex;align-items:center;gap:4px;min-width:0;font-weight:700;font-size:15px;line-height:1.15}
+.period-name b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.pglyph{font-style:normal;line-height:1;font-size:16px;font-variant-emoji:text;-webkit-font-variant-emoji:text;font-family:"Segoe UI Symbol","Noto Sans Symbols 2","Noto Sans Symbols",var(--body)}
+.period-sub{font-size:11.5px;line-height:1.25;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.period-bar{height:5px;border-radius:4px;background:color-mix(in srgb, var(--primary) 22%, transparent);margin:4px 0 3px;overflow:hidden}
+.period.next .period-bar{background:var(--line)}
+.period-bar i{display:block;height:100%;width:0;border-radius:4px;background:linear-gradient(90deg,#C4922A,#E8C56B 48%,#C4922A);position:relative;overflow:hidden;transition:width 1.5s cubic-bezier(.22,.7,.2,1)}
+.period-bar.ready i{width:var(--w)}
+.period-bar i::after{content:"";position:absolute;top:0;bottom:0;left:0;width:42%;background:linear-gradient(90deg,transparent,rgba(255,255,255,.72),transparent);transform:translateX(-180%);animation:periodShimmer 3s ease-in-out infinite;animation-delay:1.5s}
+.period.next .period-bar i{display:none}
+.period-pill{align-self:flex-start;max-width:100%;margin-top:2px;font-size:11px;font-weight:700;line-height:1.25;padding:2px 7px;border-radius:999px;background:var(--surface);color:var(--on-tint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.period.next .period-pill{color:var(--muted)}
+.periods-theme{margin:6px 0 0;font-size:12px;line-height:1.3;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+@keyframes periodPulse{0%,100%{opacity:1;transform:scale(1);box-shadow:0 0 0 0 color-mix(in srgb, var(--good) 55%, transparent)}50%{opacity:.35;transform:scale(.7);box-shadow:0 0 0 6px transparent}}
+@keyframes periodShimmer{0%{transform:translateX(-180%)}40%{transform:translateX(320%)}100%{transform:translateX(320%)}}
 .home-tiles{flex:0 0 auto;min-height:0;display:grid;grid-template-columns:1fr 1fr;gap:8px;max-width:100%}
 .tile{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;width:100%;min-width:0;min-height:0;overflow:hidden;text-align:center;background:var(--surface);border:1.5px solid var(--line-strong);border-radius:16px;padding:10px 8px;box-shadow:var(--shadow);color:var(--ink)}
 .tile .tile-ico{color:var(--primary);display:grid;margin-bottom:2px}
@@ -509,18 +534,40 @@ main.home.home-in > *{animation:homeIn .45s ease both}
 main.home.home-in > *:nth-child(2){animation-delay:.06s}
 main.home.home-in > *:nth-child(3){animation-delay:.12s}
 main.home.home-in > *:nth-child(4){animation-delay:.18s}
+main.home.home-in > *:nth-child(5){animation-delay:.24s}
 @media (prefers-reduced-motion:reduce){
   main.home.home-in > *{animation:none}
   .tile:active{transform:none}
+  .now-dot{animation:none}
+  .period-bar i{transition:none}
+  .period-bar i::after{animation:none;display:none}
 }
 body.app-fit main.home{overflow:hidden;gap:8px}
 body.app-fit main.home .h1{font-size:24px}
 body.app-fit main.home > .home-tiles{flex:0 0 auto}
+body.app-fit main.home > .periods{flex:1 1 auto;min-height:0}
+@media (max-height:740px){
+  body.app-fit main.home{gap:5px}
+  body.app-fit main.home .h1{font-size:20px}
+  .gita-banner{height:36px;min-height:36px;max-height:36px}
+  .glance{padding:5px 10px}
+  .glance-h{font-size:13.5px}
+  .glance-s{font-size:12.5px}
+  .glance-p{font-size:11.5px}
+  .tile{padding:6px 6px}
+  .tile .tile-ico svg{width:22px;height:22px}
+  .tile b{font-size:14.5px}
+  .tile .tile-sub{-webkit-line-clamp:1}
+  .periods{padding:6px 8px}
+  .period{padding:5px 7px 5px}
+  .period-name{font-size:14px}
+  .periods-theme{margin-top:4px}
+}
 @media (max-height:700px){
-  body.app-fit main.home{gap:6px}
-  body.app-fit main.home .h1{font-size:21px}
-  .tile{padding:8px 6px}
-  .tile b{font-size:15px}
+  body.app-fit main.home{gap:4px}
+  body.app-fit main.home .h1{font-size:19px}
+  .tile{padding:5px 6px}
+  .tile b{font-size:14px}
   .ask-om{width:64px;height:64px;margin-bottom:8px}
   .ask-om .dev{font-size:32px}
   .ask-hero{margin-bottom:10px}
@@ -1289,10 +1336,13 @@ function dayPart(d) {
   return 'night';
 }
 function greetLine(name, d) {
-  const part = dayPart(d);
+  const clock = d || new Date();
+  const part = dayPart(clock);
   if (part === 'morning') return tr(`Good morning, ${name}`, `शुभ प्रभात, ${name}`);
   if (part === 'afternoon') return tr(`Good afternoon, ${name}`, `नमस्ते, ${name}`);
-  return tr(`Good evening, ${name}`, `शुभ संध्या, ${name}`);
+  if (part === 'evening') return tr(`Good evening, ${name}`, `शुभ संध्या, ${name}`);
+  if (clock.getHours() < 5) return tr(`Late night, ${name}`, `देर रात, ${name}`);
+  return tr(`Good night, ${name}`, `शुभ रात्रि, ${name}`);
 }
 function relWhen(start, end, now) {
   const t = (now || new Date()).getTime();
@@ -1319,12 +1369,153 @@ function goodTimeLine(g, now) {
   if (!pick) return '';
   return `${pick.name} ${pick.when} · ${clock(pick.start)}–${clock(pick.end)}`;
 }
-function glanceHoroLine(h, sign) {
-  if (!h) return '';
-  if (h.ai && readingForSign(h.text, sign)) return String(h.text).replace(/[*_#>`]/g, '').replace(/\s+/g, ' ').trim();
-  const moon = h.transits && h.transits.Moon;
-  if (!moon) return '';
-  return tr(`Moon in ${signName(moon.sign)}`, `चंद्र ${signName(moon.sign)} में`);
+function niceDay(d) {
+  return (d || new Date()).toLocaleDateString(loc(), {day: 'numeric', month: 'long', year: 'numeric'});
+}
+function glanceTitle(sign, iso) {
+  let day = new Date();
+  if (iso && /^\d{4}-\d{2}-\d{2}$/.test(iso)) {
+    const [y, m, d] = iso.split('-').map(Number);
+    day = new Date(y, m - 1, d);
+  }
+  const date = niceDay(day);
+  return sign ? `${signName(sign)} · ${date}` : date;
+}
+function horoGlanceSentence(text, sign) {
+  if (!text) return '';
+  const signEn = sign || '';
+  const idx = SIGNS.indexOf(sign);
+  const signHi = idx >= 0 ? SIGNS_HI[idx] : '';
+  const flat = String(text).replace(/[*_#>`]/g, ' ').replace(/\b\d{4}-\d{2}-\d{2}\b/g, ' ').replace(/\s+/g, ' ').trim();
+  const parts = flat.split(/(?<=[.!?।])\s+/).map(s => s.trim()).filter(Boolean);
+  const titleish = s => {
+    const core = s.replace(/[.!?।]/g, '').trim();
+    if (!core) return true;
+    const mentionsSign = (signEn && s.includes(signEn)) || (signHi && s.includes(signHi));
+    const mentionsHead = /horoscope|राशिफल/i.test(s);
+    const words = core.split(/\s+/).length;
+    if (mentionsHead && words <= 8) return true;
+    if (mentionsSign && mentionsHead) return true;
+    if (mentionsSign && words <= 8 && !/\b(moon|चंद्र|house|भाव)\b/i.test(s)) return true;
+    return false;
+  };
+  const lead = [signEn, signHi].filter(Boolean).map(n => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  const stripLead = s => {
+    let out = s;
+    if (lead.length) {
+      const re = new RegExp('^(?:' + lead.join('|') + ')(?:\\s*\\([^)]{0,24}\\))?\\s*[·•:\\-–]*\\s*', 'i');
+      out = out.replace(re, '');
+      out = out.replace(new RegExp('^(?:' + lead.join('|') + ')\\s*[·•:\\-–]*\\s*', 'i'), '');
+    }
+    return out
+      .replace(/^\d{1,2}\s+[A-Za-z\u0900-\u097F.]+\s+\d{4}\s*[·•:\-–]*\s*/, '')
+      .replace(/^(?:horoscope|राशिफल)\s*[.।:]?\s*/i, '')
+      .replace(/\b\d{4}-\d{2}-\d{2}\b/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+  };
+  const kept = parts.filter(s => !titleish(s));
+  return stripLead(kept[0] || parts[0] || '');
+}
+const PLANET_GLYPH = {
+  Sun: '\u2609\uFE0E', Moon: '\u263D\uFE0E', Mars: '\u2642\uFE0E', Mercury: '\u263F\uFE0E',
+  Jupiter: '\u2643\uFE0E', Venus: '\u2640\uFE0E', Saturn: '\u2644\uFE0E', Rahu: '\u260A\uFE0E', Ketu: '\u260B\uFE0E',
+};
+const PERIOD_THEME = {
+  Sun: ['confidence and recognition', 'आत्मविश्वास और पहचान'],
+  Moon: ['emotions and home', 'भावनाएँ और घर'],
+  Mars: ['energy and courage', 'ऊर्जा और साहस'],
+  Mercury: ['study and trade', 'अध्ययन और व्यापार'],
+  Jupiter: ['learning and growth', 'सीखना और विकास'],
+  Venus: ['love and comfort', 'प्रेम और सुख'],
+  Saturn: ['discipline and patience', 'अनुशासन और धैर्य'],
+  Rahu: ['ambition and change', 'महत्वाकांक्षा और परिवर्तन'],
+  Ketu: ['letting go and inner focus', 'त्याग और अंतर्मुखी ध्यान'],
+};
+const planetGlyph = p => PLANET_GLYPH[p] || '';
+const themeOf = p => { const t = PERIOD_THEME[p]; return t ? tr(t[0], t[1]) : ''; };
+function localDayMs(iso) {
+  const [y, m, d] = String(iso || '').slice(0, 10).split('-').map(Number);
+  if (!y || !m || !d) return NaN;
+  return new Date(y, m - 1, d).getTime();
+}
+function periodPct(p, now) {
+  if (!p || !p.start || !p.end) return 0;
+  const a = localDayMs(p.start), b = localDayMs(p.end), n = (now || new Date()).getTime();
+  if (!Number.isFinite(a) || !Number.isFinite(b) || b <= a) return 0;
+  return Math.max(0, Math.min(100, Math.round((n - a) / (b - a) * 100)));
+}
+function monthsLeftLabel(days) {
+  const months = days / 30.4375;
+  const whole = Math.floor(months);
+  const frac = months - whole;
+  if (frac >= 0.25 && frac < 0.75) return (whole ? String(whole) : '') + '½';
+  return String(frac >= 0.75 ? whole + 1 : Math.max(whole, 1));
+}
+function timeLeft(endIso, now) {
+  const end = localDayMs(endIso);
+  if (!Number.isFinite(end)) return '';
+  const n = now || new Date();
+  const today = new Date(n.getFullYear(), n.getMonth(), n.getDate()).getTime();
+  const days = Math.round((end - today) / 86400000);
+  if (days <= 0) return tr('ends today', 'आज समाप्त');
+  if (days < 60) return days === 1 ? tr('1 day left', '1 दिन बाकी') : tr(`${days} days left`, `${days} दिन बाकी`);
+  const label = monthsLeftLabel(days);
+  if (label === '1') return tr('1 month left', '1 महीना बाकी');
+  return tr(`${label} months left`, `${label} महीने बाकी`);
+}
+function periodsCardHtml() {
+  const mini = (now) => `<div class="period ${now ? 'now' : 'next'}" id="${now ? 'periodNow' : 'periodNext'}">
+      <div class="period-k">${now ? '<span class="now-dot" aria-hidden="true"></span>' : ''}<span>${now ? tr('Now', 'अभी') : tr('Next', 'आगे')}</span></div>
+      <div class="period-name"><span class="pglyph" aria-hidden="true"></span><b class="pn">…</b></div>
+      <div class="period-sub"></div>
+      <div class="period-bar"><i></i></div>
+      <span class="period-pill"></span>
+    </div>`;
+  return `<section class="periods" id="periods" aria-busy="true" aria-label="${tr('Your periods', 'आपकी दशाएँ')}">
+    <div class="periods-hd"><h3>${tr('Your periods', 'आपकी दशाएँ')}</h3><button type="button" class="periods-go" id="periodsGo">${tr('Details', 'विवरण')} ›</button></div>
+    <div class="periods-row">${mini(true)}${mini(false)}</div>
+    <p class="periods-theme" id="periodTheme"></p>
+  </section>`;
+}
+function paintPeriods(cur) {
+  const nowEl = $('#periodNow');
+  if (!nowEl || !cur || !cur.mahadasha || !cur.antardasha) return;
+  const md = cur.mahadasha, ad = cur.antardasha, nxt = cur.next_antardasha, nxtMd = cur.next_antardasha_mahadasha;
+  const fill = (root, lord, sub, pill, barPct) => {
+    const g = root.querySelector('.pglyph'), name = root.querySelector('.pn');
+    const s = root.querySelector('.period-sub'), p = root.querySelector('.period-pill');
+    if (g) g.textContent = planetGlyph(lord);
+    if (name) name.textContent = plName(lord);
+    if (s) s.textContent = sub;
+    if (p) p.textContent = pill;
+    if (barPct == null) return;
+    const bar = root.querySelector('.period-bar');
+    if (!bar) return;
+    const pct = Math.max(0, Math.min(100, barPct));
+    bar.style.setProperty('--w', pct + '%');
+    bar.setAttribute('role', 'progressbar');
+    bar.setAttribute('aria-valuemin', '0');
+    bar.setAttribute('aria-valuemax', '100');
+    bar.setAttribute('aria-valuenow', String(pct));
+    bar.setAttribute('aria-label', tr('Antardasha elapsed', 'अंतर्दशा बीती'));
+    const arm = () => requestAnimationFrame(() => requestAnimationFrame(() => bar.classList.add('ready')));
+    if (RM()) arm();
+    else setTimeout(arm, 700);
+  };
+  fill(nowEl, ad.lord, tr(`in ${plName(md.lord)} Mahadasha`, `${plName(md.lord)} महादशा में`), timeLeft(ad.end), periodPct(ad));
+  const nextEl = $('#periodNext');
+  if (nextEl && nxt) {
+    const kind = nxtMd && nxtMd !== md.lord ? tr('new Mahadasha', 'नई महादशा') : tr('next Antardasha', 'अगली अंतर्दशा');
+    const from = fmtDate(nxt.start);
+    fill(nextEl, nxt.lord, kind, tr(`from ${from}`, `${from} से`), null);
+  }
+  const theme = $('#periodTheme');
+  if (theme) {
+    const a = themeOf(ad.lord), b = nxt ? themeOf(nxt.lord) : '';
+    theme.textContent = b ? tr(`Now: ${a} · Next: ${b}`, `अभी: ${a} · आगे: ${b}`) : tr(`Now: ${a}`, `अभी: ${a}`);
+  }
+  const sec = $('#periods'); if (sec) sec.removeAttribute('aria-busy');
 }
 // ------------------------------------------------------------------ home
 let homeGen = 0;
@@ -1342,7 +1533,8 @@ async function pageHome() {
     <div class="home-greet"><div class="h1">${esc(greetLine(p.name))}</div>
       <p class="sub" id="gsub">${esc(weekday)}</p></div>
     <button type="button" class="glance" id="glance" aria-label="${tr("Today's glance", 'आज की झलक')}">
-      <span class="glance-h" id="glanceHoro">${tr('Today’s reading', 'आज का पाठ')}</span>
+      <span class="glance-h" id="glanceTitle"></span>
+      <span class="glance-s" id="glanceHoro"></span>
       <span class="glance-p" id="glancePan"></span>
     </button>
     <div class="home-tiles" role="group" aria-label="${tr('Home', 'होम')}">
@@ -1350,7 +1542,8 @@ async function pageHome() {
       <button type="button" class="tile" id="tileToday"><span class="tile-ico">${I.sun(28)}</span><b>${tr('Today', 'आज')}</b><span class="tile-sub">${tr('Your day: horoscope & panchang', 'आपका दिन: राशिफल और पंचांग')}</span>${chev}</button>
       <button type="button" class="tile" id="tileChart"><span class="tile-ico">${I.chart(28)}</span><b>${tr('My chart', 'मेरी कुंडली')}</b><span class="tile-sub">${tr('Your kundli, periods & yogas', 'आपकी कुंडली, दशा और योग')}</span>${chev}</button>
       <button type="button" class="tile" id="tileMatch"><span class="tile-ico">${I.match(28)}</span><b>${tr('Match', 'मिलान')}</b><span class="tile-sub">${tr('Check guna milan · free', 'गुण मिलान देखें · मुफ़्त')}</span>${chev}</button>
-    </div></main>`;
+    </div>
+    ${periodsCardHtml()}</main>`;
   bindHeader();
   mountGita();
   const examples = ASK_EXAMPLES();
@@ -1371,6 +1564,10 @@ async function pageHome() {
   $('#tileToday').onclick = () => openToday(p);
   $('#glance').onclick = () => openToday(p);
   $('#tileChart').onclick = () => openMyChart(p);
+  const periodsGo = $('#periodsGo');
+  if (periodsGo) periodsGo.onclick = () => { S.pendingSheet = 'periods'; go('kundli'); };
+  const glanceTitleEl = $('#glanceTitle');
+  if (glanceTitleEl) glanceTitleEl.textContent = glanceTitle(null);
   let tithi = '', period = '';
   const paint = () => {
     if (gen !== homeGen || !$('#gsub')) return;
@@ -1398,13 +1595,19 @@ async function pageHome() {
     const cur = c.dasha.current;
     period = `${plName(cur.mahadasha.lord)}–${plName(cur.antardasha.lord)} ${tr('period', 'दशा')}`;
     paint();
+    paintPeriods(cur);
+    if ($('#glanceTitle')) $('#glanceTitle').textContent = glanceTitle(c.moon_sign, localISODate());
     try {
       const day = localISODate();
       const h = await api(`/api/horoscope?sign=${encodeURIComponent(c.moon_sign)}&lang=${S.lang}&date=${encodeURIComponent(day)}`);
-      if (gen !== homeGen || !$('#glanceHoro') || h.sign !== c.moon_sign) return;
-      const line = glanceHoroLine(h, c.moon_sign);
-      if (line) $('#glanceHoro').textContent = line;
-    } catch { /* the glance keeps its quiet fallback */ }
+      if (gen !== homeGen || !$('#glanceTitle') || h.sign !== c.moon_sign) return;
+      $('#glanceTitle').textContent = glanceTitle(c.moon_sign, /^\d{4}-\d{2}-\d{2}$/.test(h.date) ? h.date : day);
+      const sentence = (h.ai && readingForSign(h.text, c.moon_sign)) ? horoGlanceSentence(h.text, c.moon_sign) : '';
+      const moon = h.transits && h.transits.Moon;
+      const fallback = moon ? tr(`Moon in ${signName(moon.sign)}`, `चंद्र ${signName(moon.sign)} में`) : '';
+      const show = sentence || fallback;
+      if (show && $('#glanceHoro')) $('#glanceHoro').textContent = show;
+    } catch { /* the glance keeps the sign and date */ }
   }).catch(() => {});
 }
 function readingForSign(text, sign) {

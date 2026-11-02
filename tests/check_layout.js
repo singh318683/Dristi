@@ -40,8 +40,39 @@ const one = [{id: 'p1', name: 'Neetu', relation: 'Self', gender: 'Female', date:
 const two = one.concat([{id: 'p2', name: 'Amit', relation: 'Family', gender: 'Male', date: '1988-03-02', time: '08:15', place: {name: 'Varanasi, India', lat: 25.32, lon: 82.97, tz: 'Asia/Kolkata'}, offset: null}]);
 
 async function measure(page, name) {
-  await sleep(80);
+  await sleep(name === 'home' ? 650 : 80);
+  if (name === 'home') {
+    await page.waitForFunction(() => {
+      const t = document.getElementById('periodTheme');
+      const title = document.getElementById('glanceTitle');
+      return t && t.textContent.trim().length > 3 && title && title.textContent.includes('·');
+    }, {timeout: 8000}).catch(() => {});
+  }
   const bad = await page.evaluate(offenders);
+  if (name === 'home') {
+    const vertical = await page.evaluate(() => {
+      const main = document.querySelector('main.home');
+      const card = document.getElementById('periods');
+      const out = [];
+      if (!main) return ['home missing'];
+      if (main.scrollHeight > main.clientHeight + 2) out.push('home scroll ' + main.scrollHeight + '>' + main.clientHeight);
+      if (!card) out.push('periods missing');
+      else {
+        const r = card.getBoundingClientRect();
+        const m = main.getBoundingClientRect();
+        if (r.bottom > m.bottom + 1 || r.top < m.top - 1) out.push('periods clipped');
+        if (card.scrollHeight > card.clientHeight + 2) out.push('periods inner scroll ' + card.scrollHeight + '>' + card.clientHeight);
+        const glyph = (card.querySelector('.period.now .pglyph') || {}).textContent || '';
+        if (!glyph || glyph.charCodeAt(glyph.length - 1) !== 0xFE0E) out.push('glyph missing FE0E');
+        const title = (document.getElementById('glanceTitle') || {}).textContent || '';
+        if (/\d{4}-\d{2}-\d{2}/.test(title) || /The Moon mo/.test(title)) out.push('glance title raw: ' + title.slice(0, 80));
+        const theme = (document.getElementById('periodTheme') || {}).textContent || '';
+        if (theme.length < 4) out.push('periods theme empty');
+      }
+      return out;
+    });
+    bad.push(...vertical);
+  }
   return {name, bad};
 }
 
