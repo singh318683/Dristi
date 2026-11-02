@@ -451,8 +451,6 @@ body.app-fit main.fit > .chartcard{flex:1 1 160px;min-height:160px;display:flex;
 .ktools-grid{grid-template-columns:1fr 1fr}
 .ktools-acts{grid-template-columns:1fr 1fr 1fr}
 .ktools .chip{width:100%;min-width:0;justify-content:center;white-space:normal;text-align:center;padding:6px 4px;line-height:1.2}
-#magicForm{flex-direction:column;align-items:stretch;width:100%}
-#magicForm .input,#magicForm .btn{width:100%;min-width:0;max-width:100%}
 .chips.wrap{flex-wrap:wrap}
 .sheet.tall,.when-sheet,.onb,.gita-center{max-width:100%;min-width:0}
 .gita-mean{overflow-wrap:anywhere;max-width:100%}
@@ -2610,48 +2608,21 @@ function bindPeople() {
 }
 function openPeople() { openDetail(tr('People', 'लोग'), peopleHtml()); bindPeople(); }
 function pageMe() {
-  const w = S.wallet || {email: null, price_label: '$0.99'}, cur = activeProfile();
-  $('#app').innerHTML = header() + `<main class="fit"><div><div class="h1">${tr('Profile', 'प्रोफ़ाइल')}</div><p class="sub">${tr('Acharya is an AI astrologer. Sign-in is optional.', 'आचार्य एक AI ज्योतिषी हैं। साइन-इन वैकल्पिक है।')}</p></div>
+  const price = (S.wallet && S.wallet.price_label) || '$0.99', cur = activeProfile();
+  $('#app').innerHTML = header() + `<main class="fit" id="me"><div><div class="h1">${tr('Profile', 'प्रोफ़ाइल')}</div><p class="sub">${tr('Acharya is an AI astrologer.', 'आचार्य एक AI ज्योतिषी हैं।')}</p></div>
     <button class="card link" id="personRow"><div class="minirow"><span class="avatar lg">${initial(cur.name)}</span><span class="grow"><b>${esc(cur.name)}</b><span class="small muted" style="display:block">${esc(relName(cur.relation))} · ${fmtDate(cur.date)} · ${esc(cur.place.name.split(',')[0])}</span></span>${I.chev()}</div></button>
-    <section class="card"><div class="spread"><div><b id="credN">${esc(w.price_label || '$0.99')}</b> <span class="muted">${tr('per Acharya question', 'प्रति आचार्य प्रश्न')}</span></div></div>
-      <p class="small muted">${tr('Paid on Google Play, one question at a time. There is no free question and no credit pack. The chart, periods, dosha, panchang, matching, horoscope and kundli PDF stay free.', 'Google Play पर भुगतान, एक बार में एक प्रश्न। कोई मुफ़्त प्रश्न नहीं और कोई क्रेडिट पैक नहीं। कुंडली, दशा, दोष, पंचांग, मिलान, राशिफल और कुंडली PDF मुफ़्त हैं।')}</p>
-      <div class="setrow"><span class="small">${tr('Invite link', 'आमंत्रण')}</span><button class="btn quiet" id="copyRef">${tr('Copy', 'कॉपी')} · <span id="refCode">…</span></button></div>
-      <p class="small muted" style="margin:0">${tr('The link opens Drishti. It does not include a free question.', 'लिंक दृष्टि खोलता है। इसमें मुफ़्त प्रश्न शामिल नहीं है।')}</p></section>
-    <section class="card"><div class="sec" style="margin:0 0 6px"><h3>${w.email ? esc(w.email) : tr('Optional sign-in', 'वैकल्पिक साइन-इन')}</h3></div>
-      ${w.email ? `<p class="small muted" style="margin:0">${tr('Signed in on this device. Charts and chats follow this sign-in. Each question is paid on the device that asks it.', 'इस डिवाइस पर साइन इन है। कुंडली और चैट इस साइन-इन के साथ रहती हैं। हर प्रश्न उसी डिवाइस पर भुगतान होता है जो पूछती है।')}</p>` : `<form id="magicForm" class="minirow"><input class="input" id="magicEmail" type="email" autocomplete="email" placeholder="${tr('Email for a sign-in link', 'साइन-इन लिंक के लिए ईमेल')}"><button class="btn sm" type="submit">${tr('Email link', 'लिंक भेजें')}</button></form><p class="small muted" id="magicMsg" style="margin:6px 0 0"></p><button class="btn quiet" id="otpBtn" type="button">${tr('Phone OTP', 'फ़ोन OTP')}</button>`}
-      <div class="setrow"><span>${tr('Language', 'भाषा')}</span><div class="seg" id="setLang"><button data-v="en" aria-pressed="${!hi()}">EN</button><button data-v="hi" aria-pressed="${hi()}">हि</button></div></div>
+    <section class="card"><div class="spread"><div><b id="credN">${esc(price)}</b> <span class="muted">${tr('per Acharya question', 'प्रति आचार्य प्रश्न')}</span></div></div>
+      <p class="small muted">${tr('Paid on Google Play, one question at a time. There is no free question and no credit pack. The chart, periods, dosha, panchang, matching, horoscope and kundli PDF stay free.', 'Google Play पर भुगतान, एक बार में एक प्रश्न। कोई मुफ़्त प्रश्न नहीं और कोई क्रेडिट पैक नहीं। कुंडली, दशा, दोष, पंचांग, मिलान, राशिफल और कुंडली PDF मुफ़्त हैं।')}</p></section>
+    <section class="card" id="prefs"><div class="setrow"><span>${tr('Language', 'भाषा')}</span><div class="seg" id="setLang"><button data-v="en" aria-pressed="${!hi()}">EN</button><button data-v="hi" aria-pressed="${hi()}">हि</button></div></div>
       <div class="setrow"><span>${tr('Chart', 'कुंडली')}</span><div class="seg" id="setSty"><button data-v="north" aria-pressed="${S.style === 'north'}">${tr('North', 'उत्तर')}</button><button data-v="south" aria-pressed="${S.style === 'south'}">${tr('South', 'दक्षिण')}</button></div></div></section>
     <div class="chips wrap"><button class="chip" id="aboutBtn">${tr('About', 'जानकारी')}</button><button class="chip" id="clr">${tr('Clear chat', 'चैट मिटाएँ')}</button></div></main>`;
   bindHeader();
   $('#personRow').onclick = openPeople;
-  $('#copyRef').onclick = copyReferral;
-  const form = $('#magicForm');
-  if (form) form.onsubmit = async e => {
-    e.preventDefault();
-    const email = $('#magicEmail').value.trim();
-    if (!email) return;
-    try {
-      const r = await api('/api/auth/magic', {email, device: DEVICE});
-      $('#magicMsg').textContent = r.delivered ? tr('Check your email for the sign-in link.', 'साइन-इन लिंक के लिए ईमेल देखें।') : tr('Mail is not set up on the server yet (SMTP_HOST). The link was not sent.', 'सर्वर पर मेल अभी सेट नहीं (SMTP_HOST)। लिंक नहीं भेजा गया।');
-    } catch (err) { $('#magicMsg').textContent = err.message; }
-  };
-  const otp = $('#otpBtn');
-  if (otp) otp.onclick = () => toast(tr('Phone OTP is not available yet.', 'फ़ोन OTP अभी उपलब्ध नहीं।'));
   $$('#setLang button').forEach(b => b.onclick = () => { S.lang = b.dataset.v; store.set('lang', S.lang); render(); });
   $$('#setSty button').forEach(b => b.onclick = () => { S.style = b.dataset.v; store.set('style', S.style); render(); });
   $('#clr').onclick = () => { S.profiles.forEach(p => localStorage.removeItem('dr-chat-' + p.id)); scheduleSync(); toast(tr('Chat history cleared', 'चैट इतिहास मिटाया गया')); };
   $('#aboutBtn').onclick = () => openDetail(tr('About', 'जानकारी'), `<p class="small">${tr('Charts use the Swiss Ephemeris, Lahiri ayanamsa, whole-sign houses and Vimshottari dasha. Acharya is an AI astrologer, not a person.', 'कुंडली स्विस एफेमेरिस, लाहिरी, पूर्ण राशि भाव और विंशोत्तरी दशा से बनती है। आचार्य AI ज्योतिषी हैं, व्यक्ति नहीं।')}</p><p class="small muted">${tr('Guidance for reflection, not medical, legal or financial advice. Remedies are optional and free.', 'यह चिंतन हेतु मार्गदर्शन है, चिकित्सा, कानूनी या वित्तीय सलाह नहीं। उपाय वैकल्पिक और मुफ़्त हैं।')}</p><p class="small muted">${tr('Device ID', 'डिवाइस आईडी')}: <code style="font-size:11px;word-break:break-all">${esc(DEVICE)}</code></p><p><a href="privacy.html">${tr('Privacy policy', 'गोपनीयता नीति')}</a></p>`);
-  api('/api/referral?device=' + encodeURIComponent(DEVICE)).then(info => { S.referral = info; const el = $('#refCode'); if (el) el.textContent = info.code; }).catch(() => {});
   if (S.pendingSheet === 'people') { S.pendingSheet = null; openPeople(); }
-}
-async function copyReferral() {
-  try {
-    const info = S.referral || await api('/api/referral?device=' + encodeURIComponent(DEVICE));
-    S.referral = info;
-    const url = (location.protocol.startsWith('http') ? location.origin : '') + info.path;
-    if (navigator.clipboard) await navigator.clipboard.writeText(url);
-    toast(tr('Referral link copied', 'रेफरल लिंक कॉपी हुआ') + ' · ' + info.code);
-  } catch (e) { toast(e.message); }
 }
 // ------------------------------------------------------------------ boot
 async function captureLink() {

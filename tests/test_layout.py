@@ -20,3 +20,17 @@ def test_screens_do_not_overflow_on_phone_widths():
     env["CHROME"] = chrome
     script = os.path.join(ROOT, "tests", "check_layout.js")
     subprocess.check_call([node, script], cwd=ROOT, env=env)
+
+
+def test_profile_fits_without_invite_or_sign_in():
+    node = shutil.which("node")
+    chrome = os.environ.get("CHROME") or shutil.which("google-chrome") or shutil.which("chromium")
+    if not node or not chrome:
+        pytest.skip("node and Chrome are required for the profile check")
+    env = os.environ.copy()
+    puppeteer = "/tmp/puppeteer-core/node_modules"
+    if os.path.isdir(puppeteer):
+        env["NODE_PATH"] = puppeteer + (os.pathsep + env["NODE_PATH"] if env.get("NODE_PATH") else "")
+    env["CHROME"] = chrome
+    script = os.path.join(ROOT, "tests", "check_profile.js")
+    subprocess.check_call([node, script], cwd=ROOT, env=env)

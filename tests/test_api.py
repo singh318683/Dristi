@@ -134,7 +134,7 @@ def test_background_music_is_one_synthesized_drone():
     assert "createPeriodicWave" in html
     assert ".mp3" not in html and ".ogg" not in html and ".m4a" not in html
     assert "Web Audio" in credits and "no third-party music license" in credits
-    assert "drishti-v9" in open(os.path.join(root, "web", "sw.js"), encoding="utf-8").read()
+    assert "drishti-v11" in open(os.path.join(root, "web", "sw.js"), encoding="utf-8").read()
 
 
 def test_home_asks_for_the_device_date():
@@ -161,7 +161,20 @@ def test_home_periods_card_and_local_clock():
     assert "Good evening" in greet and "clock.getHours() < 5" in greet
     assert "function glanceTitle" in html and "function horoGlanceSentence" in html
     assert "glanceHoroLine" not in html
-    assert "drishti-v9" in open(os.path.join(os.path.dirname(__file__), "..", "web", "sw.js"), encoding="utf-8").read()
+    assert "drishti-v11" in open(os.path.join(os.path.dirname(__file__), "..", "web", "sw.js"), encoding="utf-8").read()
+
+
+def test_profile_screen_drops_invite_and_sign_in():
+    html = open(os.path.join(os.path.dirname(__file__), "..", "web", "index.html"), encoding="utf-8").read()
+    me = html.split("function pageMe()", 1)[1].split("async function captureLink", 1)[0]
+    assert "Acharya is an AI astrologer." in me and "आचार्य एक AI ज्योतिषी हैं।" in me
+    assert "Sign-in is optional" not in html and "साइन-इन वैकल्पिक है" not in html
+    for gone in ("Invite link", "copyRef", "refCode", "Optional sign-in", "magicForm", "magicEmail", "otpBtn", "Phone OTP", "Email link", "function copyReferral"):
+        assert gone not in html
+    assert 'id="prefs"' in me and 'id="setLang"' in me and 'id="setSty"' in me
+    assert 'id="personRow"' in me and 'id="credN"' in me and 'id="aboutBtn"' in me and 'id="clr"' in me
+    assert "per Acharya question" in me and "Paid on Google Play" in me
+    assert "pullSync" in html and "/api/auth/verify" in html and "/api/referral/attach" in html and "scheduleSync" in html
 
 
 def test_panchang_and_pdf_endpoints(client):
