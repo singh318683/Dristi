@@ -64,6 +64,11 @@ function offenders() {
         if (info.scroll > 2) fails.push(tag + ' scrolls ' + info.scroll);
         if (info.invite || info.signin) fails.push(tag + ' removed UI still shown ' + info.sub);
         if (!info.kept) fails.push(tag + ' missing a kept control');
+        const music = await page.evaluate(() => {
+          const b = document.getElementById('musicBtn');
+          return b ? {pressed: b.getAttribute('aria-pressed'), label: b.getAttribute('aria-label')} : null;
+        });
+        if (!music || music.pressed !== 'false') fails.push(tag + ' music toggle missing ' + JSON.stringify(music));
         if (!info.price.includes('0.99')) fails.push(tag + ' price ' + info.price);
         const expectSub = lang === 'hi' ? 'आचार्य एक AI ज्योतिषी हैं।' : 'Acharya is an AI astrologer.';
         if (info.sub !== expectSub) fails.push(tag + ' subtitle ' + info.sub);
@@ -87,6 +92,20 @@ function offenders() {
   await sleep(100);
   const south = await page.evaluate(() => document.querySelector('#setSty [data-v="south"]').getAttribute('aria-pressed'));
   if (south !== 'true') fails.push('chart toggle ' + south);
+  const beforeMute = await page.evaluate(() => document.getElementById('musicBtn').getAttribute('aria-pressed'));
+  await page.click('#musicBtn');
+  await sleep(200);
+  const muted = await page.evaluate(() => {
+    const b = document.getElementById('musicBtn');
+    return {pressed: b.getAttribute('aria-pressed'), label: b.getAttribute('aria-label'), me: !!document.getElementById('me'), invite: !!document.getElementById('copyRef')};
+  });
+  if (beforeMute !== 'false' || muted.pressed !== 'true' || !/Play background music|संगीत चालू करें/.test(muted.label) || !muted.me || muted.invite) {
+    fails.push('music mute ' + JSON.stringify({beforeMute, muted}));
+  }
+  await page.click('#musicBtn');
+  await sleep(200);
+  const unmuted = await page.evaluate(() => document.getElementById('musicBtn').getAttribute('aria-pressed'));
+  if (unmuted !== 'false') fails.push('music unmute ' + unmuted);
   await browser.close();
   if (fails.length) {
     console.error(fails.join('\n'));

@@ -702,7 +702,11 @@ window.GITA_VERSES = window.__GITA_INJECTED__ || null;
     if (root) root.setAttribute('aria-hidden', 'true');
     if (!el.dataset.bound) {
       el.dataset.bound = '1';
-      el.addEventListener('click', function (e) { if (e.target.closest('#gitaShare')) return; window.dismissGitaSplash(); });
+      el.addEventListener('click', function (e) {
+        if (e.target.closest('#gitaShare')) return;
+        if (window.drishtiUnlockAudio) window.drishtiUnlockAudio();
+        window.dismissGitaSplash();
+      });
       document.addEventListener('keydown', function (e) {
         if (e.key !== 'Escape') return;
         var box = document.getElementById('gita-splash');
@@ -854,11 +858,23 @@ function nav() {
   const items = [['home', I.home(), tr('Home', 'होम')], ['kundli', I.chart(), tr('Chart', 'कुंडली')], ['ask', I.ask(), tr('Ask', 'पूछें')], ['match', I.match(), tr('Match', 'मिलान')], ['me', I.me(), tr('Profile', 'प्रोफ़ाइल')]];
   return `<nav class="bottom" aria-label="Main"><div class="in">${items.map(([k, i, l]) => `<button data-t="${k}" ${S.tab === k ? 'aria-current="page"' : ''}><span class="ico">${i}</span>${l}</button>`).join('')}</div></nav>`;
 }
-// One tanpura-style drone for the whole app. Synthesized here, so nothing is fetched
-// and nothing is licensed. See CREDITS.md. The context is created on the first gesture.
-var musicCtx = null, musicGain = null, musicBuilt = 0, musicPlaying = false, musicHeld = false, musicTimer = 0;
-const MUSIC_LEVEL = 0.25;
-function musicOn() { return store.get('music', true) !== false; }
+// One tanpura-style drone for the whole app. Synthesized here (see CREDITS.md).
+// Phones cannot play the low strings, and iOS/Android often stay silent until the
+// context is resumed inside the gesture and routed through an <audio> element.
+var musicCtx = null, musicGain = null, musicEl = null, musicAnalyser = null;
+var musicBuilt = 0, musicPlaying = false, musicHeld = false, musicTimer = 0;
+var musicRampFrom = 0, musicRampTo = 0, musicRampAt = 0, musicRampDur = 0;
+const musicDebugOn = /(?:\?|&)audiodebug=1(?:&|$)/.test(location.search);
+function musicOn() {
+  const v = store.get('music', true);
+  return v !== false && v !== 'false';
+}
+function musicPhone() {
+  const ua = navigator.userAgent || '';
+  if (/Android|iPhone|iPad|iPod/i.test(ua)) return true;
+  return navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1;
+}
+function musicLevel() { return musicPhone() ? 0.55 : 0.25; }
 function musicBtnHtml() {
   const muted = !musicOn();
   const label = muted ? tr('Play background music', 'संगीत चालू करें') : tr('Mute background music', 'संगीत बंद करें');
@@ -872,45 +888,135 @@ function musicPaint() {
   b.setAttribute('aria-label', muted ? tr('Play background music', 'संगीत चालू करें') : tr('Mute background music', 'संगीत बंद करें'));
   b.innerHTML = muted ? I.musicOff(20) : I.musicOn(20);
 }
+function musicRms() {
+  if (!musicAnalyser) return 0;
+  const n = musicAnalyser.fftSize, data = new Float32Array(n);
+  musicAnalyser.getFloatTimeDomainData(data);
+  let s = 0;
+  for (let i = 0; i < n; i++) s += data[i] * data[i];
+  return Math.sqrt(s / n);
+}
+function musicDebugPaint() {
+  if (!musicDebugOn) return;
+  let el = document.getElementById('audioDebug');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'audioDebug';
+    el.style.cssText = 'position:fixed;left:8px;bottom:calc(env(safe-area-inset-bottom) + 72px);z-index:80;max-width:calc(100% - 16px);padding:6px 8px;border-radius:8px;background:rgba(0,0,0,.78);color:#fff;font:12px/1.35 ui-monospace,monospace;pointer-events:none';
+    document.body.appendChild(el);
+  }
+  const session = navigator.audioSession ? navigator.audioSession.type : 'n/a';
+  el.textContent = 'audio ' + (musicCtx ? musicCtx.state : 'none')
+    + ' · gain ' + musicHeardGain().toFixed(3)
+    + ' · rms ' + musicRms().toFixed(4)
+    + ' · route ' + (musicEl ? 'element' : 'destination')
+    + ' · muted ' + !musicOn()
+    + ' · playing ' + musicPlaying
+    + ' · hidden ' + document.hidden
+    + ' · session ' + session;
+}
+function musicHeardGain() {
+  if (!musicGain) return 0;
+  if (!musicRampDur) return musicGain.gain.value;
+  const t = (performance.now() - musicRampAt) / 1000;
+  if (t >= musicRampDur) return musicRampTo;
+  return musicRampFrom + (musicRampTo - musicRampFrom) * (t / musicRampDur);
+}
 function musicRamp(to, seconds, done) {
   clearTimeout(musicTimer);
   if (!musicCtx || !musicGain) return;
   const g = musicGain.gain, now = musicCtx.currentTime;
+  const dur = Math.max(0.05, seconds);
   g.cancelScheduledValues(now);
   g.setValueAtTime(g.value, now);
-  g.linearRampToValueAtTime(to, now + seconds);
-  if (done) musicTimer = setTimeout(done, seconds * 1000 + 40);
+  g.linearRampToValueAtTime(to, now + dur);
+  musicRampFrom = g.value;
+  musicRampTo = to;
+  musicRampAt = performance.now();
+  musicRampDur = dur;
+  if (done) musicTimer = setTimeout(done, dur * 1000 + 40);
+}
+function musicPing() {
+  if (!musicCtx) return;
+  try {
+    const buf = musicCtx.createBuffer(1, 1, musicCtx.sampleRate || 44100);
+    const src = musicCtx.createBufferSource();
+    src.buffer = buf;
+    src.connect(musicCtx.destination);
+    src.start(0);
+  } catch (e) { /* a locked context rejects the silent buffer until resume */ }
+}
+function musicElPlay() {
+  if (!musicEl) return;
+  try { const p = musicEl.play(); if (p && p.catch) p.catch(() => {}); } catch (e) { /* play() needs the gesture; the next tap retries */ }
+}
+function musicResume() {
+  if (!musicCtx) return;
+  if (musicCtx.state === 'suspended' || musicCtx.state === 'interrupted') {
+    musicPing();
+    try { musicCtx.resume(); } catch (e) { /* resume is retried on the next tap */ }
+  }
+  musicElPlay();
 }
 function musicBuild() {
   if (musicCtx) return;
   const AC = window.AudioContext || window.webkitAudioContext;
   if (!AC) return;
+  try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch (e) { /* older browsers have no audioSession */ }
   musicCtx = new AC();
   musicBuilt += 1;
+  musicPing();
+  try { musicCtx.resume(); } catch (e) { /* unlocked again on the next gesture */ }
   const master = musicCtx.createGain();
   master.gain.value = 0;
+  const comp = musicCtx.createDynamicsCompressor();
+  comp.threshold.value = -18;
+  comp.knee.value = 10;
+  comp.ratio.value = 8;
+  comp.attack.value = 0.008;
+  comp.release.value = 0.25;
   const breath = musicCtx.createGain();
-  breath.gain.value = 0.92;
+  breath.gain.value = 0.9;
   const filter = musicCtx.createBiquadFilter();
   filter.type = 'lowpass';
-  filter.frequency.value = 1280;
-  filter.Q.value = 0.35;
+  filter.frequency.value = 2200;
+  filter.Q.value = 0.4;
   const lfo = musicCtx.createOscillator();
   lfo.frequency.value = 0.07;
   const lfoAmt = musicCtx.createGain();
-  lfoAmt.gain.value = 0.05;
+  lfoAmt.gain.value = 0.06;
   lfo.connect(lfoAmt);
   lfoAmt.connect(breath.gain);
   lfo.start();
   filter.connect(breath);
-  breath.connect(master);
-  master.connect(musicCtx.destination);
+  breath.connect(comp);
+  comp.connect(master);
+  musicAnalyser = musicCtx.createAnalyser();
+  musicAnalyser.fftSize = 1024;
+  master.connect(musicAnalyser);
+  if (musicPhone()) {
+    const stream = musicCtx.createMediaStreamDestination();
+    musicAnalyser.connect(stream);
+    musicEl = document.createElement('audio');
+    musicEl.id = 'musicOut';
+    musicEl.setAttribute('playsinline', '');
+    musicEl.setAttribute('webkit-playsinline', '');
+    musicEl.playsInline = true;
+    musicEl.autoplay = true;
+    musicEl.volume = 1;
+    musicEl.style.cssText = 'position:absolute;width:1px;height:1px;opacity:0;pointer-events:none';
+    document.body.appendChild(musicEl);
+    musicEl.srcObject = stream.stream;
+    musicElPlay();
+  } else {
+    musicAnalyser.connect(musicCtx.destination);
+  }
   musicGain = master;
-  const real = new Float32Array(12), imag = new Float32Array(12);
-  [0, 1, 0.58, 0.34, 0.22, 0.14, 0.09, 0.055, 0.035, 0.02, 0.012, 0.008].forEach((amp, i) => { imag[i] = amp; });
+  const real = new Float32Array(10), imag = new Float32Array(10);
+  [0, 0.4, 1, 0.82, 0.58, 0.38, 0.24, 0.14, 0.08, 0.04].forEach((amp, i) => { imag[i] = amp; });
   const wave = musicCtx.createPeriodicWave(real, imag);
-  const sa = 146.83;
-  [[sa / 2, 0.08, -6], [sa / 2, 0.08, 5], [sa, 0.11, -4], [sa, 0.11, 7], [sa * 1.5, 0.08, -5], [sa * 1.5, 0.08, 8], [sa * 2, 0.04, -3], [sa * 2, 0.04, 4]].forEach(([freq, gain, cents]) => {
+  const sa = 196;
+  [[sa, 0.1, -5], [sa, 0.1, 6], [sa * 1.5, 0.12, -4], [sa * 1.5, 0.12, 7], [sa * 2, 0.1, -3], [sa * 2, 0.1, 5], [sa * 3, 0.05, -2], [sa * 4, 0.03, 3]].forEach(([freq, gain, cents]) => {
     const osc = musicCtx.createOscillator();
     osc.setPeriodicWave(wave);
     osc.frequency.value = freq;
@@ -921,23 +1027,38 @@ function musicBuild() {
     vg.connect(filter);
     osc.start();
   });
-}
-function musicStart(seconds) {
-  if (!musicOn() || document.hidden) return;
-  musicBuild();
-  if (!musicCtx) return;
-  const resumed = musicCtx.resume();
-  if (resumed && resumed.catch) resumed.catch(() => {});
-  musicHeld = false;
-  musicPlaying = true;
-  musicRamp(MUSIC_LEVEL, seconds);
+  musicCtx.onstatechange = () => {
+    if (musicCtx && musicCtx.state === 'interrupted' && musicPlaying && musicOn() && !musicHeld) {
+      musicPing();
+      try { musicCtx.resume(); } catch (e) { /* the next tap resumes an interrupted context */ }
+      musicElPlay();
+    }
+    musicDebugPaint();
+  };
 }
 function musicSilence(seconds, andSuspend) {
   if (!musicCtx) return;
   musicHeld = true;
   musicRamp(0, seconds, () => {
-    if (musicHeld && musicCtx && musicCtx.state === 'running' && (andSuspend || !musicOn())) musicCtx.suspend();
+    if (!musicHeld || !musicCtx) return;
+    if (andSuspend || !musicOn()) {
+      if (musicEl) { try { musicEl.pause(); } catch (e) { /* already paused */ } }
+      if (musicCtx.state === 'running') { try { musicCtx.suspend(); } catch (e) { /* already suspended */ } }
+    }
   });
+}
+function musicUnlock() {
+  if (!musicOn()) return;
+  musicBuild();
+  musicResume();
+  if (!musicCtx) return;
+  const running = musicCtx.state === 'running';
+  if (musicPlaying && running && !musicHeld) return;
+  musicHeld = false;
+  const fresh = !musicPlaying;
+  musicPlaying = true;
+  musicRamp(musicLevel(), fresh ? 3 : 0.8);
+  musicDebugPaint();
 }
 function musicToggle() {
   if (musicOn()) {
@@ -946,33 +1067,47 @@ function musicToggle() {
     musicSilence(0.45, true);
   } else {
     store.set('music', true);
-    musicStart(3);
+    musicUnlock();
   }
   musicPaint();
 }
-function musicOnPointer(e) {
+function musicGesture(e) {
   if (e.target && e.target.closest && e.target.closest('#musicBtn')) return;
-  if (musicPlaying || !musicOn()) return;
-  musicStart(3);
+  musicUnlock();
 }
 function musicOnVisible() {
   if (document.hidden) {
     if (musicCtx && musicPlaying) musicSilence(0.6, true);
+    musicDebugPaint();
     return;
   }
   if (!musicPlaying || !musicOn() || !musicCtx) return;
   musicHeld = false;
-  const resumed = musicCtx.resume();
-  if (resumed && resumed.catch) resumed.catch(() => {});
-  musicRamp(MUSIC_LEVEL, 1.5);
+  musicResume();
+  musicRamp(musicLevel(), 1.5);
+  musicDebugPaint();
 }
 function bindMusic() {
   const b = document.getElementById('musicBtn');
   if (b) b.onclick = e => { e.preventDefault(); e.stopPropagation(); musicToggle(); };
 }
-document.addEventListener('pointerdown', musicOnPointer, true);
+window.drishtiUnlockAudio = musicUnlock;
+['pointerdown', 'touchstart', 'touchend', 'click'].forEach(type => {
+  document.addEventListener(type, musicGesture, {capture: true, passive: true});
+});
 document.addEventListener('visibilitychange', musicOnVisible);
-window.addEventListener('pagehide', () => { if (musicCtx && musicPlaying) musicSilence(0.4, true); });
+window.addEventListener('pagehide', e => {
+  if (!musicCtx || !musicPlaying) return;
+  if (document.visibilityState === 'visible' && !(e && e.persisted)) return;
+  musicSilence(0.4, true);
+});
+window.addEventListener('pageshow', () => {
+  if (document.hidden || !musicPlaying || !musicOn() || !musicCtx) return;
+  musicHeld = false;
+  musicResume();
+  musicRamp(musicLevel(), 1.5);
+});
+if (musicDebugOn) { musicDebugPaint(); setInterval(musicDebugPaint, 500); }
 function header() {
   const p = activeProfile();
   return `<header class="top"><a class="logo" href="#" id="logo" aria-label="${tr('Drishti, AI astrologer', 'दृष्टि, AI ज्योतिषी')}"><span class="dev">दृष्टि</span><small>${tr('AI astrologer', 'AI ज्योतिषी')}</small></a>
