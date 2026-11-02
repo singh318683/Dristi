@@ -49,6 +49,16 @@ async function measure(page, name) {
     }, {timeout: 8000}).catch(() => {});
   }
   const bad = await page.evaluate(offenders);
+  if (name === 'profile') {
+    const vertical = await page.evaluate(() => {
+      const main = document.getElementById('me');
+      const out = [];
+      if (!main) return ['profile missing'];
+      if (main.scrollHeight > main.clientHeight + 2) out.push('profile scroll ' + main.scrollHeight + '>' + main.clientHeight);
+      return out;
+    });
+    bad.push(...vertical);
+  }
   if (name === 'home') {
     const vertical = await page.evaluate(() => {
       const main = document.querySelector('main.home');
