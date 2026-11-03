@@ -140,7 +140,7 @@ def test_background_music_is_one_synthesized_drone():
     assert "drishtiUnlockAudio" in html
     assert ".mp3" not in html and ".ogg" not in html and ".m4a" not in html
     assert "Web Audio" in credits and "no third-party music license" in credits
-    assert "drishti-v13" in open(os.path.join(root, "web", "sw.js"), encoding="utf-8").read()
+    assert "drishti-v14" in open(os.path.join(root, "web", "sw.js"), encoding="utf-8").read()
 
 
 def test_home_asks_for_the_device_date():
@@ -167,7 +167,7 @@ def test_home_periods_card_and_local_clock():
     assert "Good evening" in greet and "clock.getHours() < 5" in greet
     assert "function glanceTitle" in html and "function horoGlanceSentence" in html
     assert "glanceHoroLine" not in html
-    assert "drishti-v13" in open(os.path.join(os.path.dirname(__file__), "..", "web", "sw.js"), encoding="utf-8").read()
+    assert "drishti-v14" in open(os.path.join(os.path.dirname(__file__), "..", "web", "sw.js"), encoding="utf-8").read()
 
 
 def test_profile_screen_drops_invite_and_sign_in():
@@ -184,6 +184,15 @@ def test_profile_screen_drops_invite_and_sign_in():
     assert 'id="musicBtn"' in html and "function musicUnlock" in html
 
 
+def test_header_keeps_the_name_and_retrograde_has_a_gap():
+    root = os.path.join(os.path.dirname(__file__), "..")
+    html = open(os.path.join(root, "web", "index.html"), encoding="utf-8").read()
+    assert "max-width:100px" not in html
+    assert 'class="rx"' in html
+    assert ".legend span.rx{gap:.35em}" in html
+    assert "max-width:min(46vw,220px)" in html
+
+
 def test_planet_detail_opens_in_a_sheet():
     root = os.path.join(os.path.dirname(__file__), "..")
     html = open(os.path.join(root, "web", "index.html"), encoding="utf-8").read()
@@ -194,7 +203,7 @@ def test_planet_detail_opens_in_a_sheet():
     assert "max-height:58px" not in html
     assert "body.app-fit .info .m{display:-webkit-box" not in html
     assert "if (o) openReading(o, src)" in html
-    assert "drishti-v13" in open(os.path.join(root, "web", "sw.js"), encoding="utf-8").read()
+    assert "drishti-v14" in open(os.path.join(root, "web", "sw.js"), encoding="utf-8").read()
 
 
 def test_panchang_and_pdf_endpoints(client):
