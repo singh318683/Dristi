@@ -4,3 +4,6 @@ __pycache__/
 server/data/app.db
 server.log
 .pytest_cache/
+*.jks
+*.keystore
+keystore.properties

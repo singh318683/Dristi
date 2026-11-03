@@ -79,9 +79,28 @@ async function measure(page, name) {
         const theme = (document.getElementById('periodTheme') || {}).textContent || '';
         if (theme.length < 4) out.push('periods theme empty');
       }
+      const nameEl = document.querySelector('#whoBtn .n');
+      if (!nameEl) out.push('name missing');
+      else if (nameEl.scrollWidth > nameEl.clientWidth + 1) out.push('name truncated ' + nameEl.clientWidth + ' ' + nameEl.textContent);
       return out;
     });
     bad.push(...vertical);
+  }
+  if (name === 'chart') {
+    const rx = await page.evaluate(() => {
+      const span = document.querySelector('#legend .rx');
+      const out = [];
+      if (!span) return ['retrograde key missing'];
+      const mark = span.querySelector('b');
+      const word = span.querySelector('span');
+      if (!mark || !word) return ['retrograde parts missing'];
+      const gap = word.getBoundingClientRect().left - mark.getBoundingClientRect().right;
+      if (gap < 2) out.push('retrograde gap ' + Math.round(gap));
+      const label = (word.textContent || '').trim();
+      if (label !== 'retrograde' && label !== 'वक्री') out.push('retrograde label ' + label);
+      return out;
+    });
+    bad.push(...rx);
   }
   return {name, bad};
 }

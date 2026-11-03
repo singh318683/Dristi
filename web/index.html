@@ -368,7 +368,7 @@ svg.dim .ch-house.lagna:not(.hl){fill:transparent}
 @keyframes draw{from{stroke-dashoffset:1}} @keyframes fadeTo{from{opacity:0}}
 .legend button{border:0;background:none;padding:0 6px;min-height:44px;color:var(--muted);font-size:13px;border-radius:10px;cursor:pointer}
 .legend button:hover,.legend button.hl-src{background:var(--primary-tint);color:var(--ink)}
-.legend span{display:inline-flex;align-items:center;min-height:44px;padding:0 6px} .legend .note{flex-basis:100%;min-height:0;padding:4px 6px 0}
+.legend span{display:inline-flex;align-items:center;min-height:44px;padding:0 6px} .legend span.rx{gap:.35em} .legend .note{flex-basis:100%;min-height:0;padding:4px 6px 0}
 [data-hl]{cursor:pointer;transition:background-color .25s}
 #k .item[data-hl]{margin:0 -10px;padding-left:10px;padding-right:10px;border-radius:12px}
 #k .item[data-hl]:hover,#k table.t tr[data-hl]:hover,.hm:hover{background:var(--sunk)}
@@ -414,11 +414,14 @@ body.app-fit .app{flex:1;min-height:0;width:100%;max-width:560px;height:auto;dis
 body.app-fit nav.bottom{position:relative;left:auto;right:auto;width:100%;max-width:560px;flex:none;flex-shrink:0;padding-bottom:env(safe-area-inset-bottom)}
 body.app-fit nav.bottom .in{height:56px}
 body.app-fit .top{flex:none;flex-shrink:0;flex-wrap:nowrap;min-height:48px;padding-top:calc(env(safe-area-inset-top) + 2px);padding-bottom:2px}
+body.app-fit .logo{flex:0 1 auto;min-width:0;margin-right:0}
 body.app-fit .logo small{letter-spacing:.04em;font-size:10px}
-body.app-fit .who-btn{max-width:100px}
-body.app-fit .musicbtn{width:36px;min-width:36px;height:36px;min-height:36px}
-body.app-fit .langbtn{padding:0 4px}
-@media (max-width:360px){
+body.app-fit .who-btn{flex:0 1 auto;max-width:min(46vw,220px);min-width:0;margin-left:auto;overflow:hidden;justify-content:flex-start;padding:0 2px 0 4px;gap:4px}
+body.app-fit .who-btn span.n{flex:1 1 auto;min-width:0;display:block}
+body.app-fit .who-btn svg{flex:none}
+body.app-fit .musicbtn{width:36px;min-width:36px;height:36px;min-height:36px;flex:none}
+body.app-fit .langbtn{flex:none;padding:0 4px}
+@media (max-width:430px){
   body.app-fit .logo small{display:none}
 }
 body.app-fit main.fit{flex:1;min-height:0;overflow-x:hidden;overflow-y:auto;display:flex;flex-direction:column;gap:6px;padding:6px 12px;-webkit-overflow-scrolling:touch}
@@ -2348,7 +2351,7 @@ function legend(c) {
   const ab = hi() ? AB_HI : AB;
   return `<button ${hlAttr({p: [], h: [1], t: tr('Ascendant (Lagna)', 'लग्न'), m: tr(`Your rising sign, ${signName(c.d1.lagna_sign)}. It sets house 1, and every other house is counted from it.`, `आपका लग्न ${signName(c.d1.lagna_sign)}। यही पहला भाव है, बाकी भाव इसी से गिने जाते हैं।`)})}><b>${hi() ? 'लग्न' : 'Asc'}</b> ${tr('Ascendant', '')}</button>` +
     Object.keys(ab).map(p => `<button ${hlAttr(planetHL(c, p))}><b>${ab[p]}</b> ${plName(p)}</button>`).join('') +
-    `<span><b>℞</b> ${tr('retrograde', 'वक्री')}</span><span class="note">${S.style === 'north' ? tr('Top diamond = house 1. Small numbers are signs (1 Aries … 12 Pisces); shaded box is your Lagna.', 'ऊपर का भाग = पहला भाव। छोटी संख्या = राशि (1 मेष … 12 मीन); हल्का रंग = लग्न।') : tr('Signs stay fixed in each box; shaded box is your Lagna.', 'हर खाने में राशि स्थिर है; हल्का रंग = लग्न।')}</span>`;
+    `<span class="rx"><b>℞</b><span>${tr('retrograde', 'वक्री')}</span></span><span class="note">${S.style === 'north' ? tr('Top diamond = house 1. Small numbers are signs (1 Aries … 12 Pisces); shaded box is your Lagna.', 'ऊपर का भाग = पहला भाव। छोटी संख्या = राशि (1 मेष … 12 मीन); हल्का रंग = लग्न।') : tr('Signs stay fixed in each box; shaded box is your Lagna.', 'हर खाने में राशि स्थिर है; हल्का रंग = लग्न।')}</span>`;
 }
 // chart geometry (320-unit square)
 const CW = 320, CH2 = 160, CQ = 80;
