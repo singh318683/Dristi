@@ -48,3 +48,17 @@ def test_phone_audio_unlocks_and_makes_sound():
     env["CHROME"] = chrome
     script = os.path.join(ROOT, "tests", "check_audio.js")
     subprocess.check_call([node, script], cwd=ROOT, env=env)
+
+
+def test_planet_detail_sheet_shows_the_full_note():
+    node = shutil.which("node")
+    chrome = os.environ.get("CHROME") or shutil.which("google-chrome") or shutil.which("chromium")
+    if not node or not chrome:
+        pytest.skip("node and Chrome are required for the reading check")
+    env = os.environ.copy()
+    puppeteer = "/tmp/puppeteer-core/node_modules"
+    if os.path.isdir(puppeteer):
+        env["NODE_PATH"] = puppeteer + (os.pathsep + env["NODE_PATH"] if env.get("NODE_PATH") else "")
+    env["CHROME"] = chrome
+    script = os.path.join(ROOT, "tests", "check_reading.js")
+    subprocess.check_call([node, script], cwd=ROOT, env=env)

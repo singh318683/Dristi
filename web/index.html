@@ -63,7 +63,7 @@ a{color:var(--primary)}
 .musicbtn[aria-pressed=true]{color:var(--faint)}
 .musicbtn svg{display:block}
 .onb-tools{display:flex;align-items:center;gap:2px;flex:none}
-.sheet-bg{position:fixed;inset:0;background:rgba(20,16,10,.32);z-index:60;display:flex;align-items:flex-start;justify-content:center;padding-top:calc(env(safe-area-inset-top) + 64px)}
+.sheet-bg{position:fixed;inset:0;background:rgba(20,16,10,.32);z-index:70;display:flex;align-items:flex-start;justify-content:center;padding-top:calc(env(safe-area-inset-top) + 64px)}
 .sheet{background:var(--surface);border:1px solid var(--line);border-radius:18px;box-shadow:0 18px 50px -20px rgba(0,0,0,.45);width:min(92vw,380px);padding:8px}
 .sheet h4{margin:8px 10px 6px;font-size:12.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
 .opt{display:flex;align-items:center;gap:12px;width:100%;min-height:56px;border:0;background:none;border-radius:12px;padding:6px 10px;text-align:left}
@@ -404,6 +404,7 @@ svg.mini .ch-line{stroke-width:2}
 .cite:hover{background:var(--hl-fill)}
 .cite-sheet .chartwrap{margin-top:4px}
 .cite-sheet .chartwrap svg{max-width:300px}
+.sheet.cite-sheet{max-height:min(75dvh,720px);overflow:auto;padding-bottom:calc(16px + env(safe-area-inset-bottom))}
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.001ms!important;animation-delay:0s!important;animation-iteration-count:1!important;transition-duration:.001ms!important;scroll-behavior:auto!important}.reveal{opacity:1;transform:none}}
 /* One screen when it fits. Rows never shrink or overlap; main scrolls if the
    small viewport (iOS Safari toolbars) is shorter than the cards. */
@@ -456,8 +457,9 @@ body.app-fit main.fit > .chartcard{flex:1 1 160px;min-height:160px;display:flex;
 .gita-mean{overflow-wrap:anywhere;max-width:100%}
 body.app-fit .chartwrap{flex:1;min-height:0;margin-top:4px;overflow:hidden}
 body.app-fit .chartwrap svg{width:100%;height:100%;max-width:none;max-height:100%}
-body.app-fit .info{margin-top:4px;padding:6px 8px;min-height:0;max-height:58px;overflow:hidden;font-size:13px}
-body.app-fit .info .m{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+body.app-fit .info{margin-top:4px;padding:6px 8px;min-height:0;font-size:13px}
+body.app-fit .info .m{display:block}
+body.app-fit .info .spread b.t{flex:1;min-width:0;white-space:normal}
 body.app-fit .legend{flex-wrap:wrap;overflow-x:hidden;margin-top:2px;gap:0}
 body.app-fit .legend .note{display:none}
 body.app-fit .pair .pick{padding:8px 6px}
@@ -468,8 +470,20 @@ body.app-fit .reveal{opacity:1;transform:none}
 .card.horo{overflow:hidden}
 .clamp3{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;line-height:1.45;max-height:4.35em}
 .sheet-bg.as-bottom{align-items:flex-end;padding:0}
-.sheet.tall{width:min(100%,560px);max-height:min(78dvh,720px);border-radius:18px 18px 0 0;display:flex;flex-direction:column;padding:8px 14px 16px}
-.sheet.tall .sheet-body{overflow:auto;overflow-x:hidden;min-height:0;max-width:100%}
+.sheet-bg.as-bottom:not([hidden]){animation:sheetFade .22s ease}
+.sheet.tall,.sheet.reading{width:min(100%,560px);max-height:min(75dvh,720px);border-radius:18px 18px 0 0;display:flex;flex-direction:column;padding:8px 14px calc(16px + env(safe-area-inset-bottom))}
+.sheet.reading{padding-top:2px;animation:sheetRise .32s var(--ease)}
+.sheet.tall .sheet-body,.sheet.reading .sheet-body{overflow:auto;overflow-x:hidden;min-height:0;max-width:100%;overscroll-behavior:contain}
+.sheet-handle{display:flex;align-items:center;justify-content:center;width:100%;min-height:44px;margin:0;padding:8px 0 2px;border:0;background:transparent;color:inherit;touch-action:none}
+.sheet-handle i{display:block;width:40px;height:4px;border-radius:4px;background:var(--line-strong)}
+.sheet.reading .spread{align-items:flex-start}
+.sheet.reading h4{display:flex;align-items:flex-start;gap:8px;flex:1;margin:0 0 8px;font-size:18px;line-height:1.35;letter-spacing:0;text-transform:none;color:var(--ink);font-weight:700;min-width:0}
+.sheet.reading h4 .pglyph{font-size:22px;flex:none;margin-top:1px}
+.sheet-x{flex:none;width:44px;height:44px;min-width:44px;min-height:44px}
+.read-m{margin:0;color:var(--ink);font-size:15.5px;line-height:1.55}
+body.sheet-lock main.fit{overflow:hidden}
+@keyframes sheetRise{from{transform:translateY(110%)}to{transform:none}}
+@keyframes sheetFade{from{opacity:0}to{opacity:1}}
 .sheet-body .chips{max-width:100%;min-width:0}
 .sheet-body .chip,.sheet-body .tag{max-width:100%;white-space:normal;height:auto}
 .why{margin-top:8px;border-top:1px solid var(--line);padding-top:4px}
@@ -853,7 +867,7 @@ function render() {
   tabs[S.tab]();
   $$('nav.bottom button').forEach(b => b.onclick = () => go(b.dataset.t));
 }
-function go(tab) { S.tab = tab; render(); window.scrollTo(0, 0); }
+function go(tab) { closeSheet(); S.tab = tab; render(); window.scrollTo(0, 0); }
 function nav() {
   const items = [['home', I.home(), tr('Home', 'होम')], ['kundli', I.chart(), tr('Chart', 'कुंडली')], ['ask', I.ask(), tr('Ask', 'पूछें')], ['match', I.match(), tr('Match', 'मिलान')], ['me', I.me(), tr('Profile', 'प्रोफ़ाइल')]];
   return `<nav class="bottom" aria-label="Main"><div class="in">${items.map(([k, i, l]) => `<button data-t="${k}" ${S.tab === k ? 'aria-current="page"' : ''}><span class="ico">${i}</span>${l}</button>`).join('')}</div></nav>`;
@@ -1138,14 +1152,85 @@ function openSwitcher() {
   sh.querySelector('.opt').focus();
 }
 function escClose(e) { if (e.key === 'Escape') closeSheet(); }
-function closeSheet() { const sh = $('#sheet'); if (sh) { sh.hidden = true; sh.innerHTML = ''; sh.classList.remove('as-bottom'); } document.removeEventListener('keydown', escClose); }
-function openDetail(title, bodyHtml) {
+let sheetReturn = null;
+function rememberFocus(el) {
+  const n = (el && el.nodeType === 1) ? el : document.activeElement;
+  if (!n || n.nodeType !== 1 || n === document.body || (n.closest && n.closest('#sheet'))) return;
+  sheetReturn = n;
+}
+function lockSheet() {
+  document.body.classList.add('sheet-lock');
+  const root = document.getElementById('root');
+  if (root) root.setAttribute('aria-hidden', 'true');
+}
+function closeSheet() {
   const sh = $('#sheet');
+  if (sh) { sh.hidden = true; sh.innerHTML = ''; sh.classList.remove('as-bottom'); }
+  document.body.classList.remove('sheet-lock');
+  const root = document.getElementById('root');
+  const splash = document.getElementById('gita-splash');
+  if (root && !(splash && !splash.hidden)) root.removeAttribute('aria-hidden');
+  document.removeEventListener('keydown', escClose);
+  const back = sheetReturn;
+  sheetReturn = null;
+  if (back && back.isConnected && back.focus) back.focus();
+}
+function bindSheetSwipe(sheetEl) {
+  const handle = sheetEl && sheetEl.querySelector('.sheet-handle');
+  if (!handle) return;
+  let y0 = 0, dy = 0, dragging = false;
+  handle.addEventListener('pointerdown', e => {
+    dragging = true; y0 = e.clientY; dy = 0;
+    try { handle.setPointerCapture(e.pointerId); } catch { /* already captured */ }
+  });
+  handle.addEventListener('pointermove', e => {
+    if (!dragging) return;
+    dy = Math.max(0, e.clientY - y0);
+    sheetEl.style.transform = dy ? 'translateY(' + dy + 'px)' : '';
+  });
+  const end = () => {
+    if (!dragging) return;
+    dragging = false;
+    if (dy > 56) closeSheet();
+    else sheetEl.style.transform = '';
+  };
+  handle.addEventListener('pointerup', end);
+  handle.addEventListener('pointercancel', end);
+}
+function openReading(o, src) {
+  if (!o || !o.t) return;
+  rememberFocus(src);
+  const sh = $('#sheet');
+  const glyph = o.p && o.p.length === 1 ? planetGlyph(o.p[0]) : '';
   sh.classList.add('as-bottom');
-  sh.innerHTML = `<div class="sheet tall" role="dialog" aria-label="${esc(title)}"><div class="spread"><h4 style="margin:8px 0">${esc(title)}</h4><button class="iconbtn" id="shX" aria-label="${tr('Close', 'बंद करें')}">${I.x()}</button></div><div class="sheet-body">${bodyHtml}</div></div>`;
+  sh.innerHTML = `<div class="sheet reading" role="dialog" aria-modal="true" aria-labelledby="readTitle" tabindex="-1">
+    <button type="button" class="sheet-handle" aria-label="${tr('Drag down to close', 'बंद करने के लिए नीचे खींचें')}"><i></i></button>
+    <div class="spread">
+      <h4 id="readTitle">${glyph ? `<span class="pglyph" aria-hidden="true">${glyph}</span>` : ''}${esc(o.t)}</h4>
+      <button type="button" class="iconbtn sheet-x" id="shX" aria-label="${tr('Close', 'बंद करें')}">${I.x()}</button>
+    </div>
+    <div class="sheet-body"><p class="read-m">${esc(o.m || '')}</p></div>
+  </div>`;
   sh.hidden = false;
+  lockSheet();
   sh.onclick = e => { if (e.target === sh) closeSheet(); };
   $('#shX').onclick = closeSheet;
+  document.removeEventListener('keydown', escClose);
+  document.addEventListener('keydown', escClose);
+  const dlg = sh.querySelector('.sheet.reading');
+  bindSheetSwipe(dlg);
+  if (dlg) dlg.focus();
+}
+function openDetail(title, bodyHtml) {
+  rememberFocus();
+  const sh = $('#sheet');
+  sh.classList.add('as-bottom');
+  sh.innerHTML = `<div class="sheet tall" role="dialog" aria-modal="true" aria-label="${esc(title)}"><div class="spread"><h4 style="margin:8px 0">${esc(title)}</h4><button type="button" class="iconbtn sheet-x" id="shX" aria-label="${tr('Close', 'बंद करें')}">${I.x()}</button></div><div class="sheet-body">${bodyHtml}</div></div>`;
+  sh.hidden = false;
+  lockSheet();
+  sh.onclick = e => { if (e.target === sh) closeSheet(); };
+  $('#shX').onclick = closeSheet;
+  document.removeEventListener('keydown', escClose);
   document.addEventListener('keydown', escClose);
   const body = sh.querySelector('.sheet-body');
   if (body) body.addEventListener('click', e => {
@@ -2087,7 +2172,7 @@ function planetHL(c, p) {
     ` ${tr('Here it is', 'स्थिति:')} ${DIGN[r.dignity][i]}${r.retrograde && !['Rahu', 'Ketu'].includes(p) ? tr(', retrograde', ', वक्री') : ''}${r.combust ? tr(', combust', ', अस्त') : ''}.` +
     (rules.length ? ' ' + tr(`Rules house ${rules.join(' & ')}.`, `${rules.join(' व ')} भाव का स्वामी।`) : '') +
     (r.aspects_houses && r.aspects_houses.length ? ' ' + tr(`Aspects (drishti) house ${r.aspects_houses.join(', ')}.`, `दृष्टि: ${r.aspects_houses.join(', ')} भाव।`) : '');
-  return {p: [p], h: [r.house], asp: p, t: tr(`${plName(p)} in ${signName(r.sign)}, house ${r.house}`, `${plName(p)} ${signName(r.sign)} में, ${r.house}वाँ भाव`), m, row: 'pr-' + p};
+  return {p: [p], h: [r.house], asp: p, t: tr(`${plName(p)} in ${signName(r.sign)} · house ${r.house}`, `${plName(p)} ${signName(r.sign)} में · ${r.house}वाँ भाव`), m, row: 'pr-' + p};
 }
 function houseHL(c, h) {
   const hd = c.houses[h - 1], occ = hd.occupants || [];
@@ -2114,14 +2199,19 @@ function setHL(o, src) {
   if (src) src.classList.add('hl-src');
   if (!K.c) return;
   applyHL($('#chartsvg svg'), K.c, o); applyHL($('#mini svg'), K.c, o); renderInfo();
+  if (o) openReading(o, src);
+  else if ($('#sheet') && !$('#sheet').hidden && $('#sheet').querySelector('.sheet.reading')) closeSheet();
 }
 function renderInfo() {
   const o = S.hl, box = $('#info'), dt = $('#dockT'), dm = $('#dockM');
   const t = o ? esc(o.t) : tr('Tap any planet, house or explanation', 'किसी ग्रह, भाव या विवरण पर टैप करें');
-  const m = o ? esc(o.m || '') : tr('The chart lights up what it refers to, in plain words.', 'कुंडली में संबंधित भाग चमक उठेगा।');
-  if (box) box.innerHTML = `<div class="spread" style="align-items:flex-start"><b class="t">${t}</b>${o ? `<button class="iconbtn clr" id="hlClr" aria-label="${tr('Clear highlight', 'हाइलाइट हटाएँ')}">${I.x()}</button>` : ''}</div><span class="m">${m}</span>`;
-  if (dt) { dt.innerHTML = t; dm.innerHTML = m; }
-  const x = $('#hlClr'); if (x) x.onclick = () => setHL(null);
+  const m = o ? '' : tr('The chart lights up what it refers to, in plain words.', 'कुंडली में संबंधित भाग चमक उठेगा।');
+  if (box) {
+    box.innerHTML = `<div class="spread" style="align-items:flex-start"><b class="t">${t}</b>${o ? `<button class="iconbtn clr" id="hlClr" aria-label="${tr('Clear highlight', 'हाइलाइट हटाएँ')}">${I.x()}</button>` : ''}</div>${m ? `<span class="m">${esc(m)}</span>` : ''}`;
+    box.onclick = o ? e => { if (!e.target.closest('#hlClr')) openReading(o); } : null;
+  }
+  if (dt) { dt.innerHTML = t; dm.innerHTML = o ? esc(o.m || '') : m; }
+  const x = $('#hlClr'); if (x) x.onclick = e => { e.stopPropagation(); setHL(null); };
 }
 function applyHL(svg, c, o) {
   if (!svg) return;
@@ -2278,14 +2368,14 @@ function chartSVG(c, div, style, mini = false) {
   const pl = (p, x, y, fs = 13) => {
     const r = c.planets[p], deg = div === 'd1' && !mini ? `<tspan class="deg" dx="1">${Math.floor(r.degree)}°</tspan>` : '', rx = r.retrograde && !['Rahu', 'Ketu'].includes(p) && !mini ? '<tspan class="deg">℞</tspan>' : '';
     const w = mini ? 38 : (deg ? 40 : 28) + (rx ? 6 : 0);
-    return `<g class="ch-g" data-p="${p}" data-x="${x}" data-y="${y - 4.5}" style="--i:${k++}" role="button" aria-label="${plName(p)}"><rect class="ch-hit" x="${x - 22}" y="${y - 15}" width="44" height="21"/><rect class="ch-ring" x="${x - w / 2}" y="${y - (mini ? 20 : 14)}" width="${w}" height="${mini ? 26 : 19}" rx="${mini ? 13 : 9.5}"/><text class="ch-pl" x="${x}" y="${y}" text-anchor="middle" style="font-size:${mini ? 24 : fs}px">${ab[p]}${deg}${rx}</text></g>`;
+    return `<g class="ch-g" data-p="${p}" data-x="${x}" data-y="${y - 4.5}" style="--i:${k++}" role="button" tabindex="0" aria-label="${plName(p)}"><rect class="ch-hit" x="${x - 22}" y="${y - 15}" width="44" height="21"/><rect class="ch-ring" x="${x - w / 2}" y="${y - (mini ? 20 : 14)}" width="${w}" height="${mini ? 26 : 19}" rx="${mini ? 13 : 9.5}"/><text class="ch-pl" x="${x}" y="${y}" text-anchor="middle" style="font-size:${mini ? 24 : fs}px">${ab[p]}${deg}${rx}</text></g>`;
   };
   const svgOpen = lbl => `<svg viewBox="-2 -2 ${CW + 4} ${CW + 4}" role="img" aria-label="${lbl}" data-div="${div}" data-style="${style}" class="${mini ? 'mini' : ''}">`;
   if (style === 'south') {
     const q = CQ; let g = `<rect class="ch-bg" x="0" y="0" width="${CW}" height="${CW}"/><rect class="ch-center" x="${q}" y="${q}" width="${2 * q}" height="${2 * q}"/>`, t = '';
     for (let s = 0; s < 12; s++) {
       const [r, col] = S_POS[s], x = col * q, y = r * q, h = (s - L + 12) % 12 + 1;
-      g += `<rect data-h="${h}" class="ch-house ${s === L ? 'lagna' : ''}" x="${x}" y="${y}" width="${q}" height="${q}"/>`;
+      g += `<rect data-h="${h}" role="button" tabindex="0" class="ch-house ${s === L ? 'lagna' : ''}" x="${x}" y="${y}" width="${q}" height="${q}"/>`;
       if (!mini) t += `<text class="ch-num" x="${x + 6}" y="${y + 15}" style="pointer-events:none">${hi() ? SIGNS_HI[s] : SIGNS[s].slice(0, 3)}</text>`;
       if (s === L && !mini) t += `<text class="ch-asc" x="${x + q - 6}" y="${y + 15}" text-anchor="end" style="pointer-events:none">${ascLbl}</text>`;
       occ(s).forEach((p, i) => { t += pl(p, x + (i % 2 ? q * .72 : q * .3), y + (mini ? 34 : 38) + Math.floor(i / 2) * (mini ? 26 : 19), 13); });
@@ -2296,7 +2386,7 @@ function chartSVG(c, div, style, mini = false) {
     return svgOpen(`South Indian ${div} chart`) + g + '</svg>';
   }
   let g = `<rect class="ch-bg" x="0" y="0" width="${CW}" height="${CW}"/>`;
-  N_POLYS.forEach((pts, i) => { g += `<polygon data-h="${i + 1}" class="ch-house ${i === 0 ? 'lagna' : ''}" points="${pts.map(p => p.join(',')).join(' ')}"><title>${tr('House', 'भाव')} ${i + 1}</title></polygon>`; });
+  N_POLYS.forEach((pts, i) => { g += `<polygon data-h="${i + 1}" role="button" tabindex="0" class="ch-house ${i === 0 ? 'lagna' : ''}" points="${pts.map(p => p.join(',')).join(' ')}"><title>${tr('House', 'भाव')} ${i + 1}</title></polygon>`; });
   g += `<rect class="ch-line" x="0" y="0" width="${CW}" height="${CW}"/><line class="ch-line" x1="0" y1="0" x2="${CW}" y2="${CW}"/><line class="ch-line" x1="${CW}" y1="0" x2="0" y2="${CW}"/><polygon class="ch-line" points="${CH2},0 ${CW},${CH2} ${CH2},${CW} 0,${CH2}"/>`;
   for (let i = 0; i < 12; i++) {
     const sg = (L + i) % 12, [nx, ny] = N_NUM[i], [cx, cy] = N_CENTERS[i];
