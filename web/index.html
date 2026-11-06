@@ -2665,30 +2665,72 @@ function purchaseTokenOf(row) {
   if (!row) return '';
   return row.purchaseToken || row.purchase_token || row.token || '';
 }
-async function buyPlayQuestion() {
-  const sku = playProductId();
+function playTokenKept() {
+  const v = store.get('playToken', '');
+  return typeof v === 'string' && v.length >= 16 ? v : '';
+}
+function keepPlayToken(token) {
+  if (token && token.length >= 16) store.set('playToken', token);
+}
+function dropPlayToken() {
+  try { localStorage.removeItem('dr-playToken'); } catch (e) { /* storage can be blocked */ }
+}
+function ownedPlayToken(owned, sku) {
+  const rows = Array.isArray(owned) ? owned : (owned && Array.isArray(owned.purchases) ? owned.purchases : []);
+  const hit = rows.find(p => {
+    const token = purchaseTokenOf(p);
+    if (!token) return false;
+    const id = p.itemId || p.productId || p.sku || '';
+    return !id || id === sku;
+  });
+  return hit ? purchaseTokenOf(hit) : '';
+}
+function alreadyOwnedError(e) {
+  const msg = String((e && (e.message || e.name || e.code)) || '');
+  return /already own|already owned|ITEM_ALREADY_OWNED/i.test(msg);
+}
+function cancelledPlayError() {
+  const err = new Error('cancelled');
+  err.code = 'payment_cancelled';
+  return err;
+}
+async function listOwnedPlayToken(service, sku) {
+  if (!service || typeof service.listPurchases !== 'function') return '';
+  try { if (typeof service.getDetails === 'function') await service.getDetails([sku]); } catch (e) { /* listing can still succeed */ }
+  const owned = await service.listPurchases();
+  const token = ownedPlayToken(owned, sku);
+  if (token) keepPlayToken(token);
+  return token;
+}
+async function buyFreshPlayQuestion(sku) {
   const bridge = window.DrishtiPlay;
   if (bridge && typeof bridge.purchase === 'function') {
     if (typeof bridge.listPurchases === 'function') {
-      const owned = await bridge.listPurchases();
-      const hit = (owned || []).find(p => (p.itemId || p.productId || p.sku) === sku && purchaseTokenOf(p));
-      if (hit) return purchaseTokenOf(hit);
+      const token = ownedPlayToken(await bridge.listPurchases(), sku);
+      if (token) { keepPlayToken(token); return token; }
     }
-    const result = await bridge.purchase(sku);
-    const token = purchaseTokenOf(result);
-    if (!token) { const err = new Error('cancelled'); err.code = 'payment_cancelled'; throw err; }
-    return token;
+    try {
+      const token = purchaseTokenOf(await bridge.purchase(sku));
+      if (!token) throw cancelledPlayError();
+      keepPlayToken(token);
+      return token;
+    } catch (e) {
+      if (e && e.code === 'payment_cancelled') throw e;
+      if (typeof bridge.listPurchases === 'function') {
+        const token = ownedPlayToken(await bridge.listPurchases(), sku);
+        if (token) { keepPlayToken(token); return token; }
+      }
+      throw e;
+    }
   }
   if (typeof window.getDigitalGoodsService !== 'function') {
     const err = new Error('play'); err.code = 'play_unavailable'; throw err;
   }
   const service = await window.getDigitalGoodsService(PLAY_BILLING);
   if (!service) { const err = new Error('play'); err.code = 'play_unavailable'; throw err; }
-  try {
-    const owned = await service.listPurchases();
-    const hit = (owned || []).find(p => p.itemId === sku && p.purchaseToken);
-    if (hit) return hit.purchaseToken;
-  } catch { /* a new purchase can still be started */ }
+  let token = '';
+  try { token = await listOwnedPlayToken(service, sku); } catch (e) { /* a new purchase can still be started */ }
+  if (token) return token;
   if (typeof PaymentRequest !== 'function') { const err = new Error('play'); err.code = 'play_unavailable'; throw err; }
   const request = new PaymentRequest(
     [{supportedMethods: PLAY_BILLING, data: {sku}}],
@@ -2696,14 +2738,22 @@ async function buyPlayQuestion() {
   let response;
   try { response = await request.show(); }
   catch (e) {
-    if (e && e.name === 'AbortError') { const err = new Error('cancelled'); err.code = 'payment_cancelled'; throw err; }
+    try { token = await listOwnedPlayToken(service, sku); } catch (again) { /* the owned token is the fallback */ }
+    if (token) return token;
+    if (e && e.name === 'AbortError' && !alreadyOwnedError(e)) throw cancelledPlayError();
     throw e;
   }
-  const token = response.details && response.details.purchaseToken;
+  token = purchaseTokenOf(response && response.details);
   // The server consumes the purchase after the answer starts. The page must not.
-  try { await response.complete('success'); } catch { /* the sheet may already be closed */ }
-  if (!token) { const err = new Error('cancelled'); err.code = 'payment_cancelled'; throw err; }
+  try { await response.complete('success'); } catch (e) { /* the sheet may already be closed */ }
+  if (!token) throw cancelledPlayError();
+  keepPlayToken(token);
   return token;
+}
+async function buyPlayQuestion() {
+  const kept = playTokenKept();
+  if (kept) return kept;
+  return buyFreshPlayQuestion(playProductId());
 }
 function noteAskError(q, code) {
   const key = chatKey(), hist = store.get(key, []);
@@ -2720,14 +2770,24 @@ async function ask(q) {
   if (!(S.status && S.status.ai_configured)) { noteAskError(q, 'ai_not_configured'); return; }
   S.streaming = true;
   let purchaseToken = '';
-  try { purchaseToken = await buyPlayQuestion(); }
+  const takeToken = async fresh => {
+    try { return fresh ? await buyFreshPlayQuestion(playProductId()) : await buyPlayQuestion(); }
+    catch (e) {
+      if (e && (e.name === 'AbortError' || e.code === 'payment_cancelled')) return '';
+      const err = new Error((e && e.message) || 'play');
+      err.code = (e && e.code) || 'play_unavailable';
+      throw err;
+    }
+  };
+  try { purchaseToken = await takeToken(false); }
   catch (e) {
     S.streaming = false;
-    if (e && (e.name === 'AbortError' || e.code === 'payment_cancelled')) {
-      const ci = $('#ci'); if (ci && !ci.value) ci.value = q;
-      return;
-    }
-    noteAskError(q, (e && e.code) || 'play_unavailable');
+    noteAskError(q, e.code);
+    return;
+  }
+  if (!purchaseToken) {
+    S.streaming = false;
+    const ci = $('#ci'); if (ci && !ci.value) ci.value = q;
     return;
   }
   const p = activeProfile(), key = chatKey(), hist = store.get(key, []);
@@ -2737,11 +2797,11 @@ async function ask(q) {
   const aiEl = document.createElement('div'); aiEl.className = 'bub ai'; aiEl.innerHTML = `<span class="typing" aria-label="${tr('Reading your chart', 'कुंडली पढ़ रहे हैं')}"><i></i><i></i><i></i></span>`;
   box.appendChild(aiEl); box.scrollTop = box.scrollHeight;
   const msgs = hist.filter(m => m.role !== 'error').slice(-8).map(m => ({role: m.role, content: m.content})).concat([{role: 'user', content: q}]);
-  let text = '', err = null;
-  try {
-    const r = await fetch(API + '/api/chat', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({device: DEVICE, profile: profileBody(p), messages: msgs, lang: S.lang, purchase_token: purchaseToken})});
+  const readChat = async token => {
+    const r = await fetch(API + '/api/chat', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({device: DEVICE, profile: profileBody(p), messages: msgs, lang: S.lang, purchase_token: token})});
     if (!r.ok || !r.body) throw new Error('HTTP ' + r.status);
-    const reader = r.body.getReader(), dec = new TextDecoder(); let buf = '';
+    const reader = r.body.getReader(), dec = new TextDecoder();
+    let buf = '', text = '', err = null;
     for (;;) {
       const {value, done} = await reader.read(); if (done) break;
       buf += dec.decode(value, {stream: true});
@@ -2754,8 +2814,27 @@ async function ask(q) {
         else if (ev.type === 'error') { err = ev; if (ev.wallet) S.wallet = ev.wallet; }
       }
     }
-  } catch (e) { err = {code: 'network'}; }
+    return {text, err};
+  };
+  let text = '', err = null;
+  try { ({text, err} = await readChat(purchaseToken)); }
+  catch (e) { err = {code: 'network'}; }
+  if (err && err.code === 'payment_invalid') {
+    const rejected = purchaseToken;
+    dropPlayToken();
+    try {
+      const next = await takeToken(true);
+      if (next && next !== rejected) {
+        purchaseToken = next;
+        text = ''; err = null;
+        aiEl.innerHTML = `<span class="typing" aria-label="${tr('Reading your chart', 'कुंडली पढ़ रहे हैं')}"><i></i><i></i><i></i></span>`;
+        ({text, err} = await readChat(purchaseToken));
+      }
+    } catch (e) { if (!err) err = {code: 'network'}; }
+  }
   S.streaming = false;
+  if (!err || text || (err && err.code === 'payment_invalid')) dropPlayToken();
+  else keepPlayToken(purchaseToken);
   if (err) {
     aiEl.outerHTML = errBubble(err.code);
     hist.push({role: 'user', content: q}, {role: 'error', code: err.code || 'llm_error', content: ''});
