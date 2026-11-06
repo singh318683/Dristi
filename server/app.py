@@ -994,6 +994,40 @@ def assetlinks():
     return JSONResponse(body, headers={"Cache-Control": "public, max-age=300"})
 
 
+@app.post("/api/clientlog")
+async def api_clientlog(request: Request):
+    """Phone-side purchase diagnostics. Tokens are dropped before anything is printed."""
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+    if not isinstance(payload, dict):
+        payload = {}
+
+    def scrub(value, depth=0):
+        if depth > 4:
+            return None
+        if isinstance(value, dict):
+            out = {}
+            for key, item in list(value.items())[:40]:
+                name = str(key)[:40]
+                if "token" in name.lower():
+                    out[name] = bool(item)
+                else:
+                    out[name] = scrub(item, depth + 1)
+            return out
+        if isinstance(value, list):
+            return [scrub(item, depth + 1) for item in value[:20]]
+        if isinstance(value, str):
+            return value[:180]
+        if isinstance(value, (int, float, bool)) or value is None:
+            return value
+        return str(value)[:80]
+
+    print("clientlog " + json.dumps(scrub(payload), ensure_ascii=False)[:2000], flush=True)
+    return {"ok": True}
+
+
 @app.get("/")
 def index():
     """Home page. The verse list is inlined so the splash can paint before any fetch."""

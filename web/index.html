@@ -2676,7 +2676,7 @@ function dropPlayToken() {
   try { localStorage.removeItem('dr-playToken'); } catch (e) { /* storage can be blocked */ }
 }
 function ownedPlayToken(owned, sku) {
-  const rows = Array.isArray(owned) ? owned : (owned && Array.isArray(owned.purchases) ? owned.purchases : []);
+  const rows = playRows(owned);
   const hit = rows.find(p => {
     const token = purchaseTokenOf(p);
     if (!token) return false;
@@ -2687,7 +2687,34 @@ function ownedPlayToken(owned, sku) {
 }
 function alreadyOwnedError(e) {
   const msg = String((e && (e.message || e.name || e.code)) || '');
-  return /already own|already owned|ITEM_ALREADY_OWNED/i.test(msg);
+  return /already own|already owned|already bought|ITEM_ALREADY_OWNED|\bresult:\s*7\b/i.test(msg);
+}
+function playRows(owned) {
+  if (!owned) return [];
+  if (Array.isArray(owned)) return owned;
+  if (Array.isArray(owned.purchases)) return owned.purchases;
+  if (typeof owned.length === 'number') { try { return Array.from(owned); } catch (e) { return []; } }
+  return [];
+}
+function playRowKeys(row) {
+  if (!row || typeof row !== 'object') return [];
+  return Object.keys(row).filter(k => !/token/i.test(k)).slice(0, 12);
+}
+function playErrBrief(e) {
+  const name = (e && e.name) || 'Error';
+  const msg = String((e && e.message) || '').replace(/[A-Za-z0-9_\-]{24,}/g, '…');
+  return (name + ': ' + msg).slice(0, 180);
+}
+let lastPlayDiag = null;
+function clientLog(event, fields) {
+  const body = Object.assign({event: event}, fields || {}, lastPlayDiag || {});
+  try {
+    fetch((typeof API === 'string' ? API : '') + '/api/clientlog', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(body),
+    }).catch(() => {});
+  } catch (e) { /* logging must not block the question */ }
 }
 function cancelledPlayError() {
   const err = new Error('cancelled');
@@ -2695,12 +2722,50 @@ function cancelledPlayError() {
   return err;
 }
 async function listOwnedPlayToken(service, sku) {
+  const diag = {
+    listFn: typeof (service && service.listPurchases),
+    historyFn: typeof (service && service.listPurchaseHistory),
+    listError: '', historyError: '',
+    listCount: 0, historyCount: 0,
+    listKeys: [], historyKeys: [],
+    listHasToken: false, historyHasToken: false,
+  };
+  lastPlayDiag = diag;
   if (!service || typeof service.listPurchases !== 'function') return '';
-  try { if (typeof service.getDetails === 'function') await service.getDetails([sku]); } catch (e) { /* listing can still succeed */ }
-  const owned = await service.listPurchases();
-  const token = ownedPlayToken(owned, sku);
+  let owned = [];
+  try { owned = await service.listPurchases(); }
+  catch (e) { diag.listError = playErrBrief(e); }
+  let token = ownedPlayToken(owned, sku);
+  if (!token && typeof service.getDetails === 'function') {
+    try { await service.getDetails([sku]); } catch (e) { /* a second list can still succeed */ }
+    try { owned = await service.listPurchases(); }
+    catch (e) { diag.listError = diag.listError || playErrBrief(e); }
+    token = ownedPlayToken(owned, sku);
+  }
+  const rows = playRows(owned);
+  diag.listCount = rows.length;
+  diag.listKeys = rows.slice(0, 3).map(playRowKeys);
+  diag.listHasToken = rows.some(p => !!purchaseTokenOf(p));
+  if (!token && typeof service.listPurchaseHistory === 'function') {
+    let hist = [];
+    try { hist = await service.listPurchaseHistory(); }
+    catch (e) { diag.historyError = playErrBrief(e); }
+    const history = playRows(hist);
+    diag.historyCount = history.length;
+    diag.historyKeys = history.slice(0, 3).map(playRowKeys);
+    diag.historyHasToken = history.some(p => !!purchaseTokenOf(p));
+    token = ownedPlayToken(hist, sku);
+  }
   if (token) keepPlayToken(token);
   return token;
+}
+let pendingPlayResponse = null;
+function settlePlaySheet() {
+  const response = pendingPlayResponse;
+  pendingPlayResponse = null;
+  if (!response) return;
+  try { const done = response.complete('success'); if (done && done.catch) done.catch(() => {}); }
+  catch (e) { /* the sheet may already be closed */ }
 }
 async function buyFreshPlayQuestion(sku) {
   const bridge = window.DrishtiPlay;
@@ -2731,6 +2796,7 @@ async function buyFreshPlayQuestion(sku) {
   let token = '';
   try { token = await listOwnedPlayToken(service, sku); } catch (e) { /* a new purchase can still be started */ }
   if (token) return token;
+  clientLog('play-list-empty', {sku: sku});
   if (typeof PaymentRequest !== 'function') { const err = new Error('play'); err.code = 'play_unavailable'; throw err; }
   const request = new PaymentRequest(
     [{supportedMethods: PLAY_BILLING, data: {sku}}],
@@ -2739,14 +2805,18 @@ async function buyFreshPlayQuestion(sku) {
   try { response = await request.show(); }
   catch (e) {
     try { token = await listOwnedPlayToken(service, sku); } catch (again) { /* the owned token is the fallback */ }
+    clientLog('play-show-fail', {name: (e && e.name) || '', message: playErrBrief(e), owned: !!token, already: alreadyOwnedError(e)});
     if (token) return token;
     if (e && e.name === 'AbortError' && !alreadyOwnedError(e)) throw cancelledPlayError();
-    throw e;
+    const err = new Error(playErrBrief(e));
+    err.code = alreadyOwnedError(e) ? 'already_owned' : 'play_unavailable';
+    throw err;
   }
   token = purchaseTokenOf(response && response.details);
-  // The server consumes the purchase after the answer starts. The page must not.
-  try { await response.complete('success'); } catch (e) { /* the sheet may already be closed */ }
+  // Leave the purchase unacknowledged until an answer starts, so a failed check
+  // can still be found with listPurchases. The server consumes it, not this page.
   if (!token) throw cancelledPlayError();
+  pendingPlayResponse = response;
   keepPlayToken(token);
   return token;
 }
@@ -2833,7 +2903,8 @@ async function ask(q) {
     } catch (e) { if (!err) err = {code: 'network'}; }
   }
   S.streaming = false;
-  if (!err || text || (err && err.code === 'payment_invalid')) dropPlayToken();
+  if (!err || text) { settlePlaySheet(); dropPlayToken(); }
+  else if (err.code === 'payment_invalid') { dropPlayToken(); }
   else keepPlayToken(purchaseToken);
   if (err) {
     aiEl.outerHTML = errBubble(err.code);

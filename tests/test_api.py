@@ -140,7 +140,7 @@ def test_background_music_is_one_synthesized_drone():
     assert "drishtiUnlockAudio" in html
     assert ".mp3" not in html and ".ogg" not in html and ".m4a" not in html
     assert "Web Audio" in credits and "no third-party music license" in credits
-    assert "drishti-v14" in open(os.path.join(root, "web", "sw.js"), encoding="utf-8").read()
+    assert "drishti-v15" in open(os.path.join(root, "web", "sw.js"), encoding="utf-8").read()
 
 
 def test_home_asks_for_the_device_date():
@@ -167,7 +167,7 @@ def test_home_periods_card_and_local_clock():
     assert "Good evening" in greet and "clock.getHours() < 5" in greet
     assert "function glanceTitle" in html and "function horoGlanceSentence" in html
     assert "glanceHoroLine" not in html
-    assert "drishti-v14" in open(os.path.join(os.path.dirname(__file__), "..", "web", "sw.js"), encoding="utf-8").read()
+    assert "drishti-v15" in open(os.path.join(os.path.dirname(__file__), "..", "web", "sw.js"), encoding="utf-8").read()
 
 
 def test_profile_screen_drops_invite_and_sign_in():
@@ -184,18 +184,32 @@ def test_profile_screen_drops_invite_and_sign_in():
     assert 'id="musicBtn"' in html and "function musicUnlock" in html
 
 
+def test_clientlog_does_not_print_purchase_tokens(client, capsys):
+    secret = "supersecrettokenvalue1234567890"
+    res = client.post("/api/clientlog", json={
+        "event": "play-list-empty",
+        "purchaseToken": secret,
+        "listCount": 0,
+        "listKeys": [["itemId"]],
+    })
+    assert res.status_code == 200 and res.json()["ok"] is True
+    printed = capsys.readouterr().out
+    assert "clientlog" in printed and secret not in printed and "listCount" in printed
+
+
 def test_owned_play_question_is_sent_again_instead_of_bought():
     root = os.path.join(os.path.dirname(__file__), "..")
     html = open(os.path.join(root, "web", "index.html"), encoding="utf-8").read()
     buy = html.split("function purchaseTokenOf", 1)[1].split("function noteAskError", 1)[0]
     assert "listPurchases" in buy and "getDetails" in buy
-    assert "already own" in buy and "ITEM_ALREADY_OWNED" in buy
+    assert "already own" in buy and "already bought" in buy and "ITEM_ALREADY_OWNED" in buy
+    assert "listPurchaseHistory" in buy and "/api/clientlog" in html
     assert "listOwnedPlayToken" in buy and "buyFreshPlayQuestion" in buy and "playTokenKept" in buy
     ask = html.split("async function ask", 1)[1].split("const KOOTA", 1)[0]
     assert "buyPlayQuestion" in ask and "buyFreshPlayQuestion" in ask
     assert "payment_invalid" in ask and "keepPlayToken(purchaseToken)" in ask
     assert "response.complete('success')" in html
-    assert "drishti-v14" in open(os.path.join(root, "web", "sw.js"), encoding="utf-8").read()
+    assert "drishti-v15" in open(os.path.join(root, "web", "sw.js"), encoding="utf-8").read()
 
 
 def test_planet_detail_opens_in_a_sheet():
@@ -208,7 +222,7 @@ def test_planet_detail_opens_in_a_sheet():
     assert "max-height:58px" not in html
     assert "body.app-fit .info .m{display:-webkit-box" not in html
     assert "if (o) openReading(o, src)" in html
-    assert "drishti-v14" in open(os.path.join(root, "web", "sw.js"), encoding="utf-8").read()
+    assert "drishti-v15" in open(os.path.join(root, "web", "sw.js"), encoding="utf-8").read()
 
 
 def test_panchang_and_pdf_endpoints(client):
