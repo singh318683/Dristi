@@ -1,6 +1,5 @@
 package com.ikshana.drishti
 
-import com.google.androidbrowserhelper.playbilling.digitalgoods.DigitalGoodsRequestHandler
 import com.google.androidbrowserhelper.trusted.DelegationService
 
 /**
@@ -10,7 +9,9 @@ import com.google.androidbrowserhelper.trusted.DelegationService
  */
 class DrishtiDelegationService : DelegationService() {
     override fun onCreate() {
+        // First handler wins. This one answers listPurchases; every other
+        // Digital Goods command is delegated to the library handler.
+        registerExtraCommandHandler(OwnedListPurchasesHandler(applicationContext))
         super.onCreate()
-        registerExtraCommandHandler(DigitalGoodsRequestHandler(applicationContext))
     }
 }
