@@ -78,28 +78,37 @@ class PlayPaymentActivity : Activity(), PurchasesUpdatedListener {
     }
 
     private fun returnOwnedOrBuy(allowLaunch: Boolean = true) {
-        val client = billing ?: return
-        val params = QueryPurchasesParams.newBuilder()
-            .setProductType(BillingClient.ProductType.INAPP)
-            .build()
-        client.queryPurchasesAsync(params) { _, purchases ->
+        if (billing == null) return
+        queryOwned { purchases ->
             val owned = ownedToken(purchases)
             if (owned != null) {
                 succeed(owned)
-                return@queryPurchasesAsync
+                return@queryOwned
             }
             if (allowLaunch) launchFlow()
             else fail("Payment attempt failed (have you already bought the item?).")
         }
     }
 
+    private fun queryOwned(done: (List<Purchase>) -> Unit) {
+        val client = billing ?: return
+        val all = mutableListOf<Purchase>()
+        var remaining = 2
+        val types = listOf(BillingClient.ProductType.INAPP, BillingClient.ProductType.SUBS)
+        for (type in types) {
+            val params = QueryPurchasesParams.newBuilder().setProductType(type).build()
+            client.queryPurchasesAsync(params) { _, purchases ->
+                synchronized(all) {
+                    if (purchases != null) all.addAll(purchases)
+                    remaining -= 1
+                    if (remaining == 0) done(all.toList())
+                }
+            }
+        }
+    }
+
     private fun ownedToken(purchases: List<Purchase>?): String? {
-        val hit = purchases?.firstOrNull {
-            it.products.contains(sku) &&
-                (it.purchaseState == Purchase.PurchaseState.PURCHASED ||
-                    it.purchaseState == Purchase.PurchaseState.PENDING)
-        } ?: return null
-        return hit.purchaseToken?.takeIf { it.isNotEmpty() }
+        return PlayPurchaseIds.tokenFor(purchases, sku)
     }
 
     private fun launchFlow() {
@@ -140,7 +149,10 @@ class PlayPaymentActivity : Activity(), PurchasesUpdatedListener {
 
     override fun onPurchasesUpdated(result: BillingResult, purchases: MutableList<Purchase>?) {
         val owned = ownedToken(purchases)
-        if (result.responseCode == BillingClient.BillingResponseCode.OK && owned != null) {
+        if (owned != null &&
+            (result.responseCode == BillingClient.BillingResponseCode.OK ||
+                result.responseCode == BillingClient.BillingResponseCode.ITEM_ALREADY_OWNED)
+        ) {
             succeed(owned)
             return
         }
