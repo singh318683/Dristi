@@ -2677,13 +2677,14 @@ function dropPlayToken() {
 }
 function ownedPlayToken(owned, sku) {
   const rows = playRows(owned);
-  const hit = rows.find(p => {
-    const token = purchaseTokenOf(p);
-    if (!token) return false;
+  const withToken = rows.filter(p => purchaseTokenOf(p));
+  const hit = withToken.find(p => {
     const id = p.itemId || p.productId || p.sku || '';
     return !id || id === sku;
   });
-  return hit ? purchaseTokenOf(hit) : '';
+  if (hit) return purchaseTokenOf(hit);
+  if (withToken.length === 1) return purchaseTokenOf(withToken[0]);
+  return '';
 }
 function alreadyOwnedError(e) {
   const msg = String((e && (e.message || e.name || e.code)) || '');

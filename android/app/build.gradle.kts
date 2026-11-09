@@ -14,8 +14,8 @@ android {
         minSdk = 24
         // Google Play requires new apps to target Android 16 (API 36) from 31 August 2026.
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 3
+        versionName = "1.0.2"
     }
 
     buildTypes {
