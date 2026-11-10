@@ -482,6 +482,20 @@ body.app-fit .reveal{opacity:1;transform:none}
 .sheet-x{flex:none;width:44px;height:44px;min-width:44px;min-height:44px}
 .read-m{margin:0;color:var(--ink);font-size:15.5px;line-height:1.55}
 body.sheet-lock main.fit{overflow:hidden}
+.sheet-bg.answer-read{bottom:calc(var(--nav-h) + env(safe-area-inset-bottom));flex-direction:column;align-items:center;justify-content:flex-end;padding:calc(env(safe-area-inset-top) + 36px) 0 0}
+body.app-fit .sheet-bg.answer-read{bottom:calc(56px + env(safe-area-inset-bottom))}
+.sheet.answer{width:min(100%,560px);flex:1 1 auto;min-height:0;max-height:100%;border-radius:18px 18px 0 0;display:flex;flex-direction:column;padding:2px 16px 12px;background:var(--surface);border:1px solid var(--line);border-bottom:0;box-shadow:0 -16px 40px rgba(0,0,0,.18);animation:sheetRise .32s var(--ease)}
+.sheet.answer .ans-head{align-items:flex-start;gap:4px;margin:0}
+.sheet.answer .ans-q{flex:1;min-width:0;margin:8px 0 0;font-size:13.5px;line-height:1.4;font-weight:650;color:var(--muted);display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.sheet.answer .sheet-body{flex:1;overflow:auto;overflow-x:hidden;min-height:0;max-width:100%;overscroll-behavior:contain;padding:4px 2px 10px;color:var(--ink);font-size:17px;line-height:1.65;overflow-wrap:anywhere}
+html[lang=hi] .sheet.answer .sheet-body{line-height:1.75}
+.sheet.answer .sheet-body p{margin:0 0 10px}
+.sheet.answer .sheet-body p:last-child{margin:0}
+.sheet.answer .plain{margin-top:14px}
+.sheet.answer .why{margin-top:12px}
+body.answer-open .composer,body.answer-open .ask-stage{display:none}
+.bub.ai{cursor:pointer}
+.read-open{display:inline-flex;align-items:center;margin-top:8px;min-height:36px;padding:0;border:0;background:none;color:var(--on-tint);font-weight:700;font-size:13px}
 @keyframes sheetRise{from{transform:translateY(110%)}to{transform:none}}
 @keyframes sheetFade{from{opacity:0}to{opacity:1}}
 .sheet-body .chips{max-width:100%;min-width:0}
@@ -1165,8 +1179,9 @@ function lockSheet() {
 }
 function closeSheet() {
   const sh = $('#sheet');
-  if (sh) { sh.hidden = true; sh.innerHTML = ''; sh.classList.remove('as-bottom'); }
-  document.body.classList.remove('sheet-lock');
+  if (sh) { sh.hidden = true; sh.innerHTML = ''; sh.classList.remove('as-bottom', 'answer-read'); }
+  document.body.classList.remove('sheet-lock', 'answer-open');
+  answerRead = null;
   const root = document.getElementById('root');
   const splash = document.getElementById('gita-splash');
   if (root && !(splash && !splash.hidden)) root.removeAttribute('aria-hidden');
@@ -1196,6 +1211,67 @@ function bindSheetSwipe(sheetEl) {
   };
   handle.addEventListener('pointerup', end);
   handle.addEventListener('pointercancel', end);
+}
+let answerRead = null;
+function questionBefore(el) {
+  let n = el ? el.previousElementSibling : null;
+  while (n) {
+    if (n.classList.contains('me')) return (n.textContent || '').trim();
+    if (n.classList.contains('ai')) break;
+    n = n.previousElementSibling;
+  }
+  return '';
+}
+function answerMarkup(el) {
+  const clone = el.cloneNode(true);
+  clone.querySelectorAll('.read-open').forEach(n => n.remove());
+  return clone.innerHTML;
+}
+function openAnswerSheet(el, live) {
+  if (!el) return;
+  const sh = $('#sheet');
+  if (!sh) return;
+  const open = !sh.hidden && sh.classList.contains('answer-read') && document.body.classList.contains('answer-open');
+  answerRead = el;
+  if (!open) {
+    rememberFocus(el);
+    sh.classList.add('as-bottom', 'answer-read');
+    document.body.classList.add('answer-open');
+    sh.innerHTML = `<div class="sheet answer" role="dialog" aria-modal="true" aria-labelledby="ansQ" tabindex="-1">
+      <button type="button" class="sheet-handle" aria-label="${tr('Drag down to close', 'बंद करने के लिए नीचे खींचें')}"><i></i></button>
+      <div class="spread ans-head">
+        <p id="ansQ" class="ans-q"></p>
+        <button type="button" class="iconbtn sheet-x" id="shX" aria-label="${tr('Close', 'बंद करें')}">${I.x()}</button>
+      </div>
+      <div class="sheet-body" id="answerRead"></div>
+    </div>`;
+    sh.hidden = false;
+    lockSheet();
+    sh.onclick = e => { if (e.target === sh) closeSheet(); };
+    $('#shX').onclick = closeSheet;
+    const body = $('#answerRead');
+    if (body) body.addEventListener('click', e => {
+      const cite = e.target.closest('.cite');
+      if (cite) openCite(cite.dataset.cp, cite.dataset.ch, cite.dataset.cs, cite.textContent);
+    });
+    document.removeEventListener('keydown', escClose);
+    document.addEventListener('keydown', escClose);
+    const dlg = sh.querySelector('.sheet.answer');
+    bindSheetSwipe(dlg);
+    if (dlg) dlg.focus();
+  }
+  const title = $('#ansQ');
+  const q = questionBefore(el);
+  if (title) title.textContent = q || tr('Answer', 'उत्तर');
+  const body = $('#answerRead');
+  if (!body) return;
+  const html = answerMarkup(el);
+  if (body.innerHTML !== html) {
+    const nearEnd = body.scrollHeight - body.scrollTop - body.clientHeight < 72;
+    body.innerHTML = html;
+    if (!open) body.scrollTop = live ? body.scrollHeight : 0;
+    else if (live && nearEnd) body.scrollTop = body.scrollHeight;
+  }
 }
 function openReading(o, src) {
   if (!o || !o.t) return;
@@ -2550,7 +2626,7 @@ const bubble = m => {
   const {body, why} = splitFactors(m.content);
   const parts = splitAnswer(body);
   const whyHtml = why ? `<details class="why"><summary>${tr('Why', 'क्यों')}</summary><p>${esc(why)}</p></details>` : '';
-  return `<div class="bub ai">${cite(md(parts.body))}${plainBox(parts.heading, parts.simple)}${whyHtml}</div>`;
+  return `<div class="bub ai">${cite(md(parts.body))}${plainBox(parts.heading, parts.simple)}${whyHtml}<button type="button" class="read-open" aria-label="${tr('Read this answer', 'यह उत्तर पढ़ें')}">${tr('Read', 'पढ़ें')}</button></div>`;
 };
 const ASK_EXAMPLES = () => [
   tr('When will my career grow?', 'मेरा करियर कब आगे बढ़ेगा?'),
@@ -2610,6 +2686,22 @@ function bindAskForm() {
 function threadComposerHtml() {
   return `<div class="composer" id="composer">${askFormHtml(false)}<p class="ask-note" id="askNote">${tr('Charged only when the answer starts', 'शुल्क तभी, जब उत्तर शुरू हो')}</p><p class="ask-remedy" id="askRemedy">${tr('Remedies, if offered, are optional and free.', 'उपाय हों तो वैकल्पिक और मुफ़्त।')}</p></div>`;
 }
+function bindAskThread(box) {
+  if (!box || box.dataset.bound) return;
+  box.dataset.bound = '1';
+  const openCiteFrom = b => openCite(b.dataset.cp, b.dataset.ch, b.dataset.cs, b.textContent);
+  box.addEventListener('click', e => {
+    const cite = e.target.closest('.cite');
+    if (cite) { openCiteFrom(cite); return; }
+    if (e.target.closest('summary, a')) return;
+    const bub = e.target.closest('.bub.ai');
+    if (bub) openAnswerSheet(bub, false);
+  });
+  box.addEventListener('keydown', e => {
+    const cite = e.target.closest('.cite');
+    if (cite && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); openCiteFrom(cite); }
+  });
+}
 function ensureAskThread() {
   if ($('#msgs') && !$('#askStage')) return $('#msgs');
   stopAskRotate();
@@ -2617,13 +2709,8 @@ function ensureAskThread() {
   const chat = $('.chat'); if (chat) chat.classList.remove('is-empty');
   if (chat && !$('#msgs')) chat.insertAdjacentHTML('beforeend', `<div class="msgs" id="msgs" aria-live="polite"></div>${threadComposerHtml()}`);
   bindAskForm();
-  const box = $('#msgs');
-  if (box && !box.dataset.bound) {
-    box.dataset.bound = '1';
-    box.addEventListener('click', e => { const b = e.target.closest('.cite'); if (b) openCite(b.dataset.cp, b.dataset.ch, b.dataset.cs, b.textContent); });
-    box.addEventListener('keydown', e => { const b = e.target.closest('.cite'); if (b && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); openCite(b.dataset.cp, b.dataset.ch, b.dataset.cs, b.textContent); } });
-  }
-  return box;
+  bindAskThread($('#msgs'));
+  return $('#msgs');
 }
 function pageAsk() {
   stopAskRotate();
@@ -2638,9 +2725,7 @@ function pageAsk() {
     const box = $('#msgs');
     box.innerHTML = hist.map(bubble).join('');
     box.scrollTop = box.scrollHeight;
-    box.dataset.bound = '1';
-    box.addEventListener('click', e => { const b = e.target.closest('.cite'); if (b) openCite(b.dataset.cp, b.dataset.ch, b.dataset.cs, b.textContent); });
-    box.addEventListener('keydown', e => { const b = e.target.closest('.cite'); if (b && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); openCite(b.dataset.cp, b.dataset.ch, b.dataset.cs, b.textContent); } });
+    bindAskThread(box);
   }
   bindHeader();
   bindAskForm();
@@ -2867,6 +2952,7 @@ async function ask(q) {
   box.insertAdjacentHTML('beforeend', bubble({role: 'user', content: q}));
   const aiEl = document.createElement('div'); aiEl.className = 'bub ai'; aiEl.innerHTML = `<span class="typing" aria-label="${tr('Reading your chart', 'कुंडली पढ़ रहे हैं')}"><i></i><i></i><i></i></span>`;
   box.appendChild(aiEl); box.scrollTop = box.scrollHeight;
+  openAnswerSheet(aiEl, true);
   const msgs = hist.filter(m => m.role !== 'error').slice(-8).map(m => ({role: m.role, content: m.content})).concat([{role: 'user', content: q}]);
   const readChat = async token => {
     const r = await fetch(API + '/api/chat', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({device: DEVICE, profile: profileBody(p), messages: msgs, lang: S.lang, purchase_token: token})});
@@ -2880,7 +2966,7 @@ async function ask(q) {
         const line = buf.slice(0, i).trim(); buf = buf.slice(i + 2);
         if (!line.startsWith('data:')) continue;
         const ev = JSON.parse(line.slice(5));
-        if (ev.type === 'token') { text += ev.text; aiEl.innerHTML = answerHtml(text); box.scrollTop = box.scrollHeight; }
+        if (ev.type === 'token') { text += ev.text; aiEl.innerHTML = answerHtml(text); if (document.body.classList.contains('answer-open')) openAnswerSheet(aiEl, true); box.scrollTop = box.scrollHeight; }
         else if (ev.type === 'done') { if (ev.wallet) S.wallet = ev.wallet; }
         else if (ev.type === 'error') { err = ev; if (ev.wallet) S.wallet = ev.wallet; }
       }
@@ -2899,6 +2985,7 @@ async function ask(q) {
         purchaseToken = next;
         text = ''; err = null;
         aiEl.innerHTML = `<span class="typing" aria-label="${tr('Reading your chart', 'कुंडली पढ़ रहे हैं')}"><i></i><i></i><i></i></span>`;
+        if (document.body.classList.contains('answer-open')) openAnswerSheet(aiEl, true);
         ({text, err} = await readChat(purchaseToken));
       }
     } catch (e) { if (!err) err = {code: 'network'}; }
@@ -2908,9 +2995,16 @@ async function ask(q) {
   else if (err.code === 'payment_invalid') { dropPlayToken(); }
   else keepPlayToken(purchaseToken);
   if (err) {
+    if (document.body.classList.contains('answer-open')) closeSheet();
     aiEl.outerHTML = errBubble(err.code);
     hist.push({role: 'user', content: q}, {role: 'error', code: err.code || 'llm_error', content: ''});
-  } else { hist.push({role: 'user', content: q}, {role: 'assistant', content: text}); aiEl.outerHTML = bubble({role: 'assistant', content: text}); }
+  } else {
+    hist.push({role: 'user', content: q}, {role: 'assistant', content: text});
+    const next = aiEl.nextSibling, parent = aiEl.parentNode;
+    aiEl.outerHTML = bubble({role: 'assistant', content: text});
+    const painted = (next && next.previousElementSibling) || (parent && parent.lastElementChild);
+    if (document.body.classList.contains('answer-open')) openAnswerSheet(painted, true);
+  }
   store.set(key, hist.slice(-40));
   scheduleSync();
   box.scrollTop = box.scrollHeight;

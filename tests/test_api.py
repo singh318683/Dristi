@@ -140,7 +140,7 @@ def test_background_music_is_one_synthesized_drone():
     assert "drishtiUnlockAudio" in html
     assert ".mp3" not in html and ".ogg" not in html and ".m4a" not in html
     assert "Web Audio" in credits and "no third-party music license" in credits
-    assert "drishti-v16" in open(os.path.join(root, "web", "sw.js"), encoding="utf-8").read()
+    assert "drishti-v17" in open(os.path.join(root, "web", "sw.js"), encoding="utf-8").read()
 
 
 def test_home_asks_for_the_device_date():
@@ -167,7 +167,7 @@ def test_home_periods_card_and_local_clock():
     assert "Good evening" in greet and "clock.getHours() < 5" in greet
     assert "function glanceTitle" in html and "function horoGlanceSentence" in html
     assert "glanceHoroLine" not in html
-    assert "drishti-v16" in open(os.path.join(os.path.dirname(__file__), "..", "web", "sw.js"), encoding="utf-8").read()
+    assert "drishti-v17" in open(os.path.join(os.path.dirname(__file__), "..", "web", "sw.js"), encoding="utf-8").read()
 
 
 def test_profile_screen_drops_invite_and_sign_in():
@@ -228,7 +228,21 @@ def test_owned_play_question_is_sent_again_instead_of_bought():
     assert "buyPlayQuestion" in ask and "buyFreshPlayQuestion" in ask
     assert "payment_invalid" in ask and "keepPlayToken(purchaseToken)" in ask
     assert "response.complete('success')" in html
-    assert "drishti-v16" in open(os.path.join(root, "web", "sw.js"), encoding="utf-8").read()
+    assert "drishti-v17" in open(os.path.join(root, "web", "sw.js"), encoding="utf-8").read()
+
+
+def test_answer_opens_in_a_reading_sheet():
+    html = open(os.path.join(os.path.dirname(__file__), "..", "web", "index.html"), encoding="utf-8").read()
+    assert "function openAnswerSheet" in html
+    assert 'class="sheet answer"' in html and 'id="answerRead"' in html
+    assert "body.answer-open .composer,body.answer-open .ask-stage{display:none}" in html
+    assert 'class="read-open"' in html and "Read this answer" in html and "यह उत्तर पढ़ें" in html
+    ask = html.split("async function ask", 1)[1].split("const KOOTA", 1)[0]
+    assert ask.find("purchaseToken = await takeToken(false)") < ask.find("openAnswerSheet(aiEl, true)")
+    assert "openAnswerSheet(aiEl, true)" in ask
+    assert "openAnswerSheet(painted, true)" in ask
+    assert "id=\"askSend\"" in html and "priceLabel()" in html
+    assert "drishti-v17" in open(os.path.join(os.path.dirname(__file__), "..", "web", "sw.js"), encoding="utf-8").read()
 
 
 def test_planet_detail_opens_in_a_sheet():
@@ -241,7 +255,7 @@ def test_planet_detail_opens_in_a_sheet():
     assert "max-height:58px" not in html
     assert "body.app-fit .info .m{display:-webkit-box" not in html
     assert "if (o) openReading(o, src)" in html
-    assert "drishti-v16" in open(os.path.join(root, "web", "sw.js"), encoding="utf-8").read()
+    assert "drishti-v17" in open(os.path.join(root, "web", "sw.js"), encoding="utf-8").read()
 
 
 def test_panchang_and_pdf_endpoints(client):
