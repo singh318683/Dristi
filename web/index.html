@@ -494,6 +494,15 @@ html[lang=hi] .sheet.answer .sheet-body{line-height:1.75}
 .sheet.answer .plain{margin-top:14px}
 .sheet.answer .why{margin-top:12px}
 body.answer-open .composer,body.answer-open .ask-stage{display:none}
+.rate-card{position:fixed;z-index:45;left:50%;bottom:calc(var(--nav-h) + env(safe-area-inset-bottom) + 10px);transform:translateX(-50%);width:min(calc(100% - 20px),400px);background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:18px;box-shadow:0 16px 40px -22px rgba(0,0,0,.45);padding:14px 14px 8px}
+body.app-fit .rate-card{bottom:calc(56px + env(safe-area-inset-bottom) + 10px)}
+.rate-card h2{margin:0 0 4px;font-size:17px;line-height:1.35;font-weight:700}
+.rate-card p{margin:0 0 8px;color:var(--muted);font-size:14px;line-height:1.45}
+html[lang=hi] .rate-card p{line-height:1.6}
+.rate-acts{display:flex;flex-direction:column;align-items:stretch;gap:0}
+.rate-acts .btn{width:100%;white-space:normal}
+.rate-acts .btn.quiet{color:var(--muted);font-weight:600}
+body.answer-open #rateCard{display:none}
 .bub.ai{cursor:pointer}
 .read-open{display:inline-flex;align-items:center;margin-top:8px;min-height:36px;padding:0;border:0;background:none;color:var(--on-tint);font-weight:700;font-size:13px}
 @keyframes sheetRise{from{transform:translateY(110%)}to{transform:none}}
@@ -710,7 +719,10 @@ window.GITA_VERSES = window.__GITA_INJECTED__ || null;
     var root = document.getElementById('root');
     if (root) root.removeAttribute('aria-hidden');
     var reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
-    var done = function () { if (el.isConnected) { el.hidden = true; el.classList.remove('out', 'is-auto'); } };
+    var done = function () {
+      if (el.isConnected) { el.hidden = true; el.classList.remove('out', 'is-auto'); }
+      if (window.maybeShowRate) window.maybeShowRate();
+    };
     if (reduce) { done(); return; }
     el.classList.add('out');
     el.addEventListener('transitionend', done, {once: true});
@@ -1158,6 +1170,7 @@ function openSwitcher() {
     <hr><button class="opt" id="shAdd"><span class="avatar lg">${I.plus()}</span><span class="meta"><b>${tr('Add a person', 'व्यक्ति जोड़ें')}</b><small>${tr('Family member or friend', 'परिवार या मित्र')}</small></span></button>
     <button class="opt" id="shManage"><span class="avatar lg">${I.users(20)}</span><span class="meta"><b>${tr('Manage people', 'लोग प्रबंधित करें')}</b></span></button></div>`;
   sh.hidden = false;
+  if (window.maybeShowRate) window.maybeShowRate();
   sh.onclick = e => { if (e.target === sh) closeSheet(); };
   sh.querySelectorAll('[data-pid]').forEach(b => b.onclick = () => { S.active = b.dataset.pid; store.set('active', S.active); S.sel = null; scheduleSync(); render(); });
   $('#shAdd').onclick = () => startOnb();
@@ -1176,12 +1189,19 @@ function lockSheet() {
   document.body.classList.add('sheet-lock');
   const root = document.getElementById('root');
   if (root) root.setAttribute('aria-hidden', 'true');
+  if (window.maybeShowRate) window.maybeShowRate();
 }
-function closeSheet() {
+function closeSheet(opts) {
   const sh = $('#sheet');
+  const wasAnswer = !!(sh && !sh.hidden && sh.classList.contains('answer-read'));
   if (sh) { sh.hidden = true; sh.innerHTML = ''; sh.classList.remove('as-bottom', 'answer-read'); }
   document.body.classList.remove('sheet-lock', 'answer-open');
   answerRead = null;
+  if (wasAnswer && !(opts && opts.skipRate)) {
+    const v = rateState();
+    if (!v.read) { v.read = true; saveRate(v); }
+  }
+  if (!(opts && opts.skipRate)) setTimeout(maybeShowRate, 0);
   const root = document.getElementById('root');
   const splash = document.getElementById('gita-splash');
   if (root && !(splash && !splash.hidden)) root.removeAttribute('aria-hidden');
@@ -2925,6 +2945,7 @@ async function ask(q) {
   if (S.streaming) return;
   if (!(S.status && S.status.ai_configured)) { noteAskError(q, 'ai_not_configured'); return; }
   S.streaming = true;
+  maybeShowRate();
   let purchaseToken = '';
   const takeToken = async fresh => {
     try { return fresh ? await buyFreshPlayQuestion(playProductId()) : await buyPlayQuestion(); }
@@ -2939,16 +2960,18 @@ async function ask(q) {
   catch (e) {
     S.streaming = false;
     noteAskError(q, e.code);
+    maybeShowRate();
     return;
   }
   if (!purchaseToken) {
     S.streaming = false;
     const ci = $('#ci'); if (ci && !ci.value) ci.value = q;
+    maybeShowRate();
     return;
   }
   const p = activeProfile(), key = chatKey(), hist = store.get(key, []);
   const box = ensureAskThread();
-  if (!box) { S.streaming = false; return; }
+  if (!box) { S.streaming = false; maybeShowRate(); return; }
   box.insertAdjacentHTML('beforeend', bubble({role: 'user', content: q}));
   const aiEl = document.createElement('div'); aiEl.className = 'bub ai'; aiEl.innerHTML = `<span class="typing" aria-label="${tr('Reading your chart', 'कुंडली पढ़ रहे हैं')}"><i></i><i></i><i></i></span>`;
   box.appendChild(aiEl); box.scrollTop = box.scrollHeight;
@@ -2995,7 +3018,7 @@ async function ask(q) {
   else if (err.code === 'payment_invalid') { dropPlayToken(); }
   else keepPlayToken(purchaseToken);
   if (err) {
-    if (document.body.classList.contains('answer-open')) closeSheet();
+    if (document.body.classList.contains('answer-open')) closeSheet({skipRate: true});
     aiEl.outerHTML = errBubble(err.code);
     hist.push({role: 'user', content: q}, {role: 'error', code: err.code || 'llm_error', content: ''});
   } else {
@@ -3008,6 +3031,7 @@ async function ask(q) {
   store.set(key, hist.slice(-40));
   scheduleSync();
   box.scrollTop = box.scrollHeight;
+  maybeShowRate();
   refreshWallet().then(updateQuota);
 }
 // ----------------------------------------------------------------- match
@@ -3094,6 +3118,97 @@ function pageMe() {
   $('#aboutBtn').onclick = () => openDetail(tr('About', 'जानकारी'), `<p class="small">${tr('Charts use the Swiss Ephemeris, Lahiri ayanamsa, whole-sign houses and Vimshottari dasha. Acharya is an AI astrologer, not a person.', 'कुंडली स्विस एफेमेरिस, लाहिरी, पूर्ण राशि भाव और विंशोत्तरी दशा से बनती है। आचार्य AI ज्योतिषी हैं, व्यक्ति नहीं।')}</p><p class="small muted">${tr('Guidance for reflection, not medical, legal or financial advice. Remedies are optional and free.', 'यह चिंतन हेतु मार्गदर्शन है, चिकित्सा, कानूनी या वित्तीय सलाह नहीं। उपाय वैकल्पिक और मुफ़्त हैं।')}</p><p class="small muted">${tr('Device ID', 'डिवाइस आईडी')}: <code style="font-size:11px;word-break:break-all">${esc(DEVICE)}</code></p><p><a href="privacy.html">${tr('Privacy policy', 'गोपनीयता नीति')}</a></p>`);
   if (S.pendingSheet === 'people') { S.pendingSheet = null; openPeople(); }
 }
+// ------------------------------------------------------------------ rate
+const PLAY_STORE_ID = 'com.ikshana.drishti';
+const PLAY_STORE_HTTPS = 'https://play.google.com/store/apps/details?id=' + PLAY_STORE_ID;
+const PLAY_STORE_MARKET = 'market://details?id=' + PLAY_STORE_ID;
+function rateState() {
+  const v = store.get('rate', {}) || {};
+  const days = Array.isArray(v.days) ? v.days.filter(d => typeof d === 'string').slice(-14) : [];
+  return {
+    rated: !!v.rated,
+    dismissals: Math.max(0, Number(v.dismissals) || 0),
+    snoozeUntil: Math.max(0, Number(v.snoozeUntil) || 0),
+    days: days,
+    read: !!v.read,
+  };
+}
+function saveRate(v) { try { store.set('rate', v); } catch (e) { /* storage can be blocked */ } }
+function rateEligible() {
+  const v = rateState();
+  if (v.rated || v.dismissals >= 3) return false;
+  if (v.snoozeUntil && Date.now() < v.snoozeUntil) return false;
+  if (!S.profiles.length || S.onb) return false;
+  return v.read || v.days.length >= 3;
+}
+function rateBusy() {
+  if (S.streaming) return true;
+  if (document.body.classList.contains('answer-open')) return true;
+  const splash = document.getElementById('gita-splash');
+  if (splash && !splash.hidden) return true;
+  const sh = document.getElementById('sheet');
+  if (sh && !sh.hidden) return true;
+  return false;
+}
+function noteRateDay() {
+  const v = rateState();
+  const day = localISODate();
+  if (v.days.indexOf(day) >= 0) return;
+  v.days.push(day);
+  if (v.days.length > 14) v.days = v.days.slice(-14);
+  saveRate(v);
+}
+function inPlayApp() {
+  // Same signals as a Play purchase: the WebView bridge, or Digital Goods in the TWA.
+  if (window.DrishtiPlay && typeof window.DrishtiPlay.purchase === 'function') return Promise.resolve(true);
+  if (typeof window.getDigitalGoodsService !== 'function') return Promise.resolve(false);
+  return Promise.resolve(window.getDigitalGoodsService(PLAY_BILLING)).then(s => !!s).catch(() => false);
+}
+async function openPlayListing() {
+  let inApp = false;
+  try { inApp = await inPlayApp(); } catch (e) { inApp = false; }
+  if (!inApp) {
+    const opened = window.open(PLAY_STORE_HTTPS, '_blank', 'noopener');
+    if (!opened) location.href = PLAY_STORE_HTTPS;
+    return;
+  }
+  location.href = PLAY_STORE_MARKET;
+  setTimeout(() => { if (!document.hidden) location.href = PLAY_STORE_HTTPS; }, 1200);
+}
+function paintRate(el) {
+  el.innerHTML = `<h2 id="rateTitle">${tr('Enjoying Drishti?', 'दृष्टि पसंद आ रही है?')}</h2><p>${tr('A short review helps others find it.', 'एक छोटी समीक्षा औरों को इसे खोजने में मदद करती है।')}</p><div class="rate-acts"><button type="button" class="btn" id="rateYes">${tr('Rate on Google Play', 'Google Play पर रेट करें')}</button><button type="button" class="btn quiet" id="rateLater">${tr('Maybe later', 'बाद में')}</button></div>`;
+  el.querySelector('#rateYes').onclick = async () => {
+    const v = rateState();
+    v.rated = true;
+    saveRate(v);
+    el.remove();
+    await openPlayListing();
+  };
+  el.querySelector('#rateLater').onclick = () => {
+    const v = rateState();
+    v.dismissals += 1;
+    v.snoozeUntil = Date.now() + 7 * 86400000;
+    saveRate(v);
+    el.remove();
+  };
+}
+function maybeShowRate() {
+  const card = document.getElementById('rateCard');
+  if (!rateEligible() || rateBusy()) {
+    if (card) card.remove();
+    return;
+  }
+  if (card) { paintRate(card); return; }
+  const el = document.createElement('aside');
+  el.id = 'rateCard';
+  el.className = 'rate-card';
+  el.setAttribute('role', 'dialog');
+  el.setAttribute('aria-labelledby', 'rateTitle');
+  paintRate(el);
+  el.addEventListener('keydown', e => { if (e.key === 'Escape') { e.preventDefault(); el.querySelector('#rateLater').click(); } });
+  document.body.appendChild(el);
+}
+window.maybeShowRate = maybeShowRate;
 // ------------------------------------------------------------------ boot
 async function captureLink() {
   const u = new URL(location.href);
@@ -3116,6 +3231,7 @@ async function captureLink() {
 }
 window.shareGitaCard = () => shareCard('gita');
 (async function boot() {
+  noteRateDay();
   const splash = document.getElementById('gita-splash');
   if (splash && !splash.hidden) { document.body.classList.add('gita-lock'); }
   render();
@@ -3126,6 +3242,7 @@ window.shareGitaCard = () => shareCard('gita');
   await refreshWallet();
   if (S.profiles.length && !S.onb) render();
   if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js');
+  maybeShowRate();
 })();
 </script>
 </body>
