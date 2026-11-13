@@ -18,6 +18,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+import connect_api
 import db
 import engine
 import gita
@@ -76,6 +77,7 @@ def billing_public() -> dict:
 
 app = FastAPI(title=APP_NAME)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+app.include_router(connect_api.router)
 
 # ------------------------------------------------------------------ db ----
 _lock = threading.Lock()
@@ -474,7 +476,8 @@ def api_match(m: MatchReq):
 def status():
     c = llm.config()
     return {"app": APP_NAME, "ai_configured": llm.configured(), "model": c["model"] if llm.configured() else None,
-            "referral_bonus": 0} | billing_public()
+            "referral_bonus": 0, "astrologer_connect": connect_api.store_ready(),
+            "stripe_publishable_key": connect_api.publishable_key()} | billing_public()
 
 
 @app.get("/api/wallet")
@@ -516,6 +519,9 @@ class ChatReq(BaseModel):
     messages: list[Msg]
     lang: str = "en"
     purchase_token: str | None = Field(default=None, max_length=4096)
+    store: str | None = None
+    transaction_id: str | None = Field(default=None, max_length=128)
+    signed_transaction: str | None = Field(default=None, max_length=20000)
 
 
 def sse(obj) -> str:
@@ -536,19 +542,39 @@ async def api_chat(r: ChatReq):
         return _sse_error(
             "ai_not_configured",
             "AI not configured yet. The astrologer will answer once an LLM API key is added on the server. You were not charged.")
-    if not (r.purchase_token or "").strip():
-        return _sse_error(
-            "payment_required",
-            "Each Acharya question is $0.99, paid through Google Play. This question was not answered. "
-            "The chart, periods, dosha, panchang, matching, horoscope and kundli PDF stay free.")
-    try:
-        redemption = redeem_purchase(r.device, r.purchase_token or "")
-    except PlayError as e:
-        return _sse_error(e.code, e.message)
+    apple = (r.store or "").strip() == "apple"
+    if apple:
+        if not (r.transaction_id or "").strip():
+            return _sse_error("payment_required", "Each Acharya question is $0.99 on the App Store. This question was not answered.")
+        try:
+            import connect_store
+            redemption = connect_store.redeem_apple_question(r.device, r.transaction_id or "", r.signed_transaction)
+        except connect_store.ConnectError as e:
+            return _sse_error(e.code, e.message)
+        def finish():
+            connect_store.finish_apple(redemption)
+        def release():
+            connect_store.release_apple(redemption)
+        charged = "apple"
+    else:
+        if not (r.purchase_token or "").strip():
+            return _sse_error(
+                "payment_required",
+                "Each Acharya question is $0.99, paid through Google Play. This question was not answered. "
+                "The chart, periods, dosha, panchang, matching, horoscope and kundli PDF stay free.")
+        try:
+            redemption = redeem_purchase(r.device, r.purchase_token or "")
+        except PlayError as e:
+            return _sse_error(e.code, e.message)
+        def finish():
+            finish_purchase(redemption)
+        def release():
+            release_purchase(redemption)
+        charged = "play"
     try:
         chart = chart_for(r.profile)
     except HTTPException:
-        release_purchase(redemption)
+        release()
         raise
     ctx = llm.compact_chart(r.profile.model_dump() | {"place": r.profile.place.name}, chart)
     system = llm.SYSTEM_PROMPT.format(app=APP_NAME, lang_rule=llm.LANG_RULES[lang])
@@ -569,15 +595,15 @@ async def api_chat(r: ChatReq):
             async for tok in llm.stream_chat(msgs):
                 got = True
                 yield sse({"type": "token", "text": tok})
-            finish_purchase(redemption)
+            finish()
             settled = True
-            yield sse({"type": "done", "charged": "play", "price": QUESTION_PRICE_LABEL, "wallet": wallet(r.device)})
+            yield sse({"type": "done", "charged": charged, "price": QUESTION_PRICE_LABEL, "wallet": wallet(r.device)})
         except Exception as e:
             if not settled:
                 if got:
-                    finish_purchase(redemption)
+                    finish()
                 else:
-                    release_purchase(redemption)
+                    release()
                 settled = True
             yield sse({"type": "error", "code": "llm_error",
                        "message": "The answer could not be completed. " + (
@@ -587,9 +613,9 @@ async def api_chat(r: ChatReq):
         finally:
             if not settled:
                 if got:
-                    finish_purchase(redemption)
+                    finish()
                 else:
-                    release_purchase(redemption)
+                    release()
     return StreamingResponse(gen(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 

@@ -1,0 +1,49 @@
+name: iOS
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "ios/**"
+      - ".github/workflows/ios.yml"
+
+jobs:
+  unsigned:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Add the Capacitor iOS project
+        working-directory: ios
+        run: |
+          npm install
+          npx cap add ios
+          /usr/libexec/PlistBuddy -c "Add :NSMicrophoneUsageDescription string Drishti uses the microphone for a voice consultation you start yourself." App/App/Info.plist || true
+          /usr/libexec/PlistBuddy -c "Add :UIBackgroundModes array" App/App/Info.plist || true
+          /usr/libexec/PlistBuddy -c "Add :UIBackgroundModes: string audio" App/App/Info.plist || true
+          /usr/libexec/PlistBuddy -c "Add :UIBackgroundModes: string voip" App/App/Info.plist || true
+      - name: Unsigned build
+        working-directory: ios/App
+        run: |
+          xcodebuild -project App.xcodeproj -scheme App -destination 'generic/platform=iOS' -configuration Release CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO
+
+  signed:
+    if: ${{ vars.APPLE_TEAM_ID != '' }}
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Add the Capacitor iOS project
+        working-directory: ios
+        run: npm install && npx cap add ios
+      - name: Archive
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        working-directory: ios/App
+        run: |
+          xcodebuild -project App.xcodeproj -scheme App -destination 'generic/platform=iOS' -configuration Release \
+            DEVELOPMENT_TEAM="$APPLE_TEAM_ID" CODE_SIGN_STYLE=Manual archive -archivePath "$RUNNER_TEMP/Drishti.xcarchive"
