@@ -10,6 +10,8 @@ npm install
 npx cap add ios
 ```
 
+Capacitor always names the native project `ios`, so the Xcode project is `ios/ios/App`. Open `ios/ios/App/App.xcworkspace`.
+
 Then merge `Info.plist.additions.xml` (microphone and background audio) and add `plugins/DrishtiNative/DrishtiStore.swift` to the App target. The page calls `window.DrishtiStore.purchase(productId)`. Product ids:
 
 | Id | What it buys |

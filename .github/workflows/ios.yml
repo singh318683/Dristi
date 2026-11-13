@@ -20,14 +20,23 @@ jobs:
         run: |
           npm install
           npx cap add ios
-          /usr/libexec/PlistBuddy -c "Add :NSMicrophoneUsageDescription string Drishti uses the microphone for a voice consultation you start yourself." App/App/Info.plist || true
-          /usr/libexec/PlistBuddy -c "Add :UIBackgroundModes array" App/App/Info.plist || true
-          /usr/libexec/PlistBuddy -c "Add :UIBackgroundModes: string audio" App/App/Info.plist || true
-          /usr/libexec/PlistBuddy -c "Add :UIBackgroundModes: string voip" App/App/Info.plist || true
+          # Capacitor names the native folder ios, so this repo's ios/ app root
+          # produces ios/ios/App.
+          XCODE_DIR="$(dirname "$(find "$PWD" -name App.xcodeproj -type d ! -path '*/node_modules/*' | head -1)")"
+          test -d "$XCODE_DIR"
+          echo "XCODE_DIR=$XCODE_DIR" >> "$GITHUB_ENV"
+          PLIST="$XCODE_DIR/App/Info.plist"
+          /usr/libexec/PlistBuddy -c "Add :NSMicrophoneUsageDescription string Drishti uses the microphone for a voice consultation you start yourself." "$PLIST" || true
+          /usr/libexec/PlistBuddy -c "Add :UIBackgroundModes array" "$PLIST" || true
+          /usr/libexec/PlistBuddy -c "Add :UIBackgroundModes: string audio" "$PLIST" || true
+          /usr/libexec/PlistBuddy -c "Add :UIBackgroundModes: string voip" "$PLIST" || true
       - name: Unsigned build
-        working-directory: ios/App
         run: |
-          xcodebuild -project App.xcodeproj -scheme App -destination 'generic/platform=iOS' -configuration Release CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO
+          if [ -d "$XCODE_DIR/App.xcworkspace" ]; then
+            xcodebuild -workspace "$XCODE_DIR/App.xcworkspace" -scheme App -destination 'generic/platform=iOS' -configuration Release CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" build
+          else
+            xcodebuild -project "$XCODE_DIR/App.xcodeproj" -scheme App -destination 'generic/platform=iOS' -configuration Release CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" build
+          fi
 
   signed:
     if: ${{ vars.APPLE_TEAM_ID != '' }}
@@ -39,11 +48,14 @@ jobs:
           node-version: "22"
       - name: Add the Capacitor iOS project
         working-directory: ios
-        run: npm install && npx cap add ios
+        run: |
+          npm install
+          npx cap add ios
+          XCODE_DIR="$(dirname "$(find "$PWD" -name App.xcodeproj -type d ! -path '*/node_modules/*' | head -1)")"
+          echo "XCODE_DIR=$XCODE_DIR" >> "$GITHUB_ENV"
       - name: Archive
         env:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-        working-directory: ios/App
         run: |
-          xcodebuild -project App.xcodeproj -scheme App -destination 'generic/platform=iOS' -configuration Release \
+          xcodebuild -workspace "$XCODE_DIR/App.xcworkspace" -scheme App -destination 'generic/platform=iOS' -configuration Release \
             DEVELOPMENT_TEAM="$APPLE_TEAM_ID" CODE_SIGN_STYLE=Manual archive -archivePath "$RUNNER_TEMP/Drishti.xcarchive"
