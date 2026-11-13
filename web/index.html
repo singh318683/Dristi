@@ -493,7 +493,7 @@ html[lang=hi] .sheet.answer .sheet-body{line-height:1.75}
 .sheet.answer .sheet-body p:last-child{margin:0}
 .sheet.answer .plain{margin-top:14px}
 .sheet.answer .why{margin-top:12px}
-body.answer-open .composer,body.answer-open .ask-stage{display:none}
+body.answer-open .composer,body.answer-open .ask-stage,body.connect-open .composer,body.connect-open .ask-stage{display:none}
 .rate-card{position:fixed;z-index:45;left:50%;bottom:calc(var(--nav-h) + env(safe-area-inset-bottom) + 10px);transform:translateX(-50%);width:min(calc(100% - 20px),400px);background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:18px;box-shadow:0 16px 40px -22px rgba(0,0,0,.45);padding:14px 14px 8px}
 body.app-fit .rate-card{bottom:calc(56px + env(safe-area-inset-bottom) + 10px)}
 .rate-card h2{margin:0 0 4px;font-size:17px;line-height:1.35;font-weight:700}
@@ -503,6 +503,37 @@ html[lang=hi] .rate-card p{line-height:1.6}
 .rate-acts .btn{width:100%;white-space:normal}
 .rate-acts .btn.quiet{color:var(--muted);font-weight:600}
 body.answer-open #rateCard{display:none}
+.sheet.connect{width:min(100%,560px);max-height:min(88dvh,760px);border-radius:18px 18px 0 0;padding:4px 16px calc(16px + env(safe-area-inset-bottom));overflow:auto;background:var(--surface);border:1px solid var(--line);border-bottom:0}
+.sheet.connect h3{margin:0 0 6px;font-size:18px;line-height:1.35}
+.sheet.connect .sub{margin:0 0 12px}
+.connect-row{display:flex;gap:10px;align-items:flex-start;padding:12px 0;border-top:1px solid var(--line);min-width:0}
+.connect-row:first-of-type{border-top:0}
+.connect-av{width:44px;height:44px;border-radius:50%;background:var(--primary-tint);color:var(--on-tint);display:grid;place-items:center;font-weight:700;flex:none}
+.connect-main{flex:1;min-width:0}
+.connect-main b,.connect-main p{display:block;min-width:0;overflow-wrap:anywhere}
+.connect-main p{margin:2px 0 0;color:var(--muted);font-size:13.5px;line-height:1.4}
+.connect-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--good);margin-right:5px;vertical-align:middle}
+.connect-actions{display:flex;gap:8px;margin-top:8px}
+.connect-actions .btn{flex:1;min-height:44px;padding:0 10px}
+.sheet-bg.connect-offer{bottom:calc(var(--nav-h) + env(safe-area-inset-bottom))}
+body.app-fit .sheet-bg.connect-offer{bottom:calc(56px + env(safe-area-inset-bottom))}
+.sheet-bg.connect-live{bottom:calc(var(--nav-h) + env(safe-area-inset-bottom));flex-direction:column;align-items:center;justify-content:flex-end;padding:calc(env(safe-area-inset-top) + 8px) 0 0}
+body.app-fit .sheet-bg.connect-live{bottom:calc(56px + env(safe-area-inset-bottom))}
+.sheet.connect-live{width:min(100%,560px);flex:1 1 auto;min-height:0;max-height:100%;border-radius:18px 18px 0 0;display:flex;flex-direction:column;padding:8px 14px 12px;background:var(--surface);border:1px solid var(--line);border-bottom:0}
+.connect-head{display:flex;align-items:center;gap:8px;min-width:0}
+.connect-head .grow{flex:1;min-width:0}
+.connect-head b,.connect-meter{display:block;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.connect-meter{color:var(--muted);font-size:13px}
+.connect-log{flex:1;overflow:auto;display:flex;flex-direction:column;gap:8px;padding:8px 0;min-height:0}
+.connect-log .me{align-self:flex-end;background:var(--primary-tint)}
+.connect-log .them{align-self:flex-start;background:var(--sunk)}
+.connect-log p{max-width:88%;margin:0;padding:8px 12px;border-radius:14px;line-height:1.45;overflow-wrap:anywhere}
+.call-screen{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:8px;min-height:0}
+.call-screen .connect-av{width:96px;height:96px;font-size:36px}
+.call-controls{display:flex;gap:8px;width:100%;margin-top:12px}
+.call-controls .btn{flex:1}
+.portal{max-width:560px;margin:0 auto;padding:16px 16px 32px;min-height:100dvh}
+.portal .card{margin-bottom:12px}
 .bub.ai{cursor:pointer}
 .read-open{display:inline-flex;align-items:center;margin-top:8px;min-height:36px;padding:0;border:0;background:none;color:var(--on-tint);font-weight:700;font-size:13px}
 @keyframes sheetRise{from{transform:translateY(110%)}to{transform:none}}
@@ -881,6 +912,7 @@ const chipsHtml = (cls = 'chip') => CHIPS().map(q => `<button class="${cls}" dat
 // ------------------------------------------------------------------ shell
 function render() {
   document.documentElement.lang = S.lang;
+  if (window.DrishtiConnect && DrishtiConnect.takeover()) return;
   closeSheet();
   const splash = document.getElementById('gita-splash');
   if (splash && !splash.hidden && window.__gitaShown && splash.dataset.lang !== S.lang && window.__fillGitaSplash) window.__fillGitaSplash(splash, window.__gitaShown);
@@ -1194,12 +1226,13 @@ function lockSheet() {
 function closeSheet(opts) {
   const sh = $('#sheet');
   const wasAnswer = !!(sh && !sh.hidden && sh.classList.contains('answer-read'));
-  if (sh) { sh.hidden = true; sh.innerHTML = ''; sh.classList.remove('as-bottom', 'answer-read'); }
-  document.body.classList.remove('sheet-lock', 'answer-open');
+  if (sh) { sh.hidden = true; sh.innerHTML = ''; sh.classList.remove('as-bottom', 'answer-read', 'connect-offer', 'connect-live'); }
+  document.body.classList.remove('sheet-lock', 'answer-open', 'connect-open');
   answerRead = null;
   if (wasAnswer && !(opts && opts.skipRate)) {
     const v = rateState();
     if (!v.read) { v.read = true; saveRate(v); }
+    if (window.onAnswerClosed) setTimeout(window.onAnswerClosed, 0);
   }
   if (!(opts && opts.skipRate)) setTimeout(maybeShowRate, 0);
   const root = document.getElementById('root');
@@ -2927,6 +2960,13 @@ async function buyFreshPlayQuestion(sku) {
   return token;
 }
 async function buyPlayQuestion() {
+  if (window.DrishtiStore && typeof window.DrishtiStore.purchase === 'function') {
+    const bought = await window.DrishtiStore.purchase(playProductId());
+    const txn = bought && (bought.transactionId || bought.transaction_id);
+    if (!txn) throw cancelledPlayError();
+    S.applePurchase = bought;
+    return txn;
+  }
   const kept = playTokenKept();
   if (kept) return kept;
   return buyFreshPlayQuestion(playProductId());
@@ -2978,7 +3018,13 @@ async function ask(q) {
   openAnswerSheet(aiEl, true);
   const msgs = hist.filter(m => m.role !== 'error').slice(-8).map(m => ({role: m.role, content: m.content})).concat([{role: 'user', content: q}]);
   const readChat = async token => {
-    const r = await fetch(API + '/api/chat', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({device: DEVICE, profile: profileBody(p), messages: msgs, lang: S.lang, purchase_token: token})});
+    const chatBody = {device: DEVICE, profile: profileBody(p), messages: msgs, lang: S.lang, purchase_token: token};
+    if (S.applePurchase && (S.applePurchase.transactionId || S.applePurchase.transaction_id) === token) {
+      chatBody.store = 'apple';
+      chatBody.transaction_id = token;
+      chatBody.signed_transaction = S.applePurchase.signedTransaction || S.applePurchase.signed_transaction || '';
+    }
+    const r = await fetch(API + '/api/chat', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(chatBody)});
     if (!r.ok || !r.body) throw new Error('HTTP ' + r.status);
     const reader = r.body.getReader(), dec = new TextDecoder();
     let buf = '', text = '', err = null;
@@ -3245,5 +3291,6 @@ window.shareGitaCard = () => shareCard('gita');
   maybeShowRate();
 })();
 </script>
+<script src="connect.js"></script>
 </body>
 </html>
