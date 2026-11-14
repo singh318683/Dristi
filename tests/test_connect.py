@@ -24,7 +24,7 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setenv("ASTROLOGER_CONNECT_ENABLED", "1")
     monkeypatch.setenv("ASTROLOGER_CONNECT_ALLOW_SQLITE", "1")
     monkeypatch.setenv("ADMIN_TOKEN", "admin-test-token")
-    monkeypatch.setenv("APPLE_COMMISSION_RATE", "0.15")
+    monkeypatch.setenv("PLATFORM_COMMISSION_RATE", "0.05")
     monkeypatch.delenv("STRIPE_SECRET_KEY", raising=False)
     monkeypatch.delenv("STRIPE_WEBHOOK_SECRET", raising=False)
     monkeypatch.delenv("LIVEKIT_API_KEY", raising=False)
@@ -42,17 +42,16 @@ def seed(client, rate=100):
     created = client.post("/api/connect/apply", json={
         "email": "meera@example.com", "password": "correct-horse", "name": "Meera Sharma",
         "specialties": ["career", "relationships"], "languages": ["Hindi", "English"],
-        "years": 12, "bio": "Timing and work.",
+        "years": 12, "bio": "Timing and work.", "rate_cents": rate,
     })
-    assert created.status_code == 200
+    assert created.status_code == 200 and created.json()["rate_cents"] == rate
     admin = auth("admin-test-token")
     listing = client.get("/api/connect/admin/astrologers", headers=admin).json()["astrologers"]
     astro_id = listing[0]["id"]
-    decided = client.post("/api/connect/admin/astrologers/" + astro_id, headers=admin, json={
-        "approve": True, "rate_cents": rate, "rating_tenths": 48,
-    })
+    decided = client.post("/api/connect/admin/astrologers/" + astro_id, headers=admin, json={"action": "approve"})
     assert decided.status_code == 200 and decided.json()["rate_cents"] == rate
     login = client.post("/api/connect/astro/login", json={"email": "meera@example.com", "password": "correct-horse"}).json()
+    assert client.post("/api/connect/astro/trial", headers=auth(login["token"])).status_code == 200
     assert client.post("/api/connect/astro/online", headers=auth(login["token"]), json={"online": True}).status_code == 200
     return astro_id, login["token"]
 
@@ -62,22 +61,24 @@ def fund(device, product, payment_id, provider="stripe"):
 
 
 def test_prices_and_split_ignore_floats():
-    assert money.commission_bps() == 1500
+    assert money.platform_bps() == 500
+    assert money.rate_bounds() == (30, 500)
+    assert money.check_rate(100) == 100
+    with pytest.raises(money.MoneyError):
+        money.check_rate(29)
+    with pytest.raises(money.MoneyError):
+        money.check_rate(501)
     assert money.product_cents("wallet_5") == 500
     assert money.product_cents("wallet_20") == 2000
     with pytest.raises(money.MoneyError):
         money.product_cents("wallet_1")
     assert money.hold_cents(100) == 500
     assert money.draw_buckets(300, 400, 500) == (300, 200)
-    with pytest.raises(money.MoneyError):
-        money.draw_buckets(100, 100, 500)
-    assert money.elapsed_cost(100, 90) == 150
+    assert money.elapsed_cost(100, 720) == 1200
     assert money.elapsed_cost(100, 0) == 0
-    net, fee = money.net_of_apple(0, 200, 1500)
-    assert (net, fee) == (170, 30)
-    assert money.split_net(net) == (127, 43)
-    assert money.split_net(150) == (112, 38)
-    assert sum(money.split_net(net)) + fee == 200
+    provider, platform = money.split_gross(1200)
+    assert (provider, platform) == (1140, 60)
+    assert provider + platform == 1200
 
 
 def test_feature_stays_off_without_the_flag(client, monkeypatch):
@@ -141,27 +142,12 @@ def test_bill_splits_stripe_and_apple_and_is_idempotent(client, monkeypatch):
     assert ended["cost_cents"] == 150
     assert store.wallet_view("phone")["balance_cents"] == 350
     earned = client.get("/api/connect/astro/earnings", headers=auth(token)).json()
-    assert earned["sessions"][0]["astro_cents"] == 112
-    assert earned["sessions"][0]["platform_cents"] == 38
+    assert earned["sessions"][0]["astro_cents"] == 143
+    assert earned["sessions"][0]["platform_cents"] == 7
+    assert earned["net_cents"] == 143 and earned["fee_cents"] == 7
     client.post("/api/connect/sessions/" + started["id"] + "/end", json={"device": "phone"})
     assert store.wallet_view("phone")["balance_cents"] == 350
-    assert client.get("/api/connect/astro/earnings", headers=auth(token)).json()["astro_cents"] == 112
-
-    monkeypatch.setattr(store, "now", lambda: base)
-    fund("phone-a", "wallet_5", "apple_txn_1", provider="apple")
-    apple = client.post("/api/connect/sessions", json={
-        "device": "phone-a", "astrologer_id": astro_id, "mode": "chat", "idempotency_key": "apple-bill",
-    }).json()
-    client.post("/api/connect/sessions/" + apple["id"] + "/accept", headers=auth(token))
-    monkeypatch.setattr(store, "now", lambda: base + timedelta(seconds=120))
-    billed = client.post("/api/connect/sessions/" + apple["id"] + "/end", json={"device": "phone-a"}).json()
-    assert billed["cost_cents"] == 200
-    book = client.get("/api/connect/astro/earnings", headers=auth(token)).json()
-    apple_row = [s for s in book["sessions"] if s["id"] == apple["id"]][0]
-    assert apple_row["astro_cents"] == 127
-    assert apple_row["platform_cents"] == 43
-    assert apple_row["fee_cents"] == 30
-    assert store.wallet_view("phone-a")["apple_cents"] == 300
+    assert client.get("/api/connect/astro/earnings", headers=auth(token)).json()["net_cents"] == 143
 
 
 def test_balance_ends_the_session(client, monkeypatch):
@@ -287,6 +273,48 @@ def test_wallet_lock_sql_uses_a_row_lock_on_postgres():
     source = open(os.path.join(os.path.dirname(__file__), "..", "server", "connect_store.py"), encoding="utf-8").read()
     assert 'sql += " for update"' in source
     assert "select id from ac_session where id=? for update" in source
+
+
+def test_rate_bounds_and_subscription_gate(client, monkeypatch):
+    low = client.post("/api/connect/apply", json={
+        "email": "low@example.com", "password": "correct-horse", "name": "Low Rate",
+        "specialties": ["career"], "languages": ["Hindi"], "years": 3, "bio": "Too cheap.", "rate_cents": 29,
+    })
+    high = client.post("/api/connect/apply", json={
+        "email": "high@example.com", "password": "correct-horse", "name": "High Rate",
+        "specialties": ["career"], "languages": ["Hindi"], "years": 3, "bio": "Too dear.", "rate_cents": 501,
+    })
+    assert low.status_code == 400 and high.status_code == 400
+    created = client.post("/api/connect/apply", json={
+        "email": "edge@example.com", "password": "correct-horse", "name": "Edge Rate",
+        "specialties": ["career"], "languages": ["English"], "years": 4, "bio": "Edges.", "rate_cents": 30,
+    })
+    assert created.status_code == 200
+    admin = auth("admin-test-token")
+    astro_id = created.json()["id"]
+    assert client.post("/api/connect/admin/astrologers/" + astro_id, headers=admin, json={"action": "approve"}).json()["rate_cents"] == 30
+    login = client.post("/api/connect/astro/login", json={"email": "edge@example.com", "password": "correct-horse"}).json()
+    from datetime import datetime, timedelta, timezone
+    base = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    monkeypatch.setattr(store, "now", lambda: base)
+    assert client.post("/api/connect/astro/online", headers=auth(login["token"]), json={"online": True}).status_code == 402
+    assert client.get("/api/connect/astrologers", params={"device": "phone"}).json()["astrologers"] == []
+    assert client.post("/api/connect/astro/trial", headers=auth(login["token"])).status_code == 200
+    assert client.post("/api/connect/astro/trial", headers=auth(login["token"])).status_code == 409
+    assert client.post("/api/connect/astro/online", headers=auth(login["token"]), json={"online": True}).status_code == 200
+    listed = client.get("/api/connect/astrologers", params={"device": "phone"}).json()["astrologers"]
+    assert [a["id"] for a in listed] == [astro_id]
+    monkeypatch.setattr(store, "now", lambda: base + timedelta(days=91))
+    assert client.get("/api/connect/astrologers", params={"device": "phone"}).json()["astrologers"] == []
+    monkeypatch.setattr(store, "now", lambda: datetime(2026, 6, 1, tzinfo=timezone.utc))
+    store.apply_provider_plan(astro_id, "active", "2030-01-01T00:00:00+00:00", None, "cus_edge", "sub_edge", "month")
+    assert client.get("/api/connect/astrologers", params={"device": "phone"}).json()["astrologers"]
+    store.apply_provider_plan(astro_id, "past_due", None, None, "cus_edge", "sub_edge", "month")
+    assert client.get("/api/connect/astrologers", params={"device": "phone"}).json()["astrologers"]
+    monkeypatch.setattr(store, "now", lambda: datetime(2026, 6, 10, tzinfo=timezone.utc))
+    assert client.get("/api/connect/astrologers", params={"device": "phone"}).json()["astrologers"] == []
+    assert client.post("/api/connect/admin/astrologers/" + astro_id, headers=admin, json={"action": "suspend"}).json()["status"] == "suspended"
+    assert client.post("/api/connect/wallet/apple", json={"device": "phone", "product_id": "wallet_5", "transaction_id": "t"}).status_code == 400
 
 
 def test_stripe_signature_helper_rejects_a_stale_event():

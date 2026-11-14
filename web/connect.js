@@ -119,13 +119,6 @@
     if (start) start.onclick = () => begin(id, mode).catch(showErr);
   }
   async function topup(product) {
-    if (window.DrishtiStore && typeof DrishtiStore.purchase === 'function') {
-      const bought = await DrishtiStore.purchase(product);
-      const txn = bought && (bought.transactionId || bought.transaction_id);
-      if (!txn) throw new Error('cancelled');
-      await api('/api/connect/wallet/apple', {device: DEVICE, product_id: product, transaction_id: txn, signed_transaction: bought.signedTransaction || ''});
-      return;
-    }
     const key = S.status && S.status.stripe_publishable_key;
     const intent = await api('/api/connect/wallet/intent', {device: DEVICE, product_id: product, idempotency_key: (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()))});
     if (!key || !intent.client_secret) throw new Error(tr('Card payments are not set up yet.', 'कार्ड भुगतान अभी सेट नहीं है।'));
@@ -319,19 +312,63 @@
     document.body.classList.remove('app-fit');
     return $('#portalBody');
   }
+  function planCards() {
+    const days = (S.status && S.status.provider_trial_days) || 90;
+    const month = (S.status && S.status.provider_monthly_label) || '$9.99';
+    const year = (S.status && S.status.provider_yearly_label) || '$99';
+    const low = (S.status && S.status.rate_min_cents) || 30;
+    const high = (S.status && S.status.rate_max_cents) || 500;
+    return {days, month, year, low, high};
+  }
+  function registerForm() {
+    const p = planCards();
+    return `<form class="card" id="astroRegister"><h3>${tr('Register as a live astrologer', 'लाइव ज्योतिषी बनें')}</h3>
+      <input class="input" id="regName" aria-label="${tr('Name', 'नाम')}" placeholder="${tr('Name', 'नाम')}">
+      <input class="input" id="regEmail" type="email" autocomplete="username" aria-label="${tr('Email', 'ईमेल')}" placeholder="${tr('Email', 'ईमेल')}">
+      <input class="input" id="regPass" type="password" autocomplete="new-password" aria-label="${tr('Password', 'पासवर्ड')}" placeholder="${tr('Password', 'पासवर्ड')}">
+      <input class="input" id="regLang" aria-label="${tr('Languages', 'भाषाएँ')}" placeholder="${tr('Languages', 'भाषाएँ')}">
+      <input class="input" id="regSpec" aria-label="${tr('Specialities', 'विशेषज्ञता')}" placeholder="${tr('Specialities', 'विशेषज्ञता')}">
+      <input class="input" id="regYears" inputmode="numeric" aria-label="${tr('Years of experience', 'अनुभव (वर्ष)')}" placeholder="${tr('Years of experience', 'अनुभव (वर्ष)')}">
+      <textarea class="input" id="regBio" rows="3" aria-label="${tr('Bio', 'परिचय')}" placeholder="${tr('A short bio', 'छोटा परिचय')}"></textarea>
+      <input class="input" id="regRate" inputmode="decimal" aria-label="${tr('Your rate per minute', 'आपका प्रति मिनट शुल्क')}" placeholder="${tr('Rate per minute, e.g. 1.00', 'प्रति मिनट शुल्क, जैसे 1.00')}">
+      <p class="sub">${tr('Same rate for chat and call.', 'चैट और कॉल का एक ही शुल्क।')} $${(p.low / 100).toFixed(2)}–$${(p.high / 100).toFixed(2)}</p>
+      <label class="sub">${tr('Photo', 'फ़ोटो')}<input id="regPhoto" type="file" accept="image/*"></label>
+      <button class="btn block" type="submit">${tr('Create account', 'खाता बनाएँ')}</button>
+      <button class="btn quiet" type="button" id="showLogin">${tr('I already have an account', 'मेरा खाता पहले से है')}</button></form>`;
+  }
   async function renderPortal() {
     const body = portalRoot(tr('Astrologer', 'ज्योतिषी'));
     const token = sessionStorage.getItem('dr-astro-token') || '';
     if (!on()) { body.innerHTML = `<p>${tr('This is not switched on yet.', 'यह अभी चालू नहीं है।')}</p>`; return; }
     if (!token) {
-      body.innerHTML = `<form class="card" id="astroLogin"><h3>${tr('Sign in', 'साइन इन')}</h3>
-        <input class="input" id="astroEmail" type="email" autocomplete="username" aria-label="${tr('Email', 'ईमेल')}">
-        <input class="input" id="astroPass" type="password" autocomplete="current-password" aria-label="${tr('Password', 'पासवर्ड')}">
-        <button class="btn block" type="submit">${tr('Sign in', 'साइन इन')}</button></form>`;
-      $('#astroLogin').onsubmit = async e => {
+      body.innerHTML = registerForm();
+      $('#showLogin').onclick = () => {
+        body.innerHTML = `<form class="card" id="astroLogin"><h3>${tr('Sign in', 'साइन इन')}</h3>
+          <input class="input" id="astroEmail" type="email" autocomplete="username" aria-label="${tr('Email', 'ईमेल')}">
+          <input class="input" id="astroPass" type="password" autocomplete="current-password" aria-label="${tr('Password', 'पासवर्ड')}">
+          <button class="btn block" type="submit">${tr('Sign in', 'साइन इन')}</button></form>`;
+        $('#astroLogin').onsubmit = async e => {
+          e.preventDefault();
+          try {
+            const got = await api('/api/connect/astro/login', {email: $('#astroEmail').value, password: $('#astroPass').value});
+            sessionStorage.setItem('dr-astro-token', got.token);
+            render();
+          } catch (err) { showErr(err); }
+        };
+      };
+      $('#astroRegister').onsubmit = async e => {
         e.preventDefault();
+        const dollars = Number($('#regRate').value);
+        const photo = await readPhoto($('#regPhoto'));
         try {
-          const got = await api('/api/connect/astro/login', {email: $('#astroEmail').value, password: $('#astroPass').value});
+          await api('/api/connect/apply', {
+            email: $('#regEmail').value, password: $('#regPass').value, name: $('#regName').value,
+            languages: $('#regLang').value.split(',').map(s => s.trim()).filter(Boolean),
+            specialties: $('#regSpec').value.split(',').map(s => s.trim()).filter(Boolean),
+            years: Number($('#regYears').value || 0), bio: $('#regBio').value, photo: photo,
+            rate_cents: Math.round(dollars * 100),
+          });
+          const got = await api('/api/connect/astro/login', {email: $('#regEmail').value, password: $('#regPass').value});
           sessionStorage.setItem('dr-astro-token', got.token);
           render();
         } catch (err) { showErr(err); }
@@ -339,24 +376,50 @@
       return;
     }
     let incoming = {sessions: []};
-    let money = {sessions: [], payouts: [], astro_cents: 0, platform_cents: 0};
+    let money = {sessions: [], payouts: [], gross_label: '$0.00', fee_label: '$0.00', net_label: '$0.00', plan_status: 'none', renews_at: ''};
     try {
       incoming = await api('/api/connect/astro/incoming', null, token);
       money = await api('/api/connect/astro/earnings', null, token);
     } catch (e) { sessionStorage.removeItem('dr-astro-token'); render(); return; }
+    const plans = planCards();
+    const needsPlan = !money.plan_status || money.plan_status === 'none' || money.plan_status === 'canceled';
     const rows = (incoming.sessions || []).map(s => `<div class="card"><b>${esc(s.mode)} · ${esc(s.status)}</b><p>${esc(s.question || '')}</p>
       <button type="button" class="btn" data-accept="${esc(s.id)}">${tr('Accept', 'स्वीकार')}</button></div>`).join('');
-    const earned = (money.sessions || []).map(s => `<p>${esc(s.mode)} · ${tr('you', 'आप')} ${s.astro_cents} · ${tr('platform', 'प्लेटफ़ॉर्म')} ${s.platform_cents}</p>`).join('');
-    const paid = (money.payouts || []).map(p => `<p>${esc(p.status)} · ${p.amount_cents}</p>`).join('');
-    body.innerHTML = `<div class="card"><label class="spread">${tr('Online', 'ऑनलाइन')}<input type="checkbox" id="astroOnline"></label>
-      <p class="sub">${tr('75% of the net session is yours. 25% is the platform.', 'शुद्ध राशि का 75% आपका है। 25% प्लेटफ़ॉर्म का।')}</p></div>
+    body.innerHTML = `${needsPlan ? `<div class="card" id="planPicker"><h3>${tr('Choose a plan', 'योजना चुनें')}</h3>
+      <button type="button" class="btn block" id="planTrial">${plans.days} ${tr('day free trial', 'दिन का निःशुल्क परीक्षण')}</button>
+      <button type="button" class="btn block" id="planMonth">${tr('Monthly', 'मासिक')} ${esc(plans.month)}</button>
+      <button type="button" class="btn block" id="planYear">${tr('Yearly', 'वार्षिक')} ${esc(plans.year)}</button>
+      <p class="sub">${tr('No lifetime plan. After the trial, the plan renews until you cancel.', 'कोई आजीवन योजना नहीं। परीक्षण के बाद योजना रद्द करने तक नवीनीकृत होती है।')}</p></div>` : ''}
+      <div class="card"><label class="spread">${tr('Online', 'ऑनलाइन')}<input type="checkbox" id="astroOnline"></label>
+      <p class="sub">${tr('You keep 95%. Drishti keeps 5% of each session.', 'आप 95% रखते हैं। दृष्टि हर सत्र का 5% रखती है।')}</p>
+      <p class="sub">${tr('Plan', 'योजना')}: ${esc(money.plan_status || 'none')}${money.renews_at ? ' · ' + esc(String(money.renews_at).slice(0, 10)) : ''}</p></div>
       ${rows || `<p class="sub">${tr('No waiting chat or call.', 'कोई प्रतीक्षारत चैट या कॉल नहीं।')}</p>`}
-      <div class="card"><h3>${tr('Earnings', 'कमाई')}</h3>${earned || `<p>${tr('No sessions yet.', 'अभी कोई सत्र नहीं।')}</p>`}
-        <h3>${tr('Payouts', 'भुगतान')}</h3>${paid || `<p>${tr('No payout yet. Stripe pays a week after the session.', 'अभी भुगतान नहीं। सत्र के एक सप्ताह बाद Stripe भेजता है।')}</p>`}
+      <div class="card" id="earnings"><h3>${tr('Earnings', 'कमाई')}</h3>
+        <p>${tr('Gross', 'कुल')} ${esc(money.gross_label || '$0.00')}</p>
+        <p>${tr('Drishti fee', 'दृष्टि शुल्क')} ${esc(money.fee_label || '$0.00')}</p>
+        <p><b>${tr('Net', 'शुद्ध')} ${esc(money.net_label || '$0.00')}</b></p>
+        <button type="button" class="btn" id="managePlan">${tr('Manage plan', 'योजना प्रबंधित करें')}</button>
         <button type="button" class="btn quiet" id="astroStripe">${tr('Set up payouts', 'भुगतान सेट करें')}</button></div>`;
+    const trial = $('#planTrial');
+    if (trial) trial.onclick = () => api('/api/connect/astro/trial', {}, token).then(() => render()).catch(showErr);
+    const month = $('#planMonth');
+    if (month) month.onclick = () => api('/api/connect/astro/plan', {interval: 'month'}, token).then(d => { if (d.url) location.href = d.url; }).catch(showErr);
+    const year = $('#planYear');
+    if (year) year.onclick = () => api('/api/connect/astro/plan', {interval: 'year'}, token).then(d => { if (d.url) location.href = d.url; }).catch(showErr);
     $('#astroOnline').onchange = e => api('/api/connect/astro/online', {online: e.target.checked}, token).catch(showErr);
     document.querySelectorAll('[data-accept]').forEach(b => b.onclick = () => api('/api/connect/sessions/' + b.dataset.accept + '/accept', {}, token).then(() => render()).catch(showErr));
     $('#astroStripe').onclick = () => api('/api/connect/astro/stripe', {}, token).then(d => { if (d.url) location.href = d.url; }).catch(showErr);
+    $('#managePlan').onclick = () => api('/api/connect/astro/portal', {}, token).then(d => { if (d.url) location.href = d.url; }).catch(showErr);
+  }
+  function readPhoto(input) {
+    const file = input && input.files && input.files[0];
+    if (!file) return Promise.resolve('');
+    return new Promise(resolve => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result || '').slice(0, 200000));
+      reader.onerror = () => resolve('');
+      reader.readAsDataURL(file);
+    });
   }
   async function renderAdmin() {
     const body = portalRoot(tr('Admin', 'एडमिन'));
@@ -372,18 +435,18 @@
     let data;
     try { data = await api('/api/connect/admin/astrologers', null, token); }
     catch (e) { sessionStorage.removeItem('dr-admin-token'); body.innerHTML = `<p>${tr('That token was not accepted.', 'वह टोकन स्वीकार नहीं हुआ।')}</p>`; return; }
-    body.innerHTML = (data.astrologers || []).map(a => `<form class="card" data-id="${esc(a.id)}">
+    body.innerHTML = (data.astrologers || []).map(a => `<div class="card" data-id="${esc(a.id)}">
       <b>${esc(a.name)}</b> <span>${esc(a.status)}</span>
-      <p>${esc(a.email)} · ${esc((a.languages || []).join(', '))}</p>
-      <input class="input" name="rate" inputmode="numeric" value="${a.rate_cents || 100}" aria-label="${tr('Cents per minute', 'प्रति मिनट सेंट')}">
-      <button class="btn" name="approve" value="1" type="submit">${tr('Approve', 'स्वीकार')}</button>
-      <button class="btn quiet" name="approve" value="0" type="submit">${tr('Reject', 'अस्वीकार')}</button>
-    </form>`).join('') || `<p>${tr('No applications.', 'कोई आवेदन नहीं।')}</p>`;
-    document.querySelectorAll('#portalBody form').forEach(form => form.onsubmit = async e => {
-      e.preventDefault();
-      const approve = e.submitter && e.submitter.value === '1';
+      <p>${esc(a.email)} · ${esc(a.rate_label || '')} · ${esc(a.plan_status || '')}</p>
+      <p>${esc((a.languages || []).join(', '))}</p>
+      <button type="button" class="btn" data-act="approve">${tr('Approve', 'स्वीकार')}</button>
+      <button type="button" class="btn quiet" data-act="suspend">${tr('Suspend', 'रोकें')}</button>
+      <button type="button" class="btn quiet" data-act="remove">${tr('Remove', 'हटाएँ')}</button>
+    </div>`).join('') || `<p>${tr('No applications.', 'कोई आवेदन नहीं।')}</p>`;
+    document.querySelectorAll('#portalBody [data-act]').forEach(b => b.onclick = async () => {
+      const card = b.closest('[data-id]');
       try {
-        await api('/api/connect/admin/astrologers/' + form.dataset.id, {approve: approve, rate_cents: Number(form.rate.value || 0), rating_tenths: 48}, token);
+        await api('/api/connect/admin/astrologers/' + card.dataset.id, {action: b.dataset.act}, token);
         render();
       } catch (err) { showErr(err); }
     });

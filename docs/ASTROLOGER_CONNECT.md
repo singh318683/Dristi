@@ -1,46 +1,45 @@
 # Personal astrologers
 
-Chat and voice with a person, beside the $0.99 Acharya question. The website and the Android app stay as they are until this is switched on.
+The iPhone app is a separate product: the same Drishti as the website and Android app, plus live astrologers. It is a second Vercel project, for example `drishti-ios`, deploying **only** from `feature/astrologer-connect` (and later its release branch) with `ASTROLOGER_CONNECT_ENABLED=1`. The production project that serves https://dristi-six.vercel.app stays on `main` with the flag unset, so Android and the current site do not change.
 
 ## Switch
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `ASTROLOGER_CONNECT_ENABLED` | off | `1` shows the connect sheet and opens the API. Anything else keeps today's app. |
-| `DATABASE_URL` | unset | Postgres. Neon: use the **pooled** string (host contains `-pooler`). SSL is added when the URL does not set `sslmode`. Without it the flag cannot serve a wallet, and existing charts, Acharya, and Play billing keep working. |
-| `ASTROLOGER_CONNECT_ALLOW_SQLITE` | off | Test-only. Do not set this on Vercel. |
-| `ADMIN_TOKEN` | unset | Bearer token for `/api/connect/admin/`. Neetu approves astrologers and sets each per-minute rate here. The rate is stored in the database. The phone cannot send a price. |
-| `APPLE_COMMISSION_RATE` | `0.15` | Applied only to the part of a session paid from App Store wallet credit. Astrologer 75% and platform 25% are taken from what remains. |
+| `ASTROLOGER_CONNECT_ENABLED` | off | `1` shows registration, the connect sheet, and the API. |
+| `DATABASE_URL` | unset | Postgres. Neon: the **pooled** URL (host contains `-pooler`). Without it the flag cannot open a wallet and the rest of the app keeps working. |
+| `ASTROLOGER_CONNECT_ALLOW_SQLITE` | off | Tests only. Do not set this on Vercel. |
+| `ADMIN_TOKEN` | unset | Bearer token for `/#admin`. Approve, suspend, or remove a provider. The admin does not set the rate. |
+| `ASTRO_RATE_MIN` | `0.30` | Lowest per-minute rate. A decimal is dollars. A whole number is cents (`30`). |
+| `ASTRO_RATE_MAX` | `5.00` | Highest per-minute rate. Same parsing. Default ceiling is $5.00 (`500` cents). |
+| `PLATFORM_COMMISSION_RATE` | `0.05` | Drishti's share of each session's gross. The provider keeps the rest (95%). |
+| `PROVIDER_TRIAL_DAYS` | `90` | One free trial. No lifetime plan. |
+| `PROVIDER_GRACE_DAYS` | `3` | After `invoice.payment_failed`, the provider stays bookable this many days, then disappears. |
+| `PROVIDER_MONTHLY_LABEL` | `$9.99` | Label only. Stripe charges the price id. |
+| `PROVIDER_YEARLY_LABEL` | `$99` | Label only. |
+| `STRIPE_PRICE_PROVIDER_MONTHLY` | unset | Stripe Billing price id for the monthly plan. |
+| `STRIPE_PRICE_PROVIDER_YEARLY` | unset | Stripe Billing price id for the yearly plan. |
+| `STRIPE_SECRET_KEY` | unset | PaymentIntents, subscriptions, Connect, and the customer portal. |
+| `STRIPE_WEBHOOK_SECRET` | unset | Signs `POST /api/connect/stripe/webhook`. |
+| `STRIPE_PUBLISHABLE_KEY` | unset | Wallet top-up in the browser, including Apple Pay. |
+| `APP_PUBLIC_URL` | unset | Success and return URLs for Checkout, the portal, and Connect. |
+| `CRON_SECRET` | unset | `Authorization: Bearer` for the Monday payout cron. |
+| `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` | unset | Voice rooms. Tokens are minted only after a hold and an accepted call. |
 
-Vercel Postgres or Neon: create the database, copy the pooled URL into `DATABASE_URL`, then set `ASTROLOGER_CONNECT_ENABLED=1`. Tables are created on first use. If the URL is missing, `/api/status` reports `astrologer_connect: false` and the new routes answer `503` instead of charging anyone.
+Customer payments for a live session are Stripe, including Apple Pay. They are person-to-person services under App Store guideline 3.1.3(d), not in-app purchases. StoreKit remains only for the $0.99 Acharya question. See `ios/APP_REVIEW.md` for the review risk.
+
+## Who can be booked
+
+A provider sets one rate, from the minimum through the maximum, for both chat and call. Neetu approves, suspends, or removes them. They appear online only when they are approved, toggled online, and either inside the trial, on an active subscription, or inside the grace period after a failed payment.
+
+Stripe webhooks update that state: `customer.subscription.created`, `updated`, and `deleted`, and `invoice.payment_failed`.
 
 ## Money
 
-Wallet products are `wallet_5`, `wallet_10`, and `wallet_20` (500, 1000, and 2000 cents). A session places a five-minute hold at the astrologer's stored rate, the same rate for chat and call. The server clock starts when the astrologer accepts. Heartbeats from both sides, and a LiveKit webhook for calls, end the session. The charge is the elapsed seconds times the rate, floored to the cent, and never more than the hold. The unused hold returns to the same wallet bucket. Stripe-funded cents are split in full. App Store cents are reduced by `APPLE_COMMISSION_RATE` first. Ledger lines for one transaction always balance: user wallet, hold, astrologer payable, platform revenue, and the Apple fee.
+Wallet packs `wallet_5`, `wallet_10`, and `wallet_20` are Stripe PaymentIntents. A session holds five minutes at the provider's stored rate. The server clock starts when they accept. Heartbeats and the LiveKit webhook end the session. The charge is elapsed seconds times the rate, floored to the cent, and never more than the hold. Unused hold returns to the wallet.
 
-Top-ups:
+Of the gross, Drishti takes `PLATFORM_COMMISSION_RATE` and the provider the remainder. Twelve minutes at $1.00 is $12.00 gross, $0.60 Drishti, $11.40 provider. Amounts are integer cents and the two shares sum to the gross. There is no 75/25 split and no App Store commission taken out of a live session.
 
-- Web, including Apple Pay: `POST /api/connect/wallet/intent` creates a Stripe PaymentIntent for the product. The webhook `POST /api/connect/stripe/webhook` credits the wallet once. Set `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, and `STRIPE_PUBLISHABLE_KEY`.
-- iOS: the app sends the StoreKit 2 transaction id. The server calls the App Store Server API. Set `APPLE_ISSUER_ID`, `APPLE_KEY_ID`, `APPLE_IAP_PRIVATE_KEY`, `APPLE_BUNDLE_ID` (`com.ikshana.drishti`), and `APPLE_IAP_ENV=sandbox` for sandbox. `PyJWT` and `cryptography` sign that request.
+Payouts are Stripe Connect Express, weekly, after the 7-day hold, for at least $1. Razorpay Route is still only a later India option.
 
-`acharya_question` stays $0.99. On iOS the WebView bridge `window.DrishtiStore.purchase` can buy it, and `/api/chat` with `store: "apple"` verifies that transaction. Android still uses Google Play. A missing or reused purchase is not answered.
-
-## Chat and voice
-
-Chat is polled (`/messages` and `/heartbeat` every few seconds). That works on Vercel's short functions. Pusher or Ably can replace the poll later without changing the ledger.
-
-Voice is [LiveKit](https://livekit.io). Set `LIVEKIT_URL`, `LIVEKIT_API_KEY`, and `LIVEKIT_API_SECRET`. The server mints a ten-minute join token only after the hold exists and the astrologer has accepted a call. No phone numbers are exchanged. Point LiveKit's webhook at `POST /api/connect/livekit/webhook`. The `Authorization` header is a short JWT signed with `LIVEKIT_API_SECRET` whose `sha256` claim is the body. `participant_left` and `room_finished` end the session. Mute and speaker stay on the device. The iOS wrapper adds the microphone permission and CallKit.
-
-## Payouts
-
-Astrologers onboard with Stripe Connect Express (`POST /api/connect/astro/stripe`, needs `APP_PUBLIC_URL`). Earnings sit for 7 days. Monday at 12:00 UTC, Vercel cron calls `GET /api/cron/connect-payouts` with `Authorization: Bearer $CRON_SECRET` and sends Stripe transfers for payable balances of at least $1. The cron is in `vercel.json`.
-
-Razorpay Route is the later India payout option. It is not wired. The ledger account ids stay the same when it is added.
-
-## People
-
-Astrologers apply at `POST /api/connect/apply` and sign in at `/#astro`. They toggle online, accept a chat or call, and read earnings. Neetu uses `/#admin` with `ADMIN_TOKEN` to approve and set the cents-per-minute rate.
-
-A user can report or block an astrologer from the chat. Blocked astrologers disappear from that user's list.
-
-The offer sheet appears when an Acharya answer is closed, and only when the flag is on. Maybe later dismisses that sheet. The next answer can offer it again.
+Chat is polled so it runs on Vercel. Voice is LiveKit. No phone numbers are exchanged.

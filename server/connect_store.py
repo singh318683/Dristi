@@ -52,9 +52,18 @@ def ensure(con) -> None:
             bio text not null,
             rate_cents int not null default 0,
             rating_tenths int not null default 0,
+            photo text not null default '',
             status text not null,
             online int not null default 0,
             stripe_account text,
+            plan_status text not null default 'none',
+            plan_interval text not null default '',
+            trial_ends text,
+            period_end text,
+            grace_until text,
+            stripe_customer text,
+            stripe_subscription text,
+            trial_used int not null default 0,
             created text not null)""",
         """create table if not exists ac_astro_token(
             token text primary key,
@@ -259,7 +268,7 @@ def _json_list(value) -> str:
     return json.dumps(parts[:8])
 
 
-def apply_astrologer(email: str, password: str, name: str, specialties, languages, years: int, bio: str) -> dict:
+def apply_astrologer(email: str, password: str, name: str, specialties, languages, years: int, bio: str, rate_cents: int, photo: str = "") -> dict:
     email = (email or "").strip().lower()
     name = (name or "").strip()
     if "@" not in email or len(password or "") < 8 or len(name) < 2:
@@ -267,16 +276,21 @@ def apply_astrologer(email: str, password: str, name: str, specialties, language
     years = int(years)
     if years < 0 or years > 80:
         raise ConnectError("bad_application", 400)
+    try:
+        rate = money.check_rate(rate_cents)
+    except money.MoneyError as e:
+        raise ConnectError(e.code, 400) from e
+    photo = (photo or "").strip()[:200000]
     with db.connect() as con:
         ensure(con)
         if con.execute("select id from ac_astrologer where email=?", (email,)).fetchone():
             raise ConnectError("email_taken", 409)
         astro_id = "astro_" + secrets.token_hex(8)
         con.execute(
-            """insert into ac_astrologer(id, email, password_hash, name, specialties, languages, years, bio, rate_cents, rating_tenths, status, online, created)
-               values(?,?,?,?,?,?,?,?,0,0,'pending',0,?)""",
-            (astro_id, email, hash_password(password), name[:80], _json_list(specialties), _json_list(languages), years, (bio or "")[:500], _iso()))
-    return {"id": astro_id, "status": "pending"}
+            """insert into ac_astrologer(id, email, password_hash, name, specialties, languages, years, bio, rate_cents, rating_tenths, photo, status, online, created)
+               values(?,?,?,?,?,?,?,?,?,0,?,'pending',0,?)""",
+            (astro_id, email, hash_password(password), name[:80], _json_list(specialties), _json_list(languages), years, (bio or "")[:500], rate, photo, _iso()))
+    return {"id": astro_id, "status": "pending", "rate_cents": rate, "rate_label": money.money_label(rate, True)}
 
 
 def astro_login(email: str, password: str) -> dict:
@@ -303,26 +317,46 @@ def astro_from_token(token: str) -> str:
     return row[0]
 
 
+def _plan_live(status: str, trial_ends: str | None, period_end: str | None, grace_until: str | None, moment: datetime | None = None) -> bool:
+    moment = moment or now()
+    if status == "trialing":
+        end = _parse(trial_ends)
+        return end is not None and end > moment
+    if status == "active":
+        end = _parse(period_end)
+        return end is None or end > moment
+    if status == "past_due":
+        grace = _parse(grace_until)
+        return grace is not None and grace > moment
+    return False
+
+
 def set_online(astrologer_id: str, online: bool) -> dict:
     with db.connect() as con:
         ensure(con)
-        row = con.execute("select status from ac_astrologer where id=?", (astrologer_id,)).fetchone()
+        row = con.execute(
+            "select status, plan_status, trial_ends, period_end, grace_until from ac_astrologer where id=?",
+            (astrologer_id,)).fetchone()
         if not row:
             raise ConnectError("not_found", 404)
         if row[0] != "approved":
             raise ConnectError("not_approved", 403)
+        if online and not _plan_live(row[1], row[2], row[3], row[4]):
+            raise ConnectError("plan_required", 402)
         con.execute("update ac_astrologer set online=? where id=?", (1 if online else 0, astrologer_id))
     return {"online": bool(online)}
 
 
 def _astro_public(row) -> dict:
-    (astro_id, name, specialties, languages, years, rate_cents, rating, online, status) = row
+    astro_id, name, specialties, languages, years, rate_cents, rating, online, status = row[:9]
+    photo = row[9] if len(row) > 9 else ""
     specs = json.loads(specialties or "[]")
     langs = json.loads(languages or "[]")
     return {
         "id": astro_id,
         "name": name,
         "initial": (name[:1] or "?").upper(),
+        "photo": photo or "",
         "specialties": specs,
         "languages": langs,
         "years": years,
@@ -339,56 +373,71 @@ def list_astrologers(device: str) -> list[dict]:
     with db.connect() as con:
         ensure(con)
         rows = con.execute(
-            """select id, name, specialties, languages, years, rate_cents, rating_tenths, online, status
+            """select id, name, specialties, languages, years, rate_cents, rating_tenths, online, status, photo,
+                      plan_status, trial_ends, period_end, grace_until
                from ac_astrologer where status='approved' and online=1 and rate_cents>0
                and id not in (select astrologer_id from ac_block where device=?)
                order by name""",
             (device,)).fetchall()
-    return [_astro_public(row) for row in rows]
+    moment = now()
+    visible = [row for row in rows if _plan_live(row[10], row[11], row[12], row[13], moment)]
+    return [_astro_public(row) for row in visible]
 
 
 def admin_list() -> list[dict]:
     with db.connect() as con:
         ensure(con)
         rows = con.execute(
-            """select id, name, specialties, languages, years, rate_cents, rating_tenths, online, status, email
+            """select id, name, specialties, languages, years, rate_cents, rating_tenths, online, status, photo, email, plan_status
                from ac_astrologer order by created""").fetchall()
     out = []
     for row in rows:
-        item = _astro_public(row[:9])
-        item["email"] = row[9]
+        item = _astro_public(row[:10])
+        item["email"] = row[10]
+        item["plan_status"] = row[11]
         out.append(item)
     return out
 
 
-def admin_decide(astrologer_id: str, approve: bool, rate_cents: int = 0, rating_tenths: int = 0) -> dict:
+def admin_decide(astrologer_id: str, action: str) -> dict:
+    action = (action or "").strip()
+    if action not in ("approve", "suspend", "remove"):
+        raise ConnectError("bad_action", 400)
     with db.connect() as con:
         ensure(con)
-        row = con.execute("select id from ac_astrologer where id=?", (astrologer_id,)).fetchone()
+        row = con.execute("select rate_cents from ac_astrologer where id=?", (astrologer_id,)).fetchone()
         if not row:
             raise ConnectError("not_found", 404)
-        if not approve:
-            con.execute("update ac_astrologer set status='rejected', online=0 where id=?", (astrologer_id,))
-            return {"id": astrologer_id, "status": "rejected"}
-        rate = money.hold_cents(int(rate_cents)) // money.MIN_MINUTES
-        rating = max(0, min(50, int(rating_tenths or 0)))
-        con.execute(
-            "update ac_astrologer set status='approved', rate_cents=?, rating_tenths=? where id=?",
-            (rate, rating, astrologer_id))
-    return {"id": astrologer_id, "status": "approved", "rate_cents": rate, "rate_label": money.money_label(rate, True)}
+        if action == "approve":
+            con.execute("update ac_astrologer set status='approved' where id=?", (astrologer_id,))
+            status = "approved"
+        elif action == "suspend":
+            con.execute("update ac_astrologer set status='suspended', online=0 where id=?", (astrologer_id,))
+            status = "suspended"
+        else:
+            con.execute("update ac_astrologer set status='removed', online=0 where id=?", (astrologer_id,))
+            status = "removed"
+    return {"id": astrologer_id, "status": status, "rate_cents": int(row[0]), "rate_label": money.money_label(int(row[0]), True)}
 
 
 def _load_astro(con, astrologer_id: str):
     return con.execute(
-        "select id, name, status, online, rate_cents from ac_astrologer where id=?",
+        """select id, name, status, online, rate_cents, plan_status, trial_ends, period_end, grace_until
+           from ac_astrologer where id=?""",
         (astrologer_id,)).fetchone()
+
+
+def _bookable(astro) -> bool:
+    if not astro or astro[2] != "approved" or not astro[3] or int(astro[4]) <= 0:
+        return False
+    return _plan_live(astro[5], astro[6], astro[7], astro[8])
 
 
 def quote(device: str, astrologer_id: str) -> dict:
     with db.connect() as con:
         ensure(con)
         astro = _load_astro(con, astrologer_id)
-        if not astro or astro[2] != "approved" or not astro[3]:
+        if not _bookable(astro):
             raise ConnectError("unavailable", 404)
         blocked = con.execute(
             "select 1 from ac_block where device=? and astrologer_id=?", (device, astrologer_id)).fetchone()
@@ -442,7 +491,7 @@ def start_session(device: str, astrologer_id: str, mode: str, question: str, cha
             if prior:
                 return session_view(prior[0], con)
         astro = _load_astro(con, astrologer_id)
-        if not astro or astro[2] != "approved" or not astro[3] or int(astro[4]) <= 0:
+        if not _bookable(astro):
             raise ConnectError("unavailable", 404)
         if con.execute("select 1 from ac_block where device=? and astrologer_id=?", (device, astrologer_id)).fetchone():
             raise ConnectError("blocked", 403)
@@ -668,8 +717,7 @@ def _settle(con, item: dict, moment: datetime, reason: str) -> None:
     refund_apple = hold_apple - charge_apple
     stripe_cents, apple_cents = _lock_wallet(con, current["device"])
     _set_wallet(con, current["device"], stripe_cents + refund_stripe, apple_cents + refund_apple)
-    net, fee = money.net_of_apple(charge_stripe, charge_apple)
-    astro_cents, platform_cents = money.split_net(net)
+    astro_cents, platform_cents = money.split_gross(charge)
     entries = [(f"hold:{current['id']}", hold, 0)]
     if refund_stripe + refund_apple:
         entries.append((f"wallet:{current['device']}", 0, refund_stripe + refund_apple))
@@ -677,15 +725,13 @@ def _settle(con, item: dict, moment: datetime, reason: str) -> None:
         entries.append((f"payable:{current['astrologer_id']}", 0, astro_cents))
     if platform_cents:
         entries.append((f"revenue:platform", 0, platform_cents))
-    if fee:
-        entries.append(("fee:apple", 0, fee))
     if hold:
         _post(con, "settle-" + current["id"], entries, "session_settle", current["id"])
     available = _iso(moment + timedelta(days=7))
     con.execute(
         """insert into ac_earning(session_id, astrologer_id, amount_cents, platform_cents, fee_cents, available_at)
            values(?,?,?,?,?,?) on conflict(session_id) do nothing""",
-        (current["id"], current["astrologer_id"], astro_cents, platform_cents, fee, available))
+        (current["id"], current["astrologer_id"], astro_cents, platform_cents, 0, available))
     updated = con.execute(
         """update ac_session set status='ended', ended_at=?, billed_cents=?, end_reason=?
            where id=? and status!='ended'""",
@@ -771,11 +817,74 @@ def astrologer_private(astrologer_id: str) -> dict:
     with db.connect() as con:
         ensure(con)
         row = con.execute(
-            "select email, stripe_account, status, online, name from ac_astrologer where id=?",
+            """select email, stripe_account, status, online, name, stripe_customer, trial_used, plan_status
+               from ac_astrologer where id=?""",
             (astrologer_id,)).fetchone()
     if not row:
         raise ConnectError("not_found", 404)
-    return {"email": row[0], "stripe_account": row[1] or "", "status": row[2], "online": bool(row[3]), "name": row[4]}
+    return {
+        "email": row[0], "stripe_account": row[1] or "", "status": row[2], "online": bool(row[3]),
+        "name": row[4], "stripe_customer": row[5] or "", "trial_used": int(row[6] or 0), "plan_status": row[7],
+    }
+
+
+def set_stripe_customer(astrologer_id: str, customer_id: str) -> None:
+    with db.connect() as con:
+        ensure(con)
+        con.execute("update ac_astrologer set stripe_customer=? where id=?", (customer_id, astrologer_id))
+
+
+def grant_trial(astrologer_id: str) -> dict:
+    days = money.trial_days()
+    if days <= 0:
+        raise ConnectError("trial_unavailable", 400)
+    moment = now()
+    with db.connect() as con:
+        ensure(con)
+        row = con.execute("select trial_used, plan_status from ac_astrologer where id=?", (astrologer_id,)).fetchone()
+        if not row:
+            raise ConnectError("not_found", 404)
+        if int(row[0] or 0) or row[1] in ("trialing", "active", "past_due"):
+            raise ConnectError("trial_used", 409)
+        ends = moment + timedelta(days=days)
+        con.execute(
+            """update ac_astrologer set plan_status='trialing', trial_ends=?, trial_used=1, grace_until=null
+               where id=?""",
+            (_iso(ends), astrologer_id))
+    return {"plan_status": "trialing", "trial_ends": _iso(ends), "trial_days": days}
+
+
+def apply_provider_plan(astrologer_id: str, stripe_status: str, period_end: str | None, trial_end: str | None, customer: str, subscription: str, interval: str = "") -> dict:
+    moment = now()
+    status = (stripe_status or "").strip()
+    mapped = {
+        "trialing": "trialing", "active": "active", "past_due": "past_due",
+        "canceled": "canceled", "unpaid": "canceled", "incomplete_expired": "canceled",
+        "paused": "canceled",
+    }.get(status, "none")
+    with db.connect() as con:
+        ensure(con)
+        row = con.execute("select grace_until, trial_used from ac_astrologer where id=?", (astrologer_id,)).fetchone()
+        if not row and customer:
+            found = con.execute("select id, grace_until, trial_used from ac_astrologer where stripe_customer=?", (customer,)).fetchone()
+            if found:
+                astrologer_id = found[0]
+                row = (found[1], found[2])
+        if not row:
+            raise ConnectError("not_found", 404)
+        grace = row[0]
+        if mapped == "past_due" and not grace:
+            grace = _iso(moment + timedelta(days=money.grace_days()))
+        if mapped != "past_due":
+            grace = None if mapped in ("active", "trialing", "canceled", "none") else grace
+        online_off = mapped in ("canceled", "none")
+        con.execute(
+            """update ac_astrologer set plan_status=?, plan_interval=?, trial_ends=?, period_end=?, grace_until=?,
+               stripe_customer=?, stripe_subscription=?, trial_used=case when ? in ('trialing','active','past_due') then 1 else trial_used end,
+               online=case when ? then 0 else online end
+               where id=?""",
+            (mapped, interval or "", trial_end, period_end, grace, customer or None, subscription or None, mapped, 1 if online_off else 0, astrologer_id))
+    return {"id": astrologer_id, "plan_status": mapped}
 
 
 def earnings(astrologer_id: str) -> dict:
@@ -789,15 +898,34 @@ def earnings(astrologer_id: str) -> dict:
         payouts = con.execute(
             "select id, amount_cents, status, created, stripe_transfer from ac_payout where astrologer_id=? order by created",
             (astrologer_id,)).fetchall()
+        plan = con.execute(
+            "select plan_status, plan_interval, trial_ends, period_end, grace_until from ac_astrologer where id=?",
+            (astrologer_id,)).fetchone()
     sessions = [{
         "id": r[0], "mode": r[1], "billed_cents": r[2] or 0, "ended_at": r[3],
         "astro_cents": r[4] or 0, "platform_cents": r[5] or 0, "fee_cents": r[6] or 0,
         "available_at": r[7], "paid": bool(r[8]),
+        "gross_cents": r[2] or 0,
     } for r in rows]
+    gross = sum(s["gross_cents"] for s in sessions)
+    net = sum(s["astro_cents"] for s in sessions)
+    fee = sum(s["platform_cents"] for s in sessions)
+    renews = ""
+    if plan:
+        renews = plan[2] if plan[0] == "trialing" else (plan[3] or "")
     return {
         "sessions": sessions,
-        "astro_cents": sum(s["astro_cents"] for s in sessions),
-        "platform_cents": sum(s["platform_cents"] for s in sessions),
+        "gross_cents": gross,
+        "gross_label": money.money_label(gross),
+        "fee_cents": fee,
+        "fee_label": money.money_label(fee),
+        "net_cents": net,
+        "net_label": money.money_label(net),
+        "astro_cents": net,
+        "platform_cents": fee,
+        "plan_status": plan[0] if plan else "none",
+        "plan_interval": plan[1] if plan else "",
+        "renews_at": renews or "",
         "payouts": [{"id": p[0], "amount_cents": p[1], "status": p[2], "created": p[3], "stripe_transfer": p[4]} for p in payouts],
     }
 

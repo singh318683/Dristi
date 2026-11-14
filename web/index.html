@@ -533,6 +533,7 @@ body.app-fit .sheet-bg.connect-live{bottom:calc(56px + env(safe-area-inset-botto
 .call-controls{display:flex;gap:8px;width:100%;margin-top:12px}
 .call-controls .btn{flex:1}
 .portal{max-width:560px;margin:0 auto;padding:16px 16px 32px;min-height:100dvh}
+#planPicker .btn{margin-bottom:8px}
 .portal .card{margin-bottom:12px}
 .bub.ai{cursor:pointer}
 .read-open{display:inline-flex;align-items:center;margin-top:8px;min-height:36px;padding:0;border:0;background:none;color:var(--on-tint);font-weight:700;font-size:13px}
@@ -3155,13 +3156,15 @@ function pageMe() {
       <p class="small muted">${tr('Paid on Google Play, one question at a time. There is no free question and no credit pack. The chart, periods, dosha, panchang, matching, horoscope and kundli PDF stay free.', 'Google Play पर भुगतान, एक बार में एक प्रश्न। कोई मुफ़्त प्रश्न नहीं और कोई क्रेडिट पैक नहीं। कुंडली, दशा, दोष, पंचांग, मिलान, राशिफल और कुंडली PDF मुफ़्त हैं।')}</p></section>
     <section class="card" id="prefs"><div class="setrow"><span>${tr('Language', 'भाषा')}</span><div class="seg" id="setLang"><button data-v="en" aria-pressed="${!hi()}">EN</button><button data-v="hi" aria-pressed="${hi()}">हि</button></div></div>
       <div class="setrow"><span>${tr('Chart', 'कुंडली')}</span><div class="seg" id="setSty"><button data-v="north" aria-pressed="${S.style === 'north'}">${tr('North', 'उत्तर')}</button><button data-v="south" aria-pressed="${S.style === 'south'}">${tr('South', 'दक्षिण')}</button></div></div></section>
-    <div class="chips wrap"><button class="chip" id="aboutBtn">${tr('About', 'जानकारी')}</button><button class="chip" id="clr">${tr('Clear chat', 'चैट मिटाएँ')}</button></div></main>`;
+    <div class="chips wrap">${(S.status && S.status.astrologer_connect) ? `<button class="chip" id="astroJoin">${tr('Register as a live astrologer', 'लाइव ज्योतिषी बनें')}</button>` : ''}<button class="chip" id="aboutBtn">${tr('About', 'जानकारी')}</button><button class="chip" id="clr">${tr('Clear chat', 'चैट मिटाएँ')}</button></div></main>`;
   bindHeader();
   $('#personRow').onclick = openPeople;
   $$('#setLang button').forEach(b => b.onclick = () => { S.lang = b.dataset.v; store.set('lang', S.lang); render(); });
   $$('#setSty button').forEach(b => b.onclick = () => { S.style = b.dataset.v; store.set('style', S.style); render(); });
   $('#clr').onclick = () => { S.profiles.forEach(p => localStorage.removeItem('dr-chat-' + p.id)); scheduleSync(); toast(tr('Chat history cleared', 'चैट इतिहास मिटाया गया')); };
-  $('#aboutBtn').onclick = () => openDetail(tr('About', 'जानकारी'), `<p class="small">${tr('Charts use the Swiss Ephemeris, Lahiri ayanamsa, whole-sign houses and Vimshottari dasha. Acharya is an AI astrologer, not a person.', 'कुंडली स्विस एफेमेरिस, लाहिरी, पूर्ण राशि भाव और विंशोत्तरी दशा से बनती है। आचार्य AI ज्योतिषी हैं, व्यक्ति नहीं।')}</p><p class="small muted">${tr('Guidance for reflection, not medical, legal or financial advice. Remedies are optional and free.', 'यह चिंतन हेतु मार्गदर्शन है, चिकित्सा, कानूनी या वित्तीय सलाह नहीं। उपाय वैकल्पिक और मुफ़्त हैं।')}</p><p class="small muted">${tr('Device ID', 'डिवाइस आईडी')}: <code style="font-size:11px;word-break:break-all">${esc(DEVICE)}</code></p><p><a href="privacy.html">${tr('Privacy policy', 'गोपनीयता नीति')}</a></p>`);
+  const join = $('#astroJoin');
+  if (join) join.onclick = () => { location.hash = '#astro'; render(); };
+  $('#aboutBtn').onclick = () => openDetail(tr('About', 'जानकारी'), `<p class="small">${tr('Charts use the Swiss Ephemeris, Lahiri ayanamsa, whole-sign houses and Vimshottari dasha. Acharya is an AI astrologer, not a person.', 'कुंडली स्विस एफेमेरिस, लाहिरी, पूर्ण राशि भाव और विंशोत्तरी दशा से बनती है। आचार्य AI ज्योतिषी हैं, व्यक्ति नहीं।')}</p><p class="small muted">${tr('Guidance for reflection, not medical, legal or financial advice. Remedies are optional and free.', 'यह चिंतन हेतु मार्गदर्शन है, चिकित्सा, कानूनी या वित्तीय सलाह नहीं। उपाय वैकल्पिक और मुफ़्त हैं।')}</p>${(S.status && S.status.astrologer_connect) ? `<p><a href="#astro">${tr('Register as a live astrologer', 'लाइव ज्योतिषी बनें')}</a></p>` : ''}<p class="small muted">${tr('Device ID', 'डिवाइस आईडी')}: <code style="font-size:11px;word-break:break-all">${esc(DEVICE)}</code></p><p><a href="privacy.html">${tr('Privacy policy', 'गोपनीयता नीति')}</a></p>`);
   if (S.pendingSheet === 'people') { S.pendingSheet = null; openPeople(); }
 }
 // ------------------------------------------------------------------ rate

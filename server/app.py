@@ -477,7 +477,8 @@ def status():
     c = llm.config()
     return {"app": APP_NAME, "ai_configured": llm.configured(), "model": c["model"] if llm.configured() else None,
             "referral_bonus": 0, "astrologer_connect": connect_api.store_ready(),
-            "stripe_publishable_key": connect_api.publishable_key()} | billing_public()
+            "stripe_publishable_key": connect_api.publishable_key(),
+            **connect_api.public_plans()} | billing_public()
 
 
 @app.get("/api/wallet")

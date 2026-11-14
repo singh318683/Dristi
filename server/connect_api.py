@@ -25,6 +25,21 @@ def feature_on() -> bool:
     return _flag("ASTROLOGER_CONNECT_ENABLED")
 
 
+def public_plans() -> dict:
+    if not store_ready():
+        return {}
+    import connect_money as money
+    low, high = money.rate_bounds()
+    return {
+        "provider_trial_days": money.trial_days(),
+        "provider_monthly_label": (os.environ.get("PROVIDER_MONTHLY_LABEL") or "$9.99").strip() or "$9.99",
+        "provider_yearly_label": (os.environ.get("PROVIDER_YEARLY_LABEL") or "$99").strip() or "$99",
+        "rate_min_cents": low,
+        "rate_max_cents": high,
+        "platform_commission_rate": (os.environ.get("PLATFORM_COMMISSION_RATE") or "0.05").strip() or "0.05",
+    }
+
+
 def publishable_key() -> str:
     if not store_ready():
         return ""
@@ -89,6 +104,8 @@ class ApplyIn(BaseModel):
     languages: list[str] = Field(default_factory=list)
     years: int = 0
     bio: str = ""
+    rate_cents: int
+    photo: str = ""
 
 
 class LoginIn(BaseModel):
@@ -167,9 +184,12 @@ class BlockIn(BaseModel):
 
 class DecideIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    approve: bool
-    rate_cents: int = 0
-    rating_tenths: int = 0
+    action: Literal["approve", "suspend", "remove"]
+
+
+class PlanIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    interval: Literal["month", "year"]
 
 
 @router.get("/api/connect/astrologers")
@@ -181,7 +201,7 @@ def api_list(device: str):
 @router.post("/api/connect/apply")
 def api_apply(body: ApplyIn):
     _gate()
-    return _run(lambda: store.apply_astrologer(body.email, body.password, body.name, body.specialties, body.languages, body.years, body.bio))
+    return _run(lambda: store.apply_astrologer(body.email, body.password, body.name, body.specialties, body.languages, body.years, body.bio, body.rate_cents, body.photo))
 
 
 @router.post("/api/connect/astro/login")
@@ -264,14 +284,7 @@ def api_intent(body: IntentIn):
 @router.post("/api/connect/wallet/apple")
 def api_apple(body: AppleIn):
     _gate()
-    import connect_storekit
-    try:
-        info = connect_storekit.verify_transaction(body.transaction_id, body.signed_transaction)
-    except connect_storekit.StoreKitError as e:
-        raise HTTPException(400, e.code) from e
-    if info.get("product_id") != body.product_id:
-        raise HTTPException(400, "payment_invalid")
-    return _run(lambda: store.credit_topup(body.device, "apple", info["product_id"], info["transaction_id"]))
+    raise HTTPException(400, "live_sessions_use_stripe")
 
 
 @router.post("/api/connect/stripe/webhook")
@@ -289,7 +302,10 @@ async def api_stripe_webhook(request: Request):
 
 
 def apply_stripe_event(event: dict) -> dict:
-    if event.get("type") != "payment_intent.succeeded":
+    kind = event.get("type") or ""
+    if kind.startswith("customer.subscription.") or kind == "invoice.payment_failed":
+        return _apply_subscription_event(event)
+    if kind != "payment_intent.succeeded":
         return {"ok": True, "ignored": True}
     obj = (event.get("data") or {}).get("object") or {}
     meta = obj.get("metadata") or {}
@@ -297,6 +313,55 @@ def apply_stripe_event(event: dict) -> dict:
         return {"ok": True, "ignored": True}
     payment_id = str(obj.get("id") or "")
     result = store.credit_topup(str(meta.get("device") or ""), "stripe", str(meta.get("product_id") or ""), payment_id)
+    return {"ok": True, **result}
+
+
+def _unix_iso(value) -> str | None:
+    if not value:
+        return None
+    from datetime import datetime, timezone
+    try:
+        return datetime.fromtimestamp(int(value), timezone.utc).isoformat()
+    except (TypeError, ValueError, OSError):
+        return None
+
+
+def _apply_subscription_event(event: dict) -> dict:
+    kind = event.get("type") or ""
+    obj = (event.get("data") or {}).get("object") or {}
+    if kind == "invoice.payment_failed":
+        customer = str(obj.get("customer") or "")
+        sub = str(obj.get("subscription") or "")
+        astro = ""
+        meta = obj.get("metadata") or {}
+        if isinstance(meta, dict):
+            astro = str(meta.get("astrologer_id") or "")
+        if not astro and customer:
+            with __import__("db").connect() as con:
+                store.ensure(con)
+                row = con.execute("select id from ac_astrologer where stripe_customer=?", (customer,)).fetchone()
+                astro = row[0] if row else ""
+        if not astro:
+            return {"ok": True, "ignored": True}
+        return {"ok": True, **store.apply_provider_plan(astro, "past_due", None, None, customer, sub, "")}
+    meta = (obj.get("metadata") or {}) if isinstance(obj, dict) else {}
+    astro = str(meta.get("astrologer_id") or "")
+    customer = str(obj.get("customer") or "")
+    if not astro and customer:
+        with __import__("db").connect() as con:
+            store.ensure(con)
+            row = con.execute("select id from ac_astrologer where stripe_customer=?", (customer,)).fetchone()
+            astro = row[0] if row else ""
+    if not astro:
+        return {"ok": True, "ignored": True}
+    items = ((obj.get("items") or {}).get("data") or [])
+    interval = ""
+    if items:
+        interval = str((((items[0].get("price") or {}).get("recurring") or {}).get("interval")) or "")
+    status = "canceled" if kind == "customer.subscription.deleted" else str(obj.get("status") or "")
+    result = store.apply_provider_plan(
+        astro, status, _unix_iso(obj.get("current_period_end")), _unix_iso(obj.get("trial_end")),
+        customer, str(obj.get("id") or ""), interval)
     return {"ok": True, **result}
 
 
@@ -416,7 +481,48 @@ def api_admin_list(request: Request):
 @router.post("/api/connect/admin/astrologers/{astrologer_id}")
 def api_admin_decide(astrologer_id: str, body: DecideIn, request: Request):
     _admin(request)
-    return _run(lambda: store.admin_decide(astrologer_id, body.approve, body.rate_cents, body.rating_tenths))
+    return _run(lambda: store.admin_decide(astrologer_id, body.action))
+
+
+@router.post("/api/connect/astro/trial")
+def api_trial(request: Request):
+    _gate()
+    astro_id = _astro_id(request)
+    return _run(lambda: store.grant_trial(astro_id))
+
+
+@router.post("/api/connect/astro/plan")
+def api_plan(body: PlanIn, request: Request):
+    _gate()
+    astro_id = _astro_id(request)
+    secret = (os.environ.get("STRIPE_SECRET_KEY") or "").strip()
+    price_key = "STRIPE_PRICE_PROVIDER_MONTHLY" if body.interval == "month" else "STRIPE_PRICE_PROVIDER_YEARLY"
+    price = (os.environ.get(price_key) or "").strip()
+    public = (os.environ.get("APP_PUBLIC_URL") or "").strip().rstrip("/")
+    if not secret or not price or not public:
+        raise HTTPException(503, "stripe_not_configured")
+    info = _run(lambda: store.astrologer_private(astro_id))
+    customer = info["stripe_customer"]
+    if not customer:
+        created = connect_stripe.create_customer(secret, info["email"], astro_id)
+        customer = created.get("id") or ""
+        store.set_stripe_customer(astro_id, customer)
+    trial = 0 if info["trial_used"] else __import__("connect_money").trial_days()
+    session = connect_stripe.create_checkout(secret, price, customer, public + "/#astro", public + "/#astro", astro_id, trial)
+    return {"url": session.get("url") or ""}
+
+
+@router.post("/api/connect/astro/portal")
+def api_portal(request: Request):
+    _gate()
+    astro_id = _astro_id(request)
+    secret = (os.environ.get("STRIPE_SECRET_KEY") or "").strip()
+    public = (os.environ.get("APP_PUBLIC_URL") or "").strip().rstrip("/")
+    info = _run(lambda: store.astrologer_private(astro_id))
+    if not secret or not public or not info["stripe_customer"]:
+        raise HTTPException(503, "stripe_not_configured")
+    session = connect_stripe.create_portal(secret, info["stripe_customer"], public + "/#astro")
+    return {"url": session.get("url") or ""}
 
 
 @router.get("/api/cron/connect-payouts")

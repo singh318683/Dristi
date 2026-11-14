@@ -80,6 +80,34 @@ def create_account_link(secret: str, account_id: str, refresh_url: str, return_u
     })
 
 
+def create_customer(secret: str, email: str, astrologer_id: str) -> dict:
+    return _form(secret, "customers", {
+        "email": email,
+        "metadata[astrologer_id]": astrologer_id,
+    }, "cus-" + astrologer_id)
+
+
+def create_checkout(secret: str, price: str, customer: str, success: str, cancel: str, astrologer_id: str, trial_days: int) -> dict:
+    data = {
+        "mode": "subscription",
+        "customer": customer,
+        "success_url": success,
+        "cancel_url": cancel,
+        "client_reference_id": astrologer_id,
+        "line_items[0][price]": price,
+        "line_items[0][quantity]": "1",
+        "metadata[astrologer_id]": astrologer_id,
+        "subscription_data[metadata][astrologer_id]": astrologer_id,
+    }
+    if trial_days > 0:
+        data["subscription_data[trial_period_days]"] = str(int(trial_days))
+    return _form(secret, "checkout/sessions", data, None)
+
+
+def create_portal(secret: str, customer: str, return_url: str) -> dict:
+    return _form(secret, "billing_portal/sessions", {"customer": customer, "return_url": return_url}, None)
+
+
 def create_transfer(secret: str, amount_cents: int, destination: str, idempotency_key: str) -> dict:
     return _form(secret, "transfers", {
         "amount": str(int(amount_cents)),
