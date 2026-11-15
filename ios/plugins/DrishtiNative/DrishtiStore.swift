@@ -3,8 +3,10 @@ import StoreKit
 import CallKit
 import AVFoundation
 
-/// StoreKit 2 consumables. Product ids: acharya_question, wallet_5, wallet_10, wallet_20.
+/// StoreKit 2 for the Acharya question only. Product id: acharya_question.
+/// Live-session wallet top-ups are Stripe, not StoreKit.
 /// The page calls `window.DrishtiStore.purchase(productId)` and posts the transaction id to the server.
+@available(iOS 15.0, *)
 @MainActor
 final class DrishtiStore: NSObject {
     func purchase(_ productId: String) async throws -> [String: String] {
@@ -43,6 +45,7 @@ final class DrishtiStore: NSObject {
 }
 
 /// Reports an in-app voice session to the system. Audio stays in the WebView's WebRTC room.
+@available(iOS 15.0, *)
 final class DrishtiCall: NSObject, CXProviderDelegate {
     private let provider: CXProvider = {
         let config = CXProviderConfiguration()

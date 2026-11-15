@@ -2,6 +2,8 @@
 
 The iPhone app is a separate product: the same Drishti as the website and Android app, plus live astrologers. It is a second Vercel project, for example `drishti-ios`, deploying **only** from `feature/astrologer-connect` (and later its release branch) with `ASTROLOGER_CONNECT_ENABLED=1`. The production project that serves https://dristi-six.vercel.app stays on `main` with the flag unset, so Android and the current site do not change.
 
+The iOS shell does not load that production site. GitHub Actions writes the repository variable `IOS_SERVER_URL` into `ios/capacitor.config.json` before generating the Xcode project. Leave it unset and the shell uses `https://drishti-ios.vercel.app`. Set it to the separate Vercel project deployed from this branch. See [ios/README.md](../ios/README.md).
+
 ## Switch
 
 | Variable | Default | Purpose |

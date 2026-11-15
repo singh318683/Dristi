@@ -15,6 +15,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
+      - name: Point the shell at the iOS site
+        env:
+          IOS_SERVER_URL: ${{ vars.IOS_SERVER_URL }}
+        run: python3 ios/scripts/set_server_url.py ios/capacitor.config.json
       - name: Add the Capacitor iOS project
         working-directory: ios
         run: |
@@ -25,37 +29,141 @@ jobs:
           XCODE_DIR="$(dirname "$(find "$PWD" -name App.xcodeproj -type d ! -path '*/node_modules/*' | head -1)")"
           test -d "$XCODE_DIR"
           echo "XCODE_DIR=$XCODE_DIR" >> "$GITHUB_ENV"
-          PLIST="$XCODE_DIR/App/Info.plist"
-          /usr/libexec/PlistBuddy -c "Add :NSMicrophoneUsageDescription string Drishti uses the microphone for a voice consultation you start yourself." "$PLIST" || true
-          /usr/libexec/PlistBuddy -c "Add :UIBackgroundModes array" "$PLIST" || true
-          /usr/libexec/PlistBuddy -c "Add :UIBackgroundModes: string audio" "$PLIST" || true
-          /usr/libexec/PlistBuddy -c "Add :UIBackgroundModes: string voip" "$PLIST" || true
+          python3 scripts/prepare_xcode.py "$XCODE_DIR" \
+            --additions "$GITHUB_WORKSPACE/ios/Info.plist.additions.xml" \
+            --swift "$GITHUB_WORKSPACE/ios/plugins/DrishtiNative/DrishtiStore.swift"
       - name: Unsigned build
         run: |
+          SETTINGS=(CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" IPHONEOS_DEPLOYMENT_TARGET=15.0)
           if [ -d "$XCODE_DIR/App.xcworkspace" ]; then
-            xcodebuild -workspace "$XCODE_DIR/App.xcworkspace" -scheme App -destination 'generic/platform=iOS' -configuration Release CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" build
+            xcodebuild -workspace "$XCODE_DIR/App.xcworkspace" -scheme App -destination 'generic/platform=iOS' -configuration Release "${SETTINGS[@]}" build
           else
-            xcodebuild -project "$XCODE_DIR/App.xcodeproj" -scheme App -destination 'generic/platform=iOS' -configuration Release CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" build
+            xcodebuild -project "$XCODE_DIR/App.xcodeproj" -scheme App -destination 'generic/platform=iOS' -configuration Release "${SETTINGS[@]}" build
           fi
 
   signed:
-    if: ${{ vars.APPLE_TEAM_ID != '' }}
+    # Runnable from the Actions tab. With the secrets unset the check step
+    # succeeds and the rest of the job is skipped.
     runs-on: macos-latest
     steps:
+      - name: Check App Store Connect signing secrets
+        id: gate
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPSTORE_API_KEY_ID: ${{ secrets.APPSTORE_API_KEY_ID }}
+          APPSTORE_API_ISSUER_ID: ${{ secrets.APPSTORE_API_ISSUER_ID }}
+          APPSTORE_API_KEY: ${{ secrets.APPSTORE_API_KEY }}
+        run: |
+          if [ -z "$APPLE_TEAM_ID" ] || [ -z "$APPSTORE_API_KEY_ID" ] || [ -z "$APPSTORE_API_ISSUER_ID" ] || [ -z "$APPSTORE_API_KEY" ]; then
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "App Store Connect signing secrets are not set. Skipping the signed build."
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
       - uses: actions/checkout@v4
+        if: steps.gate.outputs.ready == 'true'
       - uses: actions/setup-node@v4
+        if: steps.gate.outputs.ready == 'true'
         with:
           node-version: "22"
+      - name: Point the shell at the iOS site
+        if: steps.gate.outputs.ready == 'true'
+        env:
+          IOS_SERVER_URL: ${{ vars.IOS_SERVER_URL }}
+        run: python3 ios/scripts/set_server_url.py ios/capacitor.config.json
       - name: Add the Capacitor iOS project
+        if: steps.gate.outputs.ready == 'true'
         working-directory: ios
         run: |
           npm install
           npx cap add ios
           XCODE_DIR="$(dirname "$(find "$PWD" -name App.xcodeproj -type d ! -path '*/node_modules/*' | head -1)")"
+          test -d "$XCODE_DIR"
           echo "XCODE_DIR=$XCODE_DIR" >> "$GITHUB_ENV"
+          python3 scripts/prepare_xcode.py "$XCODE_DIR" \
+            --additions "$GITHUB_WORKSPACE/ios/Info.plist.additions.xml" \
+            --swift "$GITHUB_WORKSPACE/ios/plugins/DrishtiNative/DrishtiStore.swift" \
+            --build-number "${{ github.run_number }}"
+      - name: Write the App Store Connect API key
+        if: steps.gate.outputs.ready == 'true'
+        env:
+          APPSTORE_API_KEY: ${{ secrets.APPSTORE_API_KEY }}
+          APPSTORE_API_KEY_ID: ${{ secrets.APPSTORE_API_KEY_ID }}
+        run: |
+          python3 - << 'PY'
+          import os
+          from pathlib import Path
+          key = os.environ["APPSTORE_API_KEY"]
+          if "\n" not in key and "\\n" in key:
+              key = key.replace("\\n", "\n")
+          if not key.endswith("\n"):
+              key += "\n"
+          dest = Path(os.environ["RUNNER_TEMP"]) / "AuthKey.p8"
+          dest.write_text(key, encoding="utf-8")
+          dest.chmod(0o600)
+          folder = Path.home() / ".appstoreconnect" / "private_keys"
+          folder.mkdir(parents=True, mode=0o700, exist_ok=True)
+          named = folder / ("AuthKey_" + os.environ["APPSTORE_API_KEY_ID"] + ".p8")
+          named.write_text(key, encoding="utf-8")
+          named.chmod(0o600)
+          print("wrote App Store Connect API key")
+          PY
       - name: Archive
+        if: steps.gate.outputs.ready == 'true'
         env:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPSTORE_API_KEY_ID: ${{ secrets.APPSTORE_API_KEY_ID }}
+          APPSTORE_API_ISSUER_ID: ${{ secrets.APPSTORE_API_ISSUER_ID }}
         run: |
-          xcodebuild -workspace "$XCODE_DIR/App.xcworkspace" -scheme App -destination 'generic/platform=iOS' -configuration Release \
-            DEVELOPMENT_TEAM="$APPLE_TEAM_ID" CODE_SIGN_STYLE=Manual archive -archivePath "$RUNNER_TEMP/Drishti.xcarchive"
+          xcodebuild \
+            -workspace "$XCODE_DIR/App.xcworkspace" \
+            -scheme App \
+            -destination 'generic/platform=iOS' \
+            -configuration Release \
+            -archivePath "$RUNNER_TEMP/Drishti.xcarchive" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$RUNNER_TEMP/AuthKey.p8" \
+            -authenticationKeyID "$APPSTORE_API_KEY_ID" \
+            -authenticationKeyIssuerID "$APPSTORE_API_ISSUER_ID" \
+            DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
+            CODE_SIGN_STYLE=Automatic \
+            CURRENT_PROJECT_VERSION="${{ github.run_number }}" \
+            IPHONEOS_DEPLOYMENT_TARGET=15.0 \
+            archive
+      - name: Export the ipa
+        if: steps.gate.outputs.ready == 'true'
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPSTORE_API_KEY_ID: ${{ secrets.APPSTORE_API_KEY_ID }}
+          APPSTORE_API_ISSUER_ID: ${{ secrets.APPSTORE_API_ISSUER_ID }}
+        run: |
+          python3 - << 'PY'
+          import os
+          import plistlib
+          from pathlib import Path
+          path = Path(os.environ["RUNNER_TEMP"]) / "ExportOptions.plist"
+          path.write_bytes(plistlib.dumps({
+              "method": "app-store-connect",
+              "signingStyle": "automatic",
+              "teamID": os.environ["APPLE_TEAM_ID"],
+          }))
+          PY
+          xcodebuild -exportArchive \
+            -archivePath "$RUNNER_TEMP/Drishti.xcarchive" \
+            -exportPath "$RUNNER_TEMP/export" \
+            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$RUNNER_TEMP/AuthKey.p8" \
+            -authenticationKeyID "$APPSTORE_API_KEY_ID" \
+            -authenticationKeyIssuerID "$APPSTORE_API_ISSUER_ID"
+      - name: Upload to TestFlight
+        if: steps.gate.outputs.ready == 'true'
+        env:
+          APPSTORE_API_KEY_ID: ${{ secrets.APPSTORE_API_KEY_ID }}
+          APPSTORE_API_ISSUER_ID: ${{ secrets.APPSTORE_API_ISSUER_ID }}
+        run: |
+          IPA="$(find "$RUNNER_TEMP/export" -name '*.ipa' -print -quit)"
+          test -n "$IPA"
+          xcrun altool --upload-app --type ios --file "$IPA" \
+            --apiKey "$APPSTORE_API_KEY_ID" \
+            --apiIssuer "$APPSTORE_API_ISSUER_ID"

@@ -3,7 +3,7 @@
   "appName": "Drishti",
   "webDir": "../web",
   "server": {
-    "url": "https://dristi-six.vercel.app",
+    "url": "https://drishti-ios.vercel.app",
     "cleartext": false,
     "androidScheme": "https"
   },
