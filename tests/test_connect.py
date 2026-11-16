@@ -638,6 +638,112 @@ if (adminPill('removed') !== 'tag bad') process.exit(15);
     assert ran.returncode == 0, ran.stderr or ran.stdout
 
 
+def test_stripe_failures_are_502_and_do_not_save_a_missing_account(client, monkeypatch, caplog):
+    astro_id, token = seed(client)
+    monkeypatch.setenv("STRIPE_SECRET_KEY", "sk_test_SECRETKEY")
+    monkeypatch.setenv("APP_PUBLIC_URL", "https://drishti-ios.vercel.app")
+    headers = auth(token)
+
+    class Res:
+        status_code = 400
+
+        def json(self):
+            return {"error": {
+                "type": "invalid_request_error",
+                "message": "You can only create new accounts if you've signed up for Connect sk_test_SECRETKEY",
+            }}
+
+    def post(url, data=None, auth=None, headers=None, timeout=None):
+        assert auth == ("sk_test_SECRETKEY", "")
+        return Res()
+
+    monkeypatch.setattr(connect_stripe.httpx, "post", post)
+    with caplog.at_level("WARNING", logger="drishti.stripe"):
+        with pytest.raises(connect_stripe.StripeError) as caught:
+            connect_stripe.create_express_account("sk_test_SECRETKEY", "meera@example.com", "acct-1")
+    assert connect_stripe.payout_code(caught.value) == "connect_not_enabled"
+    assert "signed up for Connect" in caplog.text
+    assert "sk_test_SECRETKEY" not in caplog.text
+    assert connect_stripe.payout_code(connect_stripe.StripeError(
+        "stripe_rejected", message="The Connect platform is not enabled")) == "connect_not_enabled"
+    assert connect_stripe.payout_code(connect_stripe.StripeError(
+        "stripe_rejected", stripe_code="rate_limit", message="Too many requests")) == "payout_setup_failed"
+
+    def refuse_account(secret, email, key):
+        raise connect_stripe.StripeError(
+            "stripe_rejected", message="You can only create new accounts if you've signed up for Connect")
+
+    monkeypatch.setattr(connect_stripe, "create_express_account", refuse_account)
+    refused = client.post("/api/connect/astro/stripe", headers=headers)
+    assert refused.status_code == 502 and refused.json()["detail"] == "connect_not_enabled"
+    assert store.astrologer_private(astro_id)["stripe_account"] == ""
+
+    def other_failure(secret, email, key):
+        raise connect_stripe.StripeError("stripe_rejected", stripe_code="rate_limit", message="Too many requests")
+
+    monkeypatch.setattr(connect_stripe, "create_express_account", other_failure)
+    generic = client.post("/api/connect/astro/stripe", headers=headers)
+    assert generic.status_code == 502 and generic.json()["detail"] == "payout_setup_failed"
+    assert store.astrologer_private(astro_id)["stripe_account"] == ""
+
+    def created(secret, email, key):
+        return {"id": "acct_ok"}
+
+    def link_fails(secret, account, refresh, back):
+        raise connect_stripe.StripeError("stripe_rejected", message="link failed")
+
+    monkeypatch.setattr(connect_stripe, "create_express_account", created)
+    monkeypatch.setattr(connect_stripe, "create_account_link", link_fails)
+    linked = client.post("/api/connect/astro/stripe", headers=headers)
+    assert linked.status_code == 502 and linked.json()["detail"] == "payout_setup_failed"
+    assert store.astrologer_private(astro_id)["stripe_account"] == "acct_ok"
+
+    def linked_ok(secret, account, refresh, back):
+        assert account == "acct_ok"
+        return {"url": "https://connect.stripe.com/setup/ok"}
+
+    monkeypatch.setattr(connect_stripe, "create_account_link", linked_ok)
+    ready = client.post("/api/connect/astro/stripe", headers=headers)
+    assert ready.status_code == 200 and ready.json()["url"] == "https://connect.stripe.com/setup/ok"
+
+    def bad_intent(secret, cents, metadata, key):
+        raise connect_stripe.StripeError("stripe_rejected", message="card error")
+
+    monkeypatch.setattr(connect_stripe, "create_payment_intent", bad_intent)
+    intent = client.post("/api/connect/wallet/intent", json={"device": "phone", "product_id": "wallet_5", "idempotency_key": "once"})
+    assert intent.status_code == 502 and intent.json()["detail"] == "stripe_rejected"
+
+    def bad_retrieve(secret, intent_id):
+        raise connect_stripe.StripeError("stripe_unavailable")
+
+    monkeypatch.setattr(connect_stripe, "retrieve_payment_intent", bad_retrieve)
+    confirm = client.post("/api/connect/wallet/confirm", json={"device": "phone", "payment_intent": "pi_missing"})
+    assert confirm.status_code == 502 and confirm.json()["detail"] == "stripe_unavailable"
+
+    monkeypatch.setenv("STRIPE_PRICE_PROVIDER_MONTHLY", "price_month")
+
+    def bad_customer(secret, email, astro):
+        raise connect_stripe.StripeError("stripe_rejected", message="customer failed")
+
+    monkeypatch.setattr(connect_stripe, "create_customer", bad_customer)
+    plan = client.post("/api/connect/astro/plan", headers=headers, json={"interval": "month"})
+    assert plan.status_code == 502 and plan.json()["detail"] == "stripe_rejected"
+    assert store.astrologer_private(astro_id)["stripe_customer"] == ""
+
+    store.set_stripe_customer(astro_id, "cus_saved")
+
+    def bad_portal(secret, customer, return_url):
+        raise connect_stripe.StripeError("stripe_rejected", message="portal failed")
+
+    monkeypatch.setattr(connect_stripe, "create_portal", bad_portal)
+    portal = client.post("/api/connect/astro/portal", headers=headers)
+    assert portal.status_code == 502 and portal.json()["detail"] == "stripe_rejected"
+    connect = open(os.path.join(os.path.dirname(__file__), "..", "web", "connect.js"), encoding="utf-8").read()
+    assert "connect_not_enabled" in connect and "payout_setup_failed" in connect
+    assert "Payouts are not switched on yet. Please try again later." in connect
+    assert "भुगतान अभी चालू नहीं हैं। बाद में फिर कोशिश करें।" in connect
+
+
 def test_stripe_signature_helper_rejects_a_stale_event():
     payload = b"{}"
     stamp = str(int(time.time()) - 1000)

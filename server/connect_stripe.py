@@ -4,15 +4,51 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import logging
+import re
 import time
 
 import httpx
 
+log = logging.getLogger("drishti.stripe")
+_SECRET = re.compile(r"\b(?:sk|rk)_(?:live|test)_[A-Za-z0-9]+|whsec_[A-Za-z0-9]+")
+
 
 class StripeError(Exception):
-    def __init__(self, code: str):
+    def __init__(self, code: str, stripe_code: str = "", message: str = "", status: int = 0):
         super().__init__(code)
         self.code = code
+        self.stripe_code = stripe_code or ""
+        self.stripe_message = message or ""
+        self.status = int(status or 0)
+
+
+def _safe(text: str) -> str:
+    return _SECRET.sub("[redacted]", str(text or ""))[:400]
+
+
+def payout_code(err: StripeError) -> str:
+    blob = f"{getattr(err, 'stripe_message', '')} {getattr(err, 'stripe_code', '')}".lower()
+    if "signed up for connect" in blob:
+        return "connect_not_enabled"
+    if "not enabled" in blob and ("platform" in blob or "connect" in blob):
+        return "connect_not_enabled"
+    return "payout_setup_failed"
+
+
+def _reject(res) -> None:
+    stripe_code = ""
+    message = ""
+    try:
+        body = res.json()
+    except (ValueError, TypeError):
+        body = None
+    err = body.get("error") if isinstance(body, dict) else None
+    if isinstance(err, dict):
+        stripe_code = _safe(err.get("code") or err.get("type") or "")[:80]
+        message = _safe(err.get("message") or "")
+    log.warning("stripe error status=%s code=%s message=%s", getattr(res, "status_code", 0), stripe_code, message)
+    raise StripeError("stripe_rejected", stripe_code=stripe_code, message=message, status=getattr(res, "status_code", 0) or 0)
 
 
 def verify_event(payload: bytes, header: str, secret: str, now: int | None = None, tolerance: int = 300) -> dict:
@@ -45,9 +81,10 @@ def _form(secret: str, path: str, data: dict, idempotency_key: str | None = None
             timeout=20,
         )
     except httpx.HTTPError as e:
+        log.warning("stripe unreachable error=%s", type(e).__name__)
         raise StripeError("stripe_unavailable") from e
     if res.status_code >= 400:
-        raise StripeError("stripe_rejected")
+        _reject(res)
     return res.json()
 
 
@@ -62,9 +99,10 @@ def retrieve_payment_intent(secret: str, intent_id: str) -> dict:
             timeout=20,
         )
     except httpx.HTTPError as e:
+        log.warning("stripe unreachable error=%s", type(e).__name__)
         raise StripeError("stripe_unavailable") from e
     if res.status_code >= 400:
-        raise StripeError("stripe_rejected")
+        _reject(res)
     return res.json()
 
 

@@ -98,6 +98,11 @@ def _run(fn):
         raise HTTPException(e.status, detail) from e
 
 
+def _stripe_error(err: connect_stripe.StripeError, *, payout: bool = False) -> HTTPException:
+    code = connect_stripe.payout_code(err) if payout else (err.code or "stripe_rejected")
+    return HTTPException(502, code)
+
+
 class ApplyIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
     email: str
@@ -270,10 +275,18 @@ def api_stripe_onboard(request: Request):
     info = _run(lambda: store.astrologer_private(astro_id))
     account = info["stripe_account"]
     if not account:
-        created = connect_stripe.create_express_account(secret, info["email"], "acct-" + astro_id)
-        account = created["id"]
+        try:
+            created = connect_stripe.create_express_account(secret, info["email"], "acct-" + astro_id)
+        except connect_stripe.StripeError as e:
+            raise _stripe_error(e, payout=True) from e
+        account = str((created or {}).get("id") or "")
+        if not account:
+            raise HTTPException(502, "payout_setup_failed")
         store.set_stripe_account(astro_id, account)
-    link = connect_stripe.create_account_link(secret, account, public + "/#astro", public + "/#astro")
+    try:
+        link = connect_stripe.create_account_link(secret, account, public + "/#astro", public + "/#astro")
+    except connect_stripe.StripeError as e:
+        raise _stripe_error(e, payout=True) from e
     return {"url": link.get("url") or ""}
 
 
@@ -301,11 +314,14 @@ def api_intent(body: IntentIn):
     if not secret:
         raise HTTPException(503, "stripe_not_configured")
     nonce = (body.idempotency_key or "").strip()[:80] or secrets.token_hex(8)
-    intent = connect_stripe.create_payment_intent(secret, cents, {
-        "device": body.device,
-        "product_id": body.product_id,
-        "purpose": "wallet",
-    }, "pi-" + nonce)
+    try:
+        intent = connect_stripe.create_payment_intent(secret, cents, {
+            "device": body.device,
+            "product_id": body.product_id,
+            "purpose": "wallet",
+        }, "pi-" + nonce)
+    except connect_stripe.StripeError as e:
+        raise _stripe_error(e) from e
     public = (os.environ.get("APP_PUBLIC_URL") or "").strip().rstrip("/")
     return {
         "id": intent.get("id") or "",
@@ -567,11 +583,19 @@ def api_plan(body: PlanIn, request: Request):
     info = _run(lambda: store.astrologer_private(astro_id))
     customer = info["stripe_customer"]
     if not customer:
-        created = connect_stripe.create_customer(secret, info["email"], astro_id)
-        customer = created.get("id") or ""
+        try:
+            created = connect_stripe.create_customer(secret, info["email"], astro_id)
+        except connect_stripe.StripeError as e:
+            raise _stripe_error(e) from e
+        customer = str((created or {}).get("id") or "")
+        if not customer:
+            raise HTTPException(502, "stripe_rejected")
         store.set_stripe_customer(astro_id, customer)
     trial = 0 if info["trial_used"] else __import__("connect_money").trial_days()
-    session = connect_stripe.create_checkout(secret, price, customer, public + "/#astro", public + "/#astro", astro_id, trial)
+    try:
+        session = connect_stripe.create_checkout(secret, price, customer, public + "/#astro", public + "/#astro", astro_id, trial)
+    except connect_stripe.StripeError as e:
+        raise _stripe_error(e) from e
     return {"url": session.get("url") or ""}
 
 
@@ -586,7 +610,10 @@ def api_portal(request: Request):
         raise HTTPException(409, "no_billing_account")
     if not secret or not public:
         raise HTTPException(503, "stripe_not_configured")
-    session = connect_stripe.create_portal(secret, info["stripe_customer"], public + "/#astro")
+    try:
+        session = connect_stripe.create_portal(secret, info["stripe_customer"], public + "/#astro")
+    except connect_stripe.StripeError as e:
+        raise _stripe_error(e) from e
     return {"url": session.get("url") or ""}
 
 
@@ -604,7 +631,10 @@ def api_cron(request: Request):
         return {"ok": True, "skipped": "stripe_not_configured"}
     sent = []
     for row in store.payout_candidates():
-        transfer = connect_stripe.create_transfer(stripe_key, row["amount_cents"], row["stripe_account"], "transfer-" + row["astrologer_id"])
+        try:
+            transfer = connect_stripe.create_transfer(stripe_key, row["amount_cents"], row["stripe_account"], "transfer-" + row["astrologer_id"])
+        except connect_stripe.StripeError:
+            continue
         marked = store.mark_payout(row["astrologer_id"], row["amount_cents"], transfer.get("id") or "")
         sent.append(marked)
     return {"ok": True, "payouts": sent}

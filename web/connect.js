@@ -97,6 +97,8 @@
   const PORTAL_ERRORS = {
     not_approved: ['Your application is waiting for approval. You can go online once it\'s approved.', 'आपका आवेदन स्वीकृति की प्रतीक्षा में है। स्वीकृति के बाद आप ऑनलाइन हो सकते हैं।'],
     stripe_not_configured: ['Payments are not set up on the server yet.', 'सर्वर पर भुगतान अभी सेट नहीं है।'],
+    connect_not_enabled: ['Payouts are not switched on yet. Please try again later.', 'भुगतान अभी चालू नहीं हैं। बाद में फिर कोशिश करें।'],
+    payout_setup_failed: ['Payout setup could not be completed. Please try again later.', 'भुगतान सेटअप पूरा नहीं हो सका। बाद में फिर कोशिश करें।'],
     no_billing_account: ['Choose a monthly or yearly plan to continue after the free trial.', 'निःशुल्क परीक्षण के बाद जारी रखने के लिए मासिक या वार्षिक योजना चुनें।'],
     trial_unavailable: ['The free trial is not available.', 'निःशुल्क परीक्षण उपलब्ध नहीं है।'],
     unauthorized: ['That sign-in was not accepted.', 'यह साइन-इन स्वीकार नहीं हुआ।'],
