@@ -24,6 +24,7 @@
     }
     if (detail && typeof detail === 'object') {
       if (typeof detail.message === 'string' && detail.message) return detail.message;
+      if (typeof detail.error === 'string' && detail.error) return detail.error;
       try { return JSON.stringify(detail); } catch (e) { return ''; }
     }
     return detail == null ? '' : String(detail);
@@ -38,8 +39,10 @@
     }).then(async r => {
       const data = await r.json().catch(() => ({}));
       if (!r.ok) {
-        const text = data && detailText(data.detail);
+        const raw = data && data.detail;
+        const text = detailText(raw);
         const err = new Error(text || ('HTTP ' + r.status));
+        err.code = typeof raw === 'string' ? raw : (raw && typeof raw === 'object' && !Array.isArray(raw) && typeof raw.error === 'string' ? raw.error : '');
         err.status = r.status;
         err.body = data;
         throw err;
@@ -82,10 +85,29 @@
     $('#connectGo').onclick = () => list().catch(showErr);
     $('#connectLater').onclick = () => closeSheet();
   }
+  const PORTAL_ERRORS = {
+    not_approved: ['Your application is waiting for approval. You can go online once it\'s approved.', 'आपका आवेदन स्वीकृति की प्रतीक्षा में है। स्वीकृति के बाद आप ऑनलाइन हो सकते हैं।'],
+    stripe_not_configured: ['Payments are not set up on the server yet.', 'सर्वर पर भुगतान अभी सेट नहीं है।'],
+    no_billing_account: ['Choose a monthly or yearly plan to continue after the free trial.', 'निःशुल्क परीक्षण के बाद जारी रखने के लिए मासिक या वार्षिक योजना चुनें।'],
+    trial_unavailable: ['The free trial is not available.', 'निःशुल्क परीक्षण उपलब्ध नहीं है।'],
+    unauthorized: ['That sign-in was not accepted.', 'यह साइन-इन स्वीकार नहीं हुआ।'],
+    invalid_rate: ['Enter a per-minute rate between $0.30 and $5.00.', 'प्रति मिनट दर $0.30 से $5.00 के बीच डालें।'],
+    bad_rate: ['Enter a per-minute rate between $0.30 and $5.00.', 'प्रति मिनट दर $0.30 से $5.00 के बीच डालें।'],
+  };
+  function friendly(code) {
+    const row = PORTAL_ERRORS[code];
+    return row ? tr(row[0], row[1]) : '';
+  }
   function showErr(e) {
-    let msg = e && typeof e.message === 'string' ? e.message : '';
-    if (!msg || msg === '[object Object]') msg = e && e.body ? detailText(e.body.detail) : detailText(e && e.message);
-    if (!msg) msg = tr('Something went wrong', 'कुछ गड़बड़ हुई');
+    const code = (e && e.code) || '';
+    let msg = friendly(code);
+    if (!msg) {
+      msg = e && typeof e.message === 'string' ? e.message : '';
+      if (!msg || msg === '[object Object]') msg = e && e.body ? detailText(e.body.detail) : detailText(e && e.message);
+      msg = friendly(msg) || msg;
+      if (msg && /^[a-z][a-z0-9_]*$/.test(msg)) msg = '';
+    }
+    if (!msg) msg = tr('Something went wrong. Please try again.', 'कुछ गड़बड़ हुई। फिर कोशिश करें।');
     if (window.toast) toast(String(msg).slice(0, 180));
   }
   async function list() {
@@ -342,6 +364,39 @@
     const high = (S.status && S.status.rate_max_cents) || 500;
     return {days, month, year, low, high};
   }
+  function startPaidPlan(token, interval) {
+    return api('/api/connect/astro/plan', {interval: interval}, token).then(d => { if (d.url) location.href = d.url; });
+  }
+  function bindPaidButtons(token, monthId, yearId) {
+    const month = $(monthId || '#planMonth');
+    const year = $(yearId || '#planYear');
+    if (month) month.onclick = () => startPaidPlan(token, 'month').catch(showErr);
+    if (year) year.onclick = () => startPaidPlan(token, 'year').catch(showErr);
+  }
+  function trialNote(money) {
+    const until = money && money.renews_at ? String(money.renews_at).slice(0, 10) : '';
+    if (!until) return tr('Choose a plan to keep your listing after the free trial ends.', 'निःशुल्क परीक्षण के बाद सूची बनाए रखने के लिए एक योजना चुनें।');
+    return tr(
+      'You\'re on the free trial until ' + until + '. Choose a plan to keep your listing after it ends.',
+      'आप ' + until + ' तक निःशुल्क परीक्षण पर हैं। समाप्त होने के बाद सूची बनाए रखने के लिए एक योजना चुनें।'
+    );
+  }
+  function paidPlanHtml(money) {
+    const plans = planCards();
+    return `<div class="card" id="paidPlans"><h3>${tr('Choose a plan', 'योजना चुनें')}</h3>
+      <p class="sub">${esc(trialNote(money))}</p>
+      <button type="button" class="btn block" id="paidMonth">${tr('Monthly', 'मासिक')} ${esc(plans.month)}</button>
+      <button type="button" class="btn block" id="paidYear">${tr('Yearly', 'वार्षिक')} ${esc(plans.year)}</button>
+      <p class="sub">${tr('A card is needed only for the paid plan. It starts when the free trial ends.', 'कार्ड केवल सशुल्क योजना के लिए चाहिए। यह निःशुल्क परीक्षण समाप्त होने पर शुरू होती है।')}</p></div>`;
+  }
+  function revealPaidPlans(money, token) {
+    if ($('#paidPlans')) return;
+    const earn = $('#earnings');
+    const html = paidPlanHtml(money);
+    if (earn) earn.insertAdjacentHTML('beforebegin', html);
+    else $('#portalBody').insertAdjacentHTML('beforeend', html);
+    bindPaidButtons(token, '#paidMonth', '#paidYear');
+  }
   function registerForm() {
     const p = planCards();
     return `<form class="card" id="astroRegister"><h3>${tr('Register as a live astrologer', 'लाइव ज्योतिषी बनें')}</h3>
@@ -413,9 +468,10 @@
       <button type="button" class="btn" data-accept="${esc(s.id)}">${tr('Accept', 'स्वीकार')}</button></div>`).join('');
     body.innerHTML = `${needsPlan ? `<div class="card" id="planPicker"><h3>${tr('Choose a plan', 'योजना चुनें')}</h3>
       <button type="button" class="btn block" id="planTrial">${plans.days} ${tr('day free trial', 'दिन का निःशुल्क परीक्षण')}</button>
+      <p class="sub">${plans.days} ${tr('days free. No card.', 'दिन मुफ़्त। कार्ड नहीं।')}</p>
       <button type="button" class="btn block" id="planMonth">${tr('Monthly', 'मासिक')} ${esc(plans.month)}</button>
       <button type="button" class="btn block" id="planYear">${tr('Yearly', 'वार्षिक')} ${esc(plans.year)}</button>
-      <p class="sub">${tr('No lifetime plan. After the trial, the plan renews until you cancel.', 'कोई आजीवन योजना नहीं। परीक्षण के बाद योजना रद्द करने तक नवीनीकृत होती है।')}</p></div>` : ''}
+      <p class="sub">${tr('Monthly or yearly starts after the free trial ends. No lifetime plan.', 'मासिक या वार्षिक योजना निःशुल्क परीक्षण के बाद शुरू होती है। कोई आजीवन योजना नहीं।')}</p></div>` : ''}
       <div class="card"><label class="spread">${tr('Online', 'ऑनलाइन')}<input type="checkbox" id="astroOnline"></label>
       <p class="sub">${tr('You keep 95%. Drishti keeps 5% of each session.', 'आप 95% रखते हैं। दृष्टि हर सत्र का 5% रखती है।')}</p>
       <p class="sub">${tr('Plan', 'योजना')}: ${esc(money.plan_status || 'none')}${money.renews_at ? ' · ' + esc(String(money.renews_at).slice(0, 10)) : ''}</p></div>
@@ -428,14 +484,17 @@
         <button type="button" class="btn quiet" id="astroStripe">${tr('Set up payouts', 'भुगतान सेट करें')}</button></div>`;
     const trial = $('#planTrial');
     if (trial) trial.onclick = () => api('/api/connect/astro/trial', {}, token).then(() => render()).catch(showErr);
-    const month = $('#planMonth');
-    if (month) month.onclick = () => api('/api/connect/astro/plan', {interval: 'month'}, token).then(d => { if (d.url) location.href = d.url; }).catch(showErr);
-    const year = $('#planYear');
-    if (year) year.onclick = () => api('/api/connect/astro/plan', {interval: 'year'}, token).then(d => { if (d.url) location.href = d.url; }).catch(showErr);
+    bindPaidButtons(token);
     $('#astroOnline').onchange = e => api('/api/connect/astro/online', {online: e.target.checked}, token).catch(showErr);
     document.querySelectorAll('[data-accept]').forEach(b => b.onclick = () => api('/api/connect/sessions/' + b.dataset.accept + '/accept', {}, token).then(() => render()).catch(showErr));
     $('#astroStripe').onclick = () => api('/api/connect/astro/stripe', {}, token).then(d => { if (d.url) location.href = d.url; }).catch(showErr);
-    $('#managePlan').onclick = () => api('/api/connect/astro/portal', {}, token).then(d => { if (d.url) location.href = d.url; }).catch(showErr);
+    $('#managePlan').onclick = () => {
+      if (!money.has_billing_account) { revealPaidPlans(money, token); return; }
+      api('/api/connect/astro/portal', {}, token).then(d => { if (d.url) location.href = d.url; }).catch(err => {
+        if (err && err.code === 'no_billing_account') { revealPaidPlans(money, token); return; }
+        showErr(err);
+      });
+    };
   }
   function readPhoto(input) {
     const file = input && input.files && input.files[0];

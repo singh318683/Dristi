@@ -317,6 +317,29 @@ def test_rate_bounds_and_subscription_gate(client, monkeypatch):
     assert client.post("/api/connect/wallet/apple", json={"device": "phone", "product_id": "wallet_5", "transaction_id": "t"}).status_code == 400
 
 
+def test_free_trial_has_no_billing_account(client):
+    created = client.post("/api/connect/apply", json={
+        "email": "trial@example.com", "password": "correct-horse", "name": "Trial Ji",
+        "specialties": ["career"], "languages": ["Hindi"], "years": 5, "bio": "A trial.", "rate_cents": 100,
+    })
+    assert created.status_code == 200
+    login = client.post("/api/connect/astro/login", json={"email": "trial@example.com", "password": "correct-horse"}).json()
+    headers = auth(login["token"])
+    assert client.post("/api/connect/astro/trial", headers=headers).status_code == 200
+    earned = client.get("/api/connect/astro/earnings", headers=headers).json()
+    assert earned["plan_status"] == "trialing"
+    assert earned["has_billing_account"] is False
+    assert earned["renews_at"]
+    portal = client.post("/api/connect/astro/portal", headers=headers)
+    assert portal.status_code == 409 and portal.json()["detail"] == "no_billing_account"
+    store.set_stripe_customer(created.json()["id"], "cus_trial")
+    missing = client.post("/api/connect/astro/portal", headers=headers)
+    assert missing.status_code == 503 and missing.json()["detail"] == "stripe_not_configured"
+    plan = open(os.path.join(os.path.dirname(__file__), "..", "server", "connect_api.py"), encoding="utf-8").read()
+    body = plan.split("def api_plan", 1)[1].split("def api_portal", 1)[0]
+    assert 'trial = 0 if info["trial_used"]' in body
+
+
 def test_stripe_signature_helper_rejects_a_stale_event():
     payload = b"{}"
     stamp = str(int(time.time()) - 1000)

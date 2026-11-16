@@ -519,7 +519,9 @@ def api_portal(request: Request):
     secret = (os.environ.get("STRIPE_SECRET_KEY") or "").strip()
     public = (os.environ.get("APP_PUBLIC_URL") or "").strip().rstrip("/")
     info = _run(lambda: store.astrologer_private(astro_id))
-    if not secret or not public or not info["stripe_customer"]:
+    if not info["stripe_customer"]:
+        raise HTTPException(409, "no_billing_account")
+    if not secret or not public:
         raise HTTPException(503, "stripe_not_configured")
     session = connect_stripe.create_portal(secret, info["stripe_customer"], public + "/#astro")
     return {"url": session.get("url") or ""}

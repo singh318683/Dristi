@@ -899,7 +899,7 @@ def earnings(astrologer_id: str) -> dict:
             "select id, amount_cents, status, created, stripe_transfer from ac_payout where astrologer_id=? order by created",
             (astrologer_id,)).fetchall()
         plan = con.execute(
-            "select plan_status, plan_interval, trial_ends, period_end, grace_until from ac_astrologer where id=?",
+            "select plan_status, plan_interval, trial_ends, period_end, grace_until, stripe_customer from ac_astrologer where id=?",
             (astrologer_id,)).fetchone()
     sessions = [{
         "id": r[0], "mode": r[1], "billed_cents": r[2] or 0, "ended_at": r[3],
@@ -926,6 +926,7 @@ def earnings(astrologer_id: str) -> dict:
         "plan_status": plan[0] if plan else "none",
         "plan_interval": plan[1] if plan else "",
         "renews_at": renews or "",
+        "has_billing_account": bool(plan and plan[5]),
         "payouts": [{"id": p[0], "amount_cents": p[1], "status": p[2], "created": p[3], "stripe_transfer": p[4]} for p in payouts],
     }
 
