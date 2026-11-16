@@ -86,6 +86,8 @@ main{padding:16px}
 .spread{display:flex;justify-content:space-between;align-items:center;gap:10px}
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:48px;border:0;border-radius:14px;padding:0 20px;font-weight:700;font-size:16px;background:var(--primary);color:var(--on-primary);text-decoration:none}
 .btn:active{transform:translateY(1px)}
+button:disabled,.btn:disabled{opacity:.45;cursor:not-allowed}
+button:disabled:active,.btn:disabled:active{transform:none}
 .btn.block{width:100%}
 .btn.sec2{background:var(--surface);color:var(--ink);border:1px solid var(--line-strong)}
 .btn.quiet{background:transparent;color:var(--primary);min-height:44px;padding:0 10px}
@@ -519,6 +521,9 @@ body.answer-open #rateCard{display:none}
 .connect-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--good);margin-right:5px;vertical-align:middle}
 .connect-actions{display:flex;gap:8px;margin-top:8px}
 .connect-actions .btn{flex:1;min-height:44px;padding:0 10px}
+.connect-packs{display:flex;gap:8px;margin:8px 0 4px}
+.connect-packs .btn.pack{flex:1;min-height:44px;padding:0 8px;background:var(--surface);color:var(--ink);border:1.5px solid var(--line-strong);border-radius:999px;font-weight:700}
+.connect-packs .btn.pack.suggest{border-color:var(--primary);color:var(--primary);background:var(--primary-tint)}
 .sheet-bg.connect-offer{bottom:calc(var(--nav-h) + env(safe-area-inset-bottom))}
 body.app-fit .sheet-bg.connect-offer{bottom:calc(56px + env(safe-area-inset-bottom))}
 .sheet-bg.connect-live{bottom:calc(var(--nav-h) + env(safe-area-inset-bottom));flex-direction:column;align-items:center;justify-content:flex-end;padding:calc(env(safe-area-inset-top) + 8px) 0 0}

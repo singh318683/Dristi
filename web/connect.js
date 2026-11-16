@@ -138,10 +138,25 @@
     } catch (e) { /* no chart yet */ }
     return '';
   }
+  function coverPack(needCents) {
+    const packs = [{id: 'wallet_5', cents: 500}, {id: 'wallet_10', cents: 1000}, {id: 'wallet_20', cents: 2000}];
+    const need = Math.max(0, Number(needCents) || 0);
+    const hit = packs.find(p => p.cents >= need);
+    return (hit || packs[packs.length - 1]).id;
+  }
+  function dollars(cents) {
+    return '$' + (Math.max(0, Number(cents) || 0) / 100).toFixed(2);
+  }
   async function checkout(id, mode) {
     const q = await api('/api/connect/quote', {device: DEVICE, astrologer_id: id});
     const title = mode === 'call' ? tr('Voice call', 'वॉइस कॉल') : tr('Chat', 'चैट');
     const short = q.balance_cents < q.hold_cents;
+    const need = Math.max(0, (q.hold_cents || 0) - (q.balance_cents || 0));
+    const suggested = coverPack(need);
+    const packBtn = (pid, label) => `<button type="button" class="btn pack${pid === suggested ? ' suggest' : ''}" data-pack="${pid}">${label}</button>`;
+    const startLabel = short
+      ? tr('Add money to start', 'शुरू करने के लिए पैसे जोड़ें')
+      : (mode === 'call' ? tr('Start call', 'कॉल शुरू करें') : tr('Start chat', 'चैट शुरू करें'));
     sheet(`<div class="sheet connect" role="dialog" aria-modal="true" aria-labelledby="checkTitle">
       <button type="button" class="sheet-handle" aria-label="${tr('Drag down to close', 'बंद करने के लिए नीचे खींचें')}"><i></i></button>
       <h3 id="checkTitle">${esc(title)} · ${esc(q.name)}</h3>
@@ -149,16 +164,16 @@
       <p>${tr('A 5-minute hold', '5 मिनट की होल्ड')} · ${esc(q.hold_label)}. ${tr('Wallet balance', 'वॉलेट')} ${esc(q.balance_label)}.</p>
       <p class="sub">${tr('Your question and birth chart are shared with the astrologer. Billed per minute. End anytime. Unused hold returns to your wallet.', 'आपका प्रश्न और जन्म कुंडली ज्योतिषी के साथ साझा होती है। शुल्क प्रति मिनट। कभी भी समाप्त करें। बची होल्ड वॉलेट में लौटती है।')}</p>
       <p class="sub">${tr('Guidance for reflection, not medical, legal or financial advice.', 'यह चिंतन हेतु मार्गदर्शन है, चिकित्सा, कानूनी या वित्तीय सलाह नहीं।')}</p>
-      ${short ? `<div class="connect-actions">
-        <button type="button" class="btn quiet" data-pack="wallet_5">$5</button>
-        <button type="button" class="btn quiet" data-pack="wallet_10">$10</button>
-        <button type="button" class="btn quiet" data-pack="wallet_20">$20</button>
-      </div>` : ''}
-      <button type="button" class="btn block" id="connectStart" ${short ? 'disabled' : ''}>${mode === 'call' ? tr('Start call', 'कॉल शुरू करें') : tr('Start chat', 'चैट शुरू करें')}</button>
+      ${short ? `<div class="connect-packs">${packBtn('wallet_5', '$5')}${packBtn('wallet_10', '$10')}${packBtn('wallet_20', '$20')}</div>
+      <p class="sub" id="needMore">${tr('Add at least ' + dollars(need) + ' to start. Tap an amount above.', 'शुरू करने के लिए कम से कम ' + dollars(need) + ' जोड़ें। ऊपर कोई राशि चुनें।')}</p>` : ''}
+      <button type="button" class="btn block" id="connectStart">${startLabel}</button>
     </div>`);
     document.querySelectorAll('#sheet [data-pack]').forEach(b => b.onclick = () => topup(b.dataset.pack).then(() => checkout(id, mode)).catch(showErr));
     const start = $('#connectStart');
-    if (start) start.onclick = () => begin(id, mode).catch(showErr);
+    if (start) start.onclick = () => {
+      if (short) topup(suggested).then(() => checkout(id, mode)).catch(showErr);
+      else begin(id, mode).catch(showErr);
+    };
   }
   async function topup(product) {
     const key = S.status && S.status.stripe_publishable_key;

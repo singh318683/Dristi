@@ -141,7 +141,7 @@ def test_background_music_is_one_synthesized_drone():
     assert "drishtiUnlockAudio" in html
     assert ".mp3" not in html and ".ogg" not in html and ".m4a" not in html
     assert "Web Audio" in credits and "no third-party music license" in credits
-    assert "drishti-v25" in open(os.path.join(root, "web", "sw.js"), encoding="utf-8").read()
+    assert "drishti-v26" in open(os.path.join(root, "web", "sw.js"), encoding="utf-8").read()
 
 
 def test_home_asks_for_the_device_date():
@@ -168,7 +168,7 @@ def test_home_periods_card_and_local_clock():
     assert "Good evening" in greet and "clock.getHours() < 5" in greet
     assert "function glanceTitle" in html and "function horoGlanceSentence" in html
     assert "glanceHoroLine" not in html
-    assert "drishti-v25" in open(os.path.join(os.path.dirname(__file__), "..", "web", "sw.js"), encoding="utf-8").read()
+    assert "drishti-v26" in open(os.path.join(os.path.dirname(__file__), "..", "web", "sw.js"), encoding="utf-8").read()
 
 
 def test_profile_screen_drops_invite_and_sign_in():
@@ -229,7 +229,7 @@ def test_owned_play_question_is_sent_again_instead_of_bought():
     assert "buyPlayQuestion" in ask and "buyFreshPlayQuestion" in ask
     assert "payment_invalid" in ask and "keepPlayToken(purchaseToken)" in ask
     assert "response.complete('success')" in html
-    assert "drishti-v25" in open(os.path.join(root, "web", "sw.js"), encoding="utf-8").read()
+    assert "drishti-v26" in open(os.path.join(root, "web", "sw.js"), encoding="utf-8").read()
 
 
 def test_answer_opens_in_a_reading_sheet():
@@ -243,7 +243,7 @@ def test_answer_opens_in_a_reading_sheet():
     assert "openAnswerSheet(aiEl, true)" in ask
     assert "openAnswerSheet(painted, true)" in ask
     assert "id=\"askSend\"" in html and "priceLabel()" in html
-    assert "drishti-v25" in open(os.path.join(os.path.dirname(__file__), "..", "web", "sw.js"), encoding="utf-8").read()
+    assert "drishti-v26" in open(os.path.join(os.path.dirname(__file__), "..", "web", "sw.js"), encoding="utf-8").read()
 
 
 def test_rate_prompt_is_quiet_and_remembers_a_dismissal():
@@ -263,7 +263,7 @@ def test_rate_prompt_is_quiet_and_remembers_a_dismissal():
     assert "closeSheet({skipRate: true})" in ask
     closed = html.split("function closeSheet", 1)[1].split("function bindSheetSwipe", 1)[0]
     assert "answer-read" in closed and "v.read = true" in closed
-    assert "drishti-v25" in open(os.path.join(os.path.dirname(__file__), "..", "web", "sw.js"), encoding="utf-8").read()
+    assert "drishti-v26" in open(os.path.join(os.path.dirname(__file__), "..", "web", "sw.js"), encoding="utf-8").read()
     assert "Rate on the App Store" in rate and "App Store पर रेट करें" in rate
     assert "apps.apple.com" in rate and "if (inIosApp())" in rate
 
@@ -396,6 +396,33 @@ if (isFinite(dollars('')) || isFinite(dollars('abc'))) process.exit(7);
     assert ran.returncode == 0, ran.stderr or ran.stdout
 
 
+def test_short_wallet_points_at_a_pack_and_disabled_buttons_look_disabled():
+    root = os.path.join(os.path.dirname(__file__), "..")
+    html = open(os.path.join(root, "web", "index.html"), encoding="utf-8").read()
+    connect = open(os.path.join(root, "web", "connect.js"), encoding="utf-8").read()
+    assert "button:disabled,.btn:disabled{opacity:.45;cursor:not-allowed}" in html
+    assert "connect-packs" in html and ".btn.pack" in html and ".btn.pack.suggest" in html
+    assert "Add money to start" in connect and "शुरू करने के लिए पैसे जोड़ें" in connect
+    assert "Tap an amount above." in connect and "ऊपर कोई राशि चुनें।" in connect
+    assert "function coverPack" in connect
+    assert 'id="connectStart" ${short ? \'disabled\' : \'\'}' not in connect
+    script = r"""
+const fs = require('fs');
+const src = fs.readFileSync(process.argv[1], 'utf8');
+const start = src.indexOf('function coverPack');
+const end = src.indexOf('function dollars');
+eval(src.slice(start, end));
+if (coverPack(150) !== 'wallet_5') process.exit(2);
+if (coverPack(500) !== 'wallet_5') process.exit(3);
+if (coverPack(501) !== 'wallet_10') process.exit(4);
+if (coverPack(1500) !== 'wallet_20') process.exit(5);
+if (coverPack(2500) !== 'wallet_20') process.exit(6);
+if (coverPack(0) !== 'wallet_5') process.exit(7);
+"""
+    ran = subprocess.run(["node", "-e", script, os.path.join(root, "web", "connect.js")], capture_output=True, text=True)
+    assert ran.returncode == 0, ran.stderr or ran.stdout
+
+
 def test_planet_detail_opens_in_a_sheet():
     root = os.path.join(os.path.dirname(__file__), "..")
     html = open(os.path.join(root, "web", "index.html"), encoding="utf-8").read()
@@ -406,7 +433,7 @@ def test_planet_detail_opens_in_a_sheet():
     assert "max-height:58px" not in html
     assert "body.app-fit .info .m{display:-webkit-box" not in html
     assert "if (o) openReading(o, src)" in html
-    assert "drishti-v25" in open(os.path.join(root, "web", "sw.js"), encoding="utf-8").read()
+    assert "drishti-v26" in open(os.path.join(root, "web", "sw.js"), encoding="utf-8").read()
 
 
 def test_panchang_and_pdf_endpoints(client):
