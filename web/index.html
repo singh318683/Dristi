@@ -294,6 +294,10 @@ html[lang=hi] .bub{line-height:1.7}
 .ask-dots button i{width:7px;height:7px;border-radius:50%;background:var(--line-strong);display:block}
 .ask-dots button[aria-current=true] i{background:var(--primary);width:8px;height:8px}
 .ask-note{margin:12px 0 0;text-align:center;color:var(--muted);font-size:13.5px}
+.live-entry{display:block;width:100%;min-height:44px;margin:0 0 10px;padding:8px 12px;border:1px solid var(--line);border-radius:14px;background:var(--surface);color:var(--ink);font-weight:650;font-size:14.5px;line-height:1.35;text-align:center}
+.ask-stage .live-entry{margin-bottom:12px}
+.connect-empty{padding:6px 0 12px}
+.connect-empty p{margin:0 0 6px}
 .ask-bar{display:flex;flex-direction:column;align-items:stretch;gap:8px;width:100%;min-width:0;max-width:100%}
 .ask-bar textarea{width:100%;max-width:100%;min-width:0;flex:none;resize:none;min-height:48px;border:1.5px solid var(--line-strong);border-radius:16px;padding:11px 14px;max-height:96px;background:var(--bg);font-size:16px;box-sizing:border-box}
 .ask-bar textarea:focus{outline:none;border-color:var(--primary)}
@@ -2706,6 +2710,19 @@ const ASK_EXAMPLES = () => [
 let askRotate = 0;
 let askIndex = 0;
 function stopAskRotate() { if (askRotate) { clearInterval(askRotate); askRotate = 0; } }
+function talkLiveHtml() {
+  if (!(S.status && S.status.astrologer_connect)) return '';
+  return `<button type="button" class="live-entry" id="talkLive">${tr('Talk to a live astrologer', 'लाइव ज्योतिषी से बात करें')}</button>`;
+}
+function bindTalkLive() {
+  const b = $('#talkLive');
+  if (!b || b.dataset.bound) return;
+  b.dataset.bound = '1';
+  b.onclick = () => {
+    if (!(window.DrishtiConnect && typeof DrishtiConnect.list === 'function')) return;
+    Promise.resolve(DrishtiConnect.list()).catch(e => { if (window.toast) toast(String((e && e.message) || '').slice(0, 180)); });
+  };
+}
 function askFormHtml(empty) {
   const price = `${tr('Ask', 'पूछें')} · ${priceLabel()}`;
   if (empty) return `<form id="cf" class="ask-card"><div class="ask-field"><textarea id="ci" rows="2" aria-label="${tr('Your question', 'आपका प्रश्न')}"></textarea><button type="button" class="ask-sample" id="askSample"></button></div><div class="ask-actions"><div class="ask-dots" id="askDots" role="tablist" aria-label="${tr('Example questions', 'उदाहरण प्रश्न')}"></div><button type="submit" class="btn" id="askSend">${price}</button></div></form>`;
@@ -2751,7 +2768,7 @@ function bindAskForm() {
   }
 }
 function threadComposerHtml() {
-  return `<div class="composer" id="composer">${askFormHtml(false)}<p class="ask-note" id="askNote">${tr('Charged only when the answer starts', 'शुल्क तभी, जब उत्तर शुरू हो')}</p><p class="ask-remedy" id="askRemedy">${tr('Remedies, if offered, are optional and free.', 'उपाय हों तो वैकल्पिक और मुफ़्त।')}</p></div>`;
+  return `<div class="composer" id="composer">${talkLiveHtml()}${askFormHtml(false)}<p class="ask-note" id="askNote">${tr('Charged only when the answer starts', 'शुल्क तभी, जब उत्तर शुरू हो')}</p><p class="ask-remedy" id="askRemedy">${tr('Remedies, if offered, are optional and free.', 'उपाय हों तो वैकल्पिक और मुफ़्त।')}</p></div>`;
 }
 function bindAskThread(box) {
   if (!box || box.dataset.bound) return;
@@ -2777,6 +2794,7 @@ function ensureAskThread() {
   if (chat && !$('#msgs')) chat.insertAdjacentHTML('beforeend', `<div class="msgs" id="msgs" aria-live="polite"></div>${threadComposerHtml()}`);
   bindAskForm();
   bindAskThread($('#msgs'));
+  bindTalkLive();
   return $('#msgs');
 }
 function pageAsk() {
@@ -2786,9 +2804,9 @@ function pageAsk() {
     <button class="asking" id="whoBtn" aria-haspopup="dialog">${tr('Reading the chart of', 'इनकी कुंडली पढ़ रहे हैं:')} <span class="avatar sm">${initial(p.name)}</span><b style="color:var(--ink)">${esc(p.name)}</b>${I.chev()}</button>`;
   const note = `<p class="ask-note" id="askNote">${tr('Charged only when the answer starts', 'शुल्क तभी, जब उत्तर शुरू हो')}</p>`;
   if (!hist.length) {
-    $('#app').innerHTML = `<div class="chat is-empty">${head}<div class="ask-stage" id="askStage"><div class="welcome ask-hero"><div class="ask-om" aria-hidden="true"><span class="dev">ॐ</span></div><h1>${tr(`Namaste, ${esc(p.name)}. What would you like to know?`, `नमस्ते, ${esc(p.name)}। आप क्या जानना चाहेंगे?`)}</h1></div>${askFormHtml(true)}${note}</div></div>`;
+    $('#app').innerHTML = `<div class="chat is-empty">${head}<div class="ask-stage" id="askStage"><div class="welcome ask-hero"><div class="ask-om" aria-hidden="true"><span class="dev">ॐ</span></div><h1>${tr(`Namaste, ${esc(p.name)}. What would you like to know?`, `नमस्ते, ${esc(p.name)}। आप क्या जानना चाहेंगे?`)}</h1></div>${talkLiveHtml()}${askFormHtml(true)}${note}</div></div>`;
   } else {
-    $('#app').innerHTML = `<div class="chat">${head}<div class="msgs" id="msgs" aria-live="polite"></div><div class="composer" id="composer">${askFormHtml(false)}${note}<p class="ask-remedy" id="askRemedy">${tr('Remedies, if offered, are optional and free.', 'उपाय हों तो वैकल्पिक और मुफ़्त।')}</p></div></div>`;
+    $('#app').innerHTML = `<div class="chat">${head}<div class="msgs" id="msgs" aria-live="polite"></div><div class="composer" id="composer">${talkLiveHtml()}${askFormHtml(false)}${note}<p class="ask-remedy" id="askRemedy">${tr('Remedies, if offered, are optional and free.', 'उपाय हों तो वैकल्पिक और मुफ़्त।')}</p></div></div>`;
     const box = $('#msgs');
     box.innerHTML = hist.map(bubble).join('');
     box.scrollTop = box.scrollHeight;
@@ -2796,6 +2814,7 @@ function pageAsk() {
   }
   bindHeader();
   bindAskForm();
+  bindTalkLive();
   bindGo();
   if (S.pendingDraft) {
     const q = S.pendingDraft; S.pendingDraft = null;
@@ -3167,9 +3186,10 @@ function pageMe() {
     <button class="card link" id="personRow"><div class="minirow"><span class="avatar lg">${initial(cur.name)}</span><span class="grow"><b>${esc(cur.name)}</b><span class="small muted" style="display:block">${esc(relName(cur.relation))} · ${fmtDate(cur.date)} · ${esc(cur.place.name.split(',')[0])}</span></span>${I.chev()}</div></button>
     <section class="card"><div class="spread"><div><b id="credN">${esc(price)}</b> <span class="muted">${tr('per Acharya question', 'प्रति आचार्य प्रश्न')}</span></div></div>
       <p class="small muted">${storeLine('Paid on Google Play, one question at a time. There is no free question and no credit pack. The chart, periods, dosha, panchang, matching, horoscope and kundli PDF stay free.', 'Google Play पर भुगतान, एक बार में एक प्रश्न। कोई मुफ़्त प्रश्न नहीं और कोई क्रेडिट पैक नहीं। कुंडली, दशा, दोष, पंचांग, मिलान, राशिफल और कुंडली PDF मुफ़्त हैं।', 'Paid on the App Store, one question at a time. There is no free question and no credit pack. The chart, periods, dosha, panchang, matching, horoscope and kundli PDF stay free.', 'App Store पर भुगतान, एक बार में एक प्रश्न। कोई मुफ़्त प्रश्न नहीं और कोई क्रेडिट पैक नहीं। कुंडली, दशा, दोष, पंचांग, मिलान, राशिफल और कुंडली PDF मुफ़्त हैं।')}</p></section>
+    ${(S.status && S.status.astrologer_connect) ? `<button type="button" class="card link" id="astroJoin"><div class="minirow"><span class="grow"><b>${tr('Are you an astrologer?', 'क्या आप ज्योतिषी हैं?')}</b><span class="small muted" style="display:block">${tr('Register as a live astrologer', 'लाइव ज्योतिषी बनें')}</span></span>${I.chev()}</div></button>` : ''}
     <section class="card" id="prefs"><div class="setrow"><span>${tr('Language', 'भाषा')}</span><div class="seg" id="setLang"><button data-v="en" aria-pressed="${!hi()}">EN</button><button data-v="hi" aria-pressed="${hi()}">हि</button></div></div>
       <div class="setrow"><span>${tr('Chart', 'कुंडली')}</span><div class="seg" id="setSty"><button data-v="north" aria-pressed="${S.style === 'north'}">${tr('North', 'उत्तर')}</button><button data-v="south" aria-pressed="${S.style === 'south'}">${tr('South', 'दक्षिण')}</button></div></div></section>
-    <div class="chips wrap">${(S.status && S.status.astrologer_connect) ? `<button class="chip" id="astroJoin">${tr('Register as a live astrologer', 'लाइव ज्योतिषी बनें')}</button>` : ''}<button class="chip" id="aboutBtn">${tr('About', 'जानकारी')}</button><button class="chip" id="clr">${tr('Clear chat', 'चैट मिटाएँ')}</button></div></main>`;
+    <div class="chips wrap"><button class="chip" id="aboutBtn">${tr('About', 'जानकारी')}</button><button class="chip" id="clr">${tr('Clear chat', 'चैट मिटाएँ')}</button></div></main>`;
   bindHeader();
   $('#personRow').onclick = openPeople;
   $$('#setLang button').forEach(b => b.onclick = () => { S.lang = b.dataset.v; store.set('lang', S.lang); render(); });

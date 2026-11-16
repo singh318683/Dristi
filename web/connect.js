@@ -85,7 +85,7 @@
     sheet(`<div class="sheet connect" role="dialog" aria-modal="true" aria-label="${tr('Astrologers', 'ज्योतिषी')}">
       <button type="button" class="sheet-handle" aria-label="${tr('Drag down to close', 'बंद करने के लिए नीचे खींचें')}"><i></i></button>
       <div class="spread"><h3>${tr('Astrologers', 'ज्योतिषी')}</h3><button type="button" class="iconbtn" data-x aria-label="${tr('Close', 'बंद करें')}">×</button></div>
-      ${rows || `<p class="sub">${tr('No astrologer is online right now.', 'अभी कोई ज्योतिषी ऑनलाइन नहीं है।')}</p>`}
+      ${rows || `<div class="connect-empty" id="connectEmpty"><p>${tr('No astrologer is online right now.', 'अभी कोई ज्योतिषी ऑनलाइन नहीं है।')}</p><p class="sub">${tr('Check back in a little while.', 'थोड़ी देर बाद फिर देखें।')}</p></div>`}
     </div>`);
     document.querySelectorAll('#sheet [data-mode]').forEach(b => b.onclick = () => checkout(b.dataset.id, b.dataset.mode).catch(showErr));
   }
@@ -308,8 +308,10 @@
   }
   function portalRoot(title) {
     const root = document.getElementById('root');
-    root.innerHTML = `<div class="portal"><div class="spread"><b>${esc(title)}</b><a href="./">${tr('App', 'ऐप')}</a></div><div id="portalBody"></div></div>`;
+    root.innerHTML = `<div class="portal"><div class="spread"><button type="button" class="btn quiet" id="portalBack">${tr('Back', 'वापस')}</button><b>${esc(title)}</b></div><div id="portalBody"></div></div>`;
     document.body.classList.remove('app-fit');
+    const back = $('#portalBack');
+    if (back) back.onclick = () => { if (location.hash) location.hash = ''; };
     return $('#portalBody');
   }
   function planCards() {

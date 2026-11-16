@@ -141,7 +141,7 @@ def test_background_music_is_one_synthesized_drone():
     assert "drishtiUnlockAudio" in html
     assert ".mp3" not in html and ".ogg" not in html and ".m4a" not in html
     assert "Web Audio" in credits and "no third-party music license" in credits
-    assert "drishti-v21" in open(os.path.join(root, "web", "sw.js"), encoding="utf-8").read()
+    assert "drishti-v22" in open(os.path.join(root, "web", "sw.js"), encoding="utf-8").read()
 
 
 def test_home_asks_for_the_device_date():
@@ -168,7 +168,7 @@ def test_home_periods_card_and_local_clock():
     assert "Good evening" in greet and "clock.getHours() < 5" in greet
     assert "function glanceTitle" in html and "function horoGlanceSentence" in html
     assert "glanceHoroLine" not in html
-    assert "drishti-v21" in open(os.path.join(os.path.dirname(__file__), "..", "web", "sw.js"), encoding="utf-8").read()
+    assert "drishti-v22" in open(os.path.join(os.path.dirname(__file__), "..", "web", "sw.js"), encoding="utf-8").read()
 
 
 def test_profile_screen_drops_invite_and_sign_in():
@@ -229,7 +229,7 @@ def test_owned_play_question_is_sent_again_instead_of_bought():
     assert "buyPlayQuestion" in ask and "buyFreshPlayQuestion" in ask
     assert "payment_invalid" in ask and "keepPlayToken(purchaseToken)" in ask
     assert "response.complete('success')" in html
-    assert "drishti-v21" in open(os.path.join(root, "web", "sw.js"), encoding="utf-8").read()
+    assert "drishti-v22" in open(os.path.join(root, "web", "sw.js"), encoding="utf-8").read()
 
 
 def test_answer_opens_in_a_reading_sheet():
@@ -243,7 +243,7 @@ def test_answer_opens_in_a_reading_sheet():
     assert "openAnswerSheet(aiEl, true)" in ask
     assert "openAnswerSheet(painted, true)" in ask
     assert "id=\"askSend\"" in html and "priceLabel()" in html
-    assert "drishti-v21" in open(os.path.join(os.path.dirname(__file__), "..", "web", "sw.js"), encoding="utf-8").read()
+    assert "drishti-v22" in open(os.path.join(os.path.dirname(__file__), "..", "web", "sw.js"), encoding="utf-8").read()
 
 
 def test_rate_prompt_is_quiet_and_remembers_a_dismissal():
@@ -263,7 +263,7 @@ def test_rate_prompt_is_quiet_and_remembers_a_dismissal():
     assert "closeSheet({skipRate: true})" in ask
     closed = html.split("function closeSheet", 1)[1].split("function bindSheetSwipe", 1)[0]
     assert "answer-read" in closed and "v.read = true" in closed
-    assert "drishti-v21" in open(os.path.join(os.path.dirname(__file__), "..", "web", "sw.js"), encoding="utf-8").read()
+    assert "drishti-v22" in open(os.path.join(os.path.dirname(__file__), "..", "web", "sw.js"), encoding="utf-8").read()
     assert "Rate on the App Store" in rate and "App Store पर रेट करें" in rate
     assert "apps.apple.com" in rate and "if (inIosApp())" in rate
 
@@ -332,6 +332,26 @@ if (say() !== 'on Google Play') process.exit(6);
     assert ran.returncode == 0, ran.stderr or ran.stdout
 
 
+def test_live_astrologer_entries_are_visible_when_the_flag_is_on():
+    root = os.path.join(os.path.dirname(__file__), "..")
+    html = open(os.path.join(root, "web", "index.html"), encoding="utf-8").read()
+    connect = open(os.path.join(root, "web", "connect.js"), encoding="utf-8").read()
+    me = html.split("function pageMe()", 1)[1].split("function peopleHtml", 1)[0]
+    ask = html.split("function pageAsk()", 1)[1].split("function updateQuota", 1)[0]
+    assert "Are you an astrologer?" in me and "क्या आप ज्योतिषी हैं?" in me
+    assert "Register as a live astrologer" in me and "लाइव ज्योतिषी बनें" in me
+    assert 'id="astroJoin"' in me and "location.hash = '#astro'" in me
+    assert "S.status.astrologer_connect" in me
+    assert "talkLiveHtml()" in ask
+    assert "Talk to a live astrologer" in html and "लाइव ज्योतिषी से बात करें" in html
+    assert 'id="talkLive"' in html and "DrishtiConnect.list" in html
+    assert "function talkLiveHtml" in html and "astrologer_connect" in html.split("function talkLiveHtml", 1)[1].split("function bindTalkLive", 1)[0]
+    assert 'id="portalBack"' in connect and "वापस" in connect
+    assert "No astrologer is online right now." in connect and "अभी कोई ज्योतिषी ऑनलाइन नहीं है।" in connect
+    assert "Check back in a little while." in connect and "थोड़ी देर बाद फिर देखें।" in connect
+    assert 'id="connectEmpty"' in connect
+
+
 def test_planet_detail_opens_in_a_sheet():
     root = os.path.join(os.path.dirname(__file__), "..")
     html = open(os.path.join(root, "web", "index.html"), encoding="utf-8").read()
@@ -342,7 +362,7 @@ def test_planet_detail_opens_in_a_sheet():
     assert "max-height:58px" not in html
     assert "body.app-fit .info .m{display:-webkit-box" not in html
     assert "if (o) openReading(o, src)" in html
-    assert "drishti-v21" in open(os.path.join(root, "web", "sw.js"), encoding="utf-8").read()
+    assert "drishti-v22" in open(os.path.join(root, "web", "sw.js"), encoding="utf-8").read()
 
 
 def test_panchang_and_pdf_endpoints(client):
