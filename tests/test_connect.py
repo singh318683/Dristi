@@ -505,6 +505,40 @@ def test_must_change_column_is_added_to_an_older_table(tmp_path, monkeypatch):
     assert "must_change" in cols
 
 
+def test_customer_sees_the_astrologer_reply_once(client):
+    astro_id, token = seed(client, rate=100)
+    fund("phone", "wallet_5", "pi_reply")
+    headers = auth(token)
+    started = client.post("/api/connect/sessions", json={
+        "device": "phone", "astrologer_id": astro_id, "mode": "chat", "question": "When is a good time?",
+        "profile": {"name": "Anuprita Khanna", "date": "1990-05-15", "place": {"name": "Delhi"}},
+        "idempotency_key": "reply-once",
+    }).json()
+    assert started["question"] == "When is a good time?"
+    accepted = client.post("/api/connect/sessions/" + started["id"] + "/accept", headers=headers).json()
+    assert accepted["question"] == "When is a good time?"
+    asked = client.post("/api/connect/sessions/" + started["id"] + "/messages", json={
+        "sender": "user", "body": "Is next spring better?", "device": "phone",
+    })
+    assert asked.status_code == 200
+    reply = client.post("/api/connect/sessions/" + started["id"] + "/messages", headers=headers, json={
+        "sender": "astrologer", "body": "Yes, after Jupiter moves.", "device": "",
+    })
+    assert reply.status_code == 200 and reply.json()["id"] > asked.json()["id"]
+    listed = client.get("/api/connect/sessions/" + started["id"] + "/messages", params={"device": "phone", "after": 0})
+    assert listed.headers["cache-control"] == "private, no-store"
+    messages = listed.json()["messages"]
+    assert [(m["sender"], m["body"]) for m in messages] == [
+        ("user", "Is next spring better?"),
+        ("astrologer", "Yes, after Jupiter moves."),
+    ]
+    assert sum(1 for m in messages if m["id"] == reply.json()["id"]) == 1
+    again = client.get("/api/connect/sessions/" + started["id"] + "/messages", params={"device": "phone", "after": 0}).json()["messages"]
+    assert [m["id"] for m in again] == [m["id"] for m in messages]
+    desk = client.get("/api/connect/astro/live", headers=headers).json()
+    assert desk["session"]["question"] == "When is a good time?"
+
+
 def test_chat_keeps_one_bubble_and_one_poll():
     root = os.path.join(os.path.dirname(__file__), "..")
     connect = open(os.path.join(root, "web", "connect.js"), encoding="utf-8").read()
@@ -517,6 +551,10 @@ def test_chat_keeps_one_bubble_and_one_poll():
     assert "className = 'bubble ' + (mine ? 'me' : 'them')" in connect
     assert "who.className = 'who'" in connect
     assert "addMsg({id: 0" not in connect
+    assert "function mergeThread" in connect and "after=0" in connect
+    assert "cache: 'no-store'" in connect
+    assert "sender=user" not in connect and "sender=astrologer" not in connect
+    assert "function questionForSession" in connect
     assert "DrishtiConnect.stop" in html
     assert ".connect-log .bubble.me{align-self:flex-end" in html
     assert ".connect-log .bubble.them{align-self:flex-start" in html
@@ -555,6 +593,22 @@ if (pending.length !== 0) process.exit(7);
 if (apply({id: 'tmp-2', sender: 'astrologer', body: 'Hi'}) !== 'append') process.exit(8);
 if (apply({id: '9', sender: 'user', body: 'Hi'}) !== 'append') process.exit(9);
 if (apply({id: '10', sender: 'astrologer', body: 'Hi'}) !== 'adopt') process.exit(10);
+const qStart = src.indexOf('function questionForSession');
+const qEnd = src.indexOf('function lastQuestion');
+eval(src.slice(qStart, qEnd));
+if (questionForSession('  Career? ', '', []) !== 'Career?') process.exit(11);
+if (questionForSession('', '  From match  ', [{role: 'user', content: 'old'}]) !== 'From match') process.exit(12);
+if (questionForSession('', '', [{role: 'assistant', content: 'x'}, {role: 'user', content: 'When?'}]) !== 'When?') process.exit(13);
+if (questionForSession('', '', [{role: 'user', content: 'first'}, {role: 'user', text: 'second'}]) !== 'second') process.exit(14);
+if (questionForSession('', '', []) !== '') process.exit(15);
+if (apply({id: 'tmp-q', sender: 'user', body: 'Is next spring better?'}) !== 'append') process.exit(16);
+const thread = [
+  {id: '21', sender: 'user', body: 'Is next spring better?'},
+  {id: '22', sender: 'astrologer', body: 'Yes, after Jupiter moves.'},
+];
+if (apply(thread[0]) !== 'adopt') process.exit(17);
+if (apply(thread[1]) !== 'append') process.exit(18);
+if (apply(thread[0]) !== 'skip' || apply(thread[1]) !== 'skip') process.exit(19);
 """
     ran = subprocess.run(["node", "-e", script, os.path.join(root, "web", "connect.js")], capture_output=True, text=True)
     assert ran.returncode == 0, ran.stderr or ran.stdout

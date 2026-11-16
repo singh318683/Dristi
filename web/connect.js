@@ -40,6 +40,7 @@
     if (auth) headers.Authorization = 'Bearer ' + auth;
     return fetch((window.API || '') + path, {
       method: body ? 'POST' : 'GET',
+      cache: 'no-store',
       headers: headers,
       body: body ? JSON.stringify(body) : undefined,
     }).then(async r => {
@@ -140,12 +141,31 @@
     </div>`);
     document.querySelectorAll('#sheet [data-mode]').forEach(b => b.onclick = () => checkout(b.dataset.id, b.dataset.mode).catch(showErr));
   }
-  function lastQuestion() {
-    try {
-      const hist = store.get(chatKey(), []);
-      for (let i = hist.length - 1; i >= 0; i--) if (hist[i].role === 'user') return hist[i].content || '';
-    } catch (e) { /* no chart yet */ }
+  function questionForSession(draft, pending, history) {
+    const typed = String(draft || '').trim();
+    if (typed) return typed.slice(0, 500);
+    const held = String(pending || '').trim();
+    if (held) return held.slice(0, 500);
+    const hist = Array.isArray(history) ? history : [];
+    for (let i = hist.length - 1; i >= 0; i--) {
+      const item = hist[i];
+      if (!item || item.role !== 'user') continue;
+      const text = String(item.content || item.text || '').trim();
+      if (text) return text.slice(0, 500);
+    }
     return '';
+  }
+  function lastQuestion() {
+    let draft = '';
+    let pending = '';
+    let hist = [];
+    try {
+      const box = document.querySelector('#ci');
+      draft = box && box.value || '';
+    } catch (e) { draft = ''; }
+    try { pending = (typeof S !== 'undefined' && S.pendingQ) || ''; } catch (e) { pending = ''; }
+    try { hist = store.get(chatKey(), []); } catch (e) { hist = []; }
+    return questionForSession(draft, pending, hist);
   }
   function coverPack(needCents) {
     const packs = [{id: 'wallet_5', cents: 500}, {id: 'wallet_10', cents: 1000}, {id: 'wallet_20', cents: 2000}];
@@ -386,7 +406,6 @@
     const id = live.id;
     const astro = live.role === 'astrologer';
     const token = live.token;
-    const after = live.after || 0;
     try {
       const body = astro ? {role: 'astrologer', device: ''} : {role: 'user', device: DEVICE};
       const view = await api('/api/connect/sessions/' + id + '/heartbeat', body, token);
@@ -414,14 +433,20 @@
         return;
       }
       if ($('#connectLog')) {
-        const q = astro ? ('after=' + after) : ('device=' + encodeURIComponent(DEVICE) + '&after=' + after);
+        const q = (astro ? 'after=0' : ('device=' + encodeURIComponent(DEVICE) + '&after=0')) + '&t=' + Date.now();
         const msgs = await api('/api/connect/sessions/' + id + '/messages?' + q, null, token);
         if (!live || live.gen !== gen) return;
-        (msgs.messages || []).forEach(addMsg);
+        mergeThread(msgs && msgs.messages);
       }
     } finally {
       beating = false;
     }
+  }
+  function mergeThread(messages) {
+    (messages || []).forEach(m => {
+      if (!m || (m.sender !== 'user' && m.sender !== 'astrologer')) return;
+      addMsg(m);
+    });
   }
   function claimMessage(seen, pending, message) {
     const id = message && message.id != null ? String(message.id) : '';
