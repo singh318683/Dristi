@@ -838,12 +838,21 @@ def post_message(session_id: str, sender: str, body: str, device: str | None, as
         who = _require_party(con, item, device, astrologer_id)
         if who != sender or item["status"] != "active":
             raise ConnectError("not_active", 409)
-        con.execute(
-            "insert into ac_message(session_id, sender, body, created) values(?,?,?,?)",
-            (session_id, sender, body, _iso()))
+        created = _iso()
+        params = (session_id, sender, body, created)
+        if con.dialect == "postgres":
+            row = con.execute(
+                "insert into ac_message(session_id, sender, body, created) values(?,?,?,?) returning id",
+                params).fetchone()
+            msg_id = int(row[0])
+        else:
+            cur = con.execute(
+                "insert into ac_message(session_id, sender, body, created) values(?,?,?,?)",
+                params)
+            msg_id = int(cur.lastrowid)
         column = "user_heartbeat" if sender == "user" else "astro_heartbeat"
-        con.execute(f"update ac_session set {column}=? where id=?", (_iso(), session_id))
-    return {"ok": True}
+        con.execute(f"update ac_session set {column}=? where id=?", (created, session_id))
+    return {"ok": True, "id": msg_id, "sender": sender, "body": body}
 
 
 def list_messages(session_id: str, after: int, device: str | None, astrologer_id: str | None) -> list[dict]:

@@ -471,8 +471,7 @@ def api_end(session_id: str, body: DeviceIn, request: Request):
 def api_post_message(session_id: str, body: MessageIn, request: Request):
     _gate()
     astro_id = _astro_id(request) if body.sender == "astrologer" else None
-    _run(lambda: store.post_message(session_id, body.sender, body.body, body.device, astro_id))
-    return {"ok": True}
+    return _run(lambda: store.post_message(session_id, body.sender, body.body, body.device, astro_id))
 
 
 @router.get("/api/connect/sessions/{session_id}/messages")

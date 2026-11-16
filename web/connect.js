@@ -9,6 +9,9 @@
   let live = null;
   let portalPoll = 0;
   let titleFlash = 0;
+  let beating = false;
+  let sending = false;
+  let generation = 0;
   const seenIncoming = {};
 
   function on() {
@@ -58,8 +61,10 @@
     if (clock) clearInterval(clock);
     timer = 0;
     clock = 0;
+    generation += 1;
     if (live && live.room && live.room.disconnect) live.room.disconnect();
     live = null;
+    beating = false;
   }
   function sheet(html, opts) {
     const sh = document.getElementById('sheet');
@@ -363,7 +368,7 @@
   }
   function watch(session, role, token) {
     stop();
-    live = {id: session.id, elapsed: session.elapsed_seconds || 0, at: Date.now(), cost: session.cost_label || '', room: null, after: 0, role: role || 'user', token: token || null, session: session};
+    live = {id: session.id, elapsed: session.elapsed_seconds || 0, at: Date.now(), cost: session.cost_label || '', room: null, after: 0, role: role || 'user', token: token || null, session: session, seen: {}, gen: generation};
     clock = setInterval(paintClock, 1000);
     paintClock();
     timer = setInterval(() => beat().catch(() => {}), 3000);
@@ -375,48 +380,132 @@
     if (net) net.textContent = view.net_label || '';
   }
   async function beat() {
-    if (!live) return;
+    if (!live || beating) return;
+    beating = true;
+    const gen = live.gen;
+    const id = live.id;
     const astro = live.role === 'astrologer';
-    const body = astro ? {role: 'astrologer', device: ''} : {role: 'user', device: DEVICE};
-    const view = await api('/api/connect/sessions/' + live.id + '/heartbeat', body, live.token);
-    live.elapsed = view.elapsed_seconds || 0;
-    live.at = Date.now();
-    live.cost = view.cost_label || live.cost;
-    live.session = view;
-    paintClock();
-    paintMeter(view);
-    if (view.status === 'active') {
-      const wait = document.querySelector('#connectLog .them');
-      if (wait && /Waiting|प्रतीक्षा/.test(wait.textContent || '')) wait.remove();
-    }
-    if (view.status === 'ended') {
-      stop();
-      if (astro) showAstroSummary(view);
-      else {
-        const missed = view.end_reason === 'unanswered';
-        if (window.toast) toast(missed
-          ? tr('No one accepted in time. Your hold was returned.', 'समय पर कोई स्वीकार नहीं किया। होल्ड लौटा दी गई।')
-          : tr('Session ended', 'सत्र समाप्त') + ' · ' + (view.cost_label || ''));
-        closeSheet();
+    const token = live.token;
+    const after = live.after || 0;
+    try {
+      const body = astro ? {role: 'astrologer', device: ''} : {role: 'user', device: DEVICE};
+      const view = await api('/api/connect/sessions/' + id + '/heartbeat', body, token);
+      if (!live || live.gen !== gen) return;
+      live.elapsed = view.elapsed_seconds || 0;
+      live.at = Date.now();
+      live.cost = view.cost_label || live.cost;
+      live.session = view;
+      paintClock();
+      paintMeter(view);
+      if (view.status === 'active') {
+        const wait = document.querySelector('#connectLog > p.them');
+        if (wait && /Waiting|प्रतीक्षा/.test(wait.textContent || '')) wait.remove();
       }
-      return;
+      if (view.status === 'ended') {
+        stop();
+        if (astro) showAstroSummary(view);
+        else {
+          const missed = view.end_reason === 'unanswered';
+          if (window.toast) toast(missed
+            ? tr('No one accepted in time. Your hold was returned.', 'समय पर कोई स्वीकार नहीं किया। होल्ड लौटा दी गई।')
+            : tr('Session ended', 'सत्र समाप्त') + ' · ' + (view.cost_label || ''));
+          closeSheet();
+        }
+        return;
+      }
+      if ($('#connectLog')) {
+        const q = astro ? ('after=' + after) : ('device=' + encodeURIComponent(DEVICE) + '&after=' + after);
+        const msgs = await api('/api/connect/sessions/' + id + '/messages?' + q, null, token);
+        if (!live || live.gen !== gen) return;
+        (msgs.messages || []).forEach(addMsg);
+      }
+    } finally {
+      beating = false;
     }
-    if ($('#connectLog')) {
-      const q = astro ? ('after=' + live.after) : ('device=' + encodeURIComponent(DEVICE) + '&after=' + live.after);
-      const msgs = await api('/api/connect/sessions/' + live.id + '/messages?' + q, null, live.token);
-      (msgs.messages || []).forEach(addMsg);
+  }
+  function claimMessage(seen, pending, message) {
+    const id = message && message.id != null ? String(message.id) : '';
+    if (id && seen[id]) return {action: 'skip', id: id};
+    if (id && id.indexOf('tmp-') !== 0) {
+      for (let i = 0; i < pending.length; i++) {
+        const item = pending[i];
+        if (item && item.sender === message.sender && item.body === message.body) return {action: 'adopt', tempId: String(item.id), id: id};
+      }
     }
+    return {action: 'append', id: id};
+  }
+  function mineRole() {
+    return live && live.role === 'astrologer' ? 'astrologer' : 'user';
+  }
+  function otherName() {
+    const session = (live && live.session) || {};
+    if (live && live.role === 'astrologer') return seekerLabel(session);
+    return session.astrologer_name || tr('Astrologer', 'ज्योतिषी');
+  }
+  function pendingMessages() {
+    const log = $('#connectLog');
+    if (!log) return [];
+    return Array.from(log.querySelectorAll('[data-pending="1"]')).map(el => ({
+      id: el.getAttribute('data-id'),
+      sender: el.getAttribute('data-sender'),
+      body: el.getAttribute('data-body'),
+    }));
+  }
+  function remember(id) {
+    if (!live || !id || String(id).indexOf('tmp-') === 0) return;
+    live.seen[String(id)] = true;
+    const n = Number(id);
+    if (n) live.after = Math.max(live.after || 0, n);
+  }
+  function bubbleNode(m) {
+    const node = document.createElement('div');
+    const mine = m.sender === mineRole();
+    node.className = 'bubble ' + (mine ? 'me' : 'them');
+    node.setAttribute('data-id', String(m.id || ''));
+    node.setAttribute('data-sender', m.sender || '');
+    node.setAttribute('data-body', m.body || '');
+    if (String(m.id || '').indexOf('tmp-') === 0) node.setAttribute('data-pending', '1');
+    if (!mine) {
+      const who = document.createElement('span');
+      who.className = 'who';
+      who.textContent = otherName();
+      node.appendChild(who);
+    }
+    const p = document.createElement('p');
+    p.textContent = m.body || '';
+    node.appendChild(p);
+    return node;
   }
   function addMsg(m) {
     const log = $('#connectLog');
-    if (!log || !m) return;
-    live.after = Math.max(live.after || 0, m.id || 0);
-    const p = document.createElement('p');
-    const mine = live && live.role === 'astrologer' ? 'astrologer' : 'user';
-    p.className = m.sender === mine ? 'me' : 'them';
-    p.textContent = m.body;
-    log.appendChild(p);
+    if (!log || !m || !live) return;
+    if (!live.seen) live.seen = {};
+    const claim = claimMessage(live.seen, pendingMessages(), m);
+    if (claim.action === 'skip') return;
+    if (claim.action === 'adopt') {
+      const node = log.querySelector('[data-pending="1"][data-id="' + claim.tempId + '"]');
+      if (node) {
+        node.setAttribute('data-id', claim.id);
+        node.removeAttribute('data-pending');
+        delete live.seen[claim.tempId];
+      } else {
+        log.appendChild(bubbleNode({id: claim.id, sender: m.sender, body: m.body}));
+      }
+      remember(claim.id);
+      log.scrollTop = log.scrollHeight;
+      return;
+    }
+    const id = claim.id || ('tmp-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6));
+    if (live.seen[id]) return;
+    live.seen[id] = true;
+    log.appendChild(bubbleNode({id: id, sender: m.sender, body: m.body}));
+    remember(id);
     log.scrollTop = log.scrollHeight;
+  }
+  function adoptMessage(serverId, sender, body) {
+    const id = serverId == null ? '' : String(serverId);
+    if (!live || !id) return;
+    addMsg({id: id, sender: sender, body: body});
   }
   function openChat(session) {
     watch(session);
@@ -428,7 +517,7 @@
       </div>
       <div class="connect-log" id="connectLog"><p class="them">${tr('Waiting for them to join.', 'उनके जुड़ने की प्रतीक्षा।')}</p></div>
       <form id="connectForm" class="ask-bar"><textarea id="connectInput" rows="1" maxlength="2000" aria-label="${tr('Message', 'संदेश')}"></textarea>
-        <button type="submit" class="btn">${tr('Send', 'भेजें')}</button></form>
+        <button type="submit" class="btn" id="connectSend">${tr('Send', 'भेजें')}</button></form>
       <button type="button" class="btn quiet" id="connectReport">${tr('Report', 'रिपोर्ट')}</button>
       <button type="button" class="btn quiet" id="connectBlock">${tr('Block', 'ब्लॉक')}</button>
     </div>`, {live: true});
@@ -438,15 +527,41 @@
     $('#connectBlock').onclick = () => block(session).catch(showErr);
     paintClock();
   }
-  async function send() {
+  function lockSend(locked) {
+    const btn = $('#connectSend');
     const input = $('#connectInput');
-    const text = (input.value || '').trim();
-    if (!text || !live) return;
+    if (btn) btn.disabled = locked;
+    if (input) input.disabled = locked;
+  }
+  async function postChat(sender, token, device) {
+    const input = $('#connectInput');
+    const text = ((input && input.value) || '').trim();
+    if (!text || !live || sending) return;
+    sending = true;
+    lockSend(true);
+    const gen = live.gen;
+    const sessionId = live.id;
     input.value = '';
-    const waiting = document.querySelector('#connectLog .them');
-    if (waiting) waiting.remove();
-    await api('/api/connect/sessions/' + live.id + '/messages', {sender: 'user', body: text, device: DEVICE});
-    addMsg({id: 0, sender: 'user', body: text});
+    const waiting = document.querySelector('#connectLog > p.them');
+    if (waiting && /Waiting|प्रतीक्षा/.test(waiting.textContent || '')) waiting.remove();
+    const tmp = 'tmp-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    addMsg({id: tmp, sender: sender, body: text});
+    try {
+      const saved = await api('/api/connect/sessions/' + sessionId + '/messages', {sender: sender, body: text, device: device}, token);
+      if (live && live.gen === gen) adoptMessage(saved && saved.id, sender, text);
+    } catch (err) {
+      const node = document.querySelector('#connectLog [data-id="' + tmp + '"]');
+      if (node) node.remove();
+      if (live && live.seen) delete live.seen[tmp];
+      if (input && input.isConnected && !input.value) input.value = text;
+      throw err;
+    } finally {
+      sending = false;
+      lockSend(false);
+    }
+  }
+  async function send() {
+    await postChat('user', null, DEVICE);
   }
   async function openCall(session) {
     watch(session);
@@ -617,12 +732,7 @@
     if (done) done.onclick = () => render();
   }
   async function sendAstro(token) {
-    const input = $('#connectInput');
-    const text = ((input && input.value) || '').trim();
-    if (!text || !live) return;
-    input.value = '';
-    await api('/api/connect/sessions/' + live.id + '/messages', {sender: 'astrologer', body: text, device: ''}, token);
-    addMsg({id: 0, sender: 'astrologer', body: text});
+    await postChat('astrologer', token, '');
   }
   async function finishAstro(token) {
     if (!live) { render(); return; }
@@ -649,7 +759,7 @@
       ${born ? `<p class="sub">${esc(born)}</p>` : ''}
       ${call ? `<p class="sub" id="connectVoice"></p><div class="call-controls"><button type="button" class="btn quiet" id="connectMute" aria-pressed="false">${tr('Mute', 'म्यूट')}</button><button type="button" class="btn" id="connectEnd">${tr('End session', 'सत्र समाप्त')}</button></div>` : `<button type="button" class="btn" id="connectEnd">${tr('End session', 'सत्र समाप्त')}</button>`}
       <div class="connect-log" id="connectLog"></div>
-      <form id="connectForm" class="ask-bar"><textarea id="connectInput" rows="1" maxlength="2000" aria-label="${tr('Message', 'संदेश')}"></textarea><button type="submit" class="btn">${tr('Send', 'भेजें')}</button></form>
+      <form id="connectForm" class="ask-bar"><textarea id="connectInput" rows="1" maxlength="2000" aria-label="${tr('Message', 'संदेश')}"></textarea><button type="submit" class="btn" id="connectSend">${tr('Send', 'भेजें')}</button></form>
       <button type="button" class="btn quiet" id="connectReport">${tr('Report', 'रिपोर्ट')}</button>
       <button type="button" class="btn quiet" id="connectBlock">${tr('Block', 'ब्लॉक')}</button>
     </div>`;
@@ -951,6 +1061,9 @@
     return true;
   }
   window.onAnswerClosed = function () { if (on()) offer(); };
-  window.DrishtiConnect = {takeover: takeover, offer: offer, list: list};
-  window.addEventListener('hashchange', () => { if (typeof render === 'function') render(); });
+  window.DrishtiConnect = {takeover: takeover, offer: offer, list: list, stop: stop};
+  window.addEventListener('hashchange', () => {
+    if (location.hash !== '#astro' && live && live.role === 'astrologer') stop();
+    if (typeof render === 'function') render();
+  });
 })();

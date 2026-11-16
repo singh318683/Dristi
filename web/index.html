@@ -540,9 +540,14 @@ body.app-fit .sheet-bg.connect-live{bottom:calc(56px + env(safe-area-inset-botto
 .connect-head b,.connect-meter{display:block;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .connect-meter{color:var(--muted);font-size:13px}
 .connect-log{flex:1;overflow:auto;display:flex;flex-direction:column;gap:8px;padding:8px 0;min-height:0}
-.connect-log .me{align-self:flex-end;background:var(--primary-tint)}
-.connect-log .them{align-self:flex-start;background:var(--sunk)}
-.connect-log p{max-width:88%;margin:0;padding:8px 12px;border-radius:14px;line-height:1.45;overflow-wrap:anywhere}
+.connect-log .bubble{max-width:88%;display:flex;flex-direction:column;gap:2px}
+.connect-log .bubble.me{align-self:flex-end;align-items:flex-end}
+.connect-log .bubble.them{align-self:flex-start;align-items:flex-start}
+.connect-log .bubble p{margin:0;padding:8px 12px;border-radius:14px;line-height:1.45;overflow-wrap:anywhere}
+.connect-log .bubble.me p{background:var(--primary-tint)}
+.connect-log .bubble.them p{background:var(--sunk)}
+.connect-log .who{font-size:11px;font-weight:650;color:var(--muted);padding:0 4px}
+.connect-log > p.them{align-self:flex-start;background:var(--sunk);max-width:88%;margin:0;padding:8px 12px;border-radius:14px}
 .call-screen{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:8px;min-height:0}
 .call-screen .connect-av{width:96px;height:96px;font-size:36px}
 .call-controls{display:flex;gap:8px;width:100%;margin-top:12px}
@@ -1241,7 +1246,9 @@ function lockSheet() {
 }
 function closeSheet(opts) {
   const sh = $('#sheet');
+  const wasLive = !!(sh && sh.classList.contains('connect-live'));
   const wasAnswer = !!(sh && !sh.hidden && sh.classList.contains('answer-read'));
+  if (wasLive && window.DrishtiConnect && DrishtiConnect.stop) DrishtiConnect.stop();
   if (sh) { sh.hidden = true; sh.innerHTML = ''; sh.classList.remove('as-bottom', 'answer-read', 'connect-offer', 'connect-live'); }
   document.body.classList.remove('sheet-lock', 'answer-open', 'connect-open');
   answerRead = null;

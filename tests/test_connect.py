@@ -3,6 +3,7 @@ import hashlib
 import hmac
 import json
 import os
+import subprocess
 import sys
 import time
 
@@ -265,8 +266,12 @@ def test_accept_opens_the_session_and_restores_online(client):
     assert desk["session"]["id"] == accepted["id"]
     posted = client.post("/api/connect/sessions/" + started["id"] + "/messages", headers=headers, json={"sender": "astrologer", "body": "Namaste", "device": ""})
     assert posted.status_code == 200
+    saved = posted.json()
+    assert saved["ok"] is True and saved["id"] > 0 and saved["sender"] == "astrologer"
     messages = client.get("/api/connect/sessions/" + started["id"] + "/messages", headers=headers).json()["messages"]
-    assert messages[0]["body"] == "Namaste" and messages[0]["sender"] == "astrologer"
+    assert messages[0]["body"] == "Namaste" and messages[0]["sender"] == "astrologer" and messages[0]["id"] == saved["id"]
+    again = client.get("/api/connect/sessions/" + started["id"] + "/messages?after=" + str(saved["id"]), headers=headers).json()["messages"]
+    assert again == []
     ended = client.post("/api/connect/sessions/" + started["id"] + "/end", headers=headers, json={"device": ""}).json()
     assert ended["status"] == "ended" and "net_label" in ended and "fee_label" in ended
     after = client.get("/api/connect/astro/live", headers=headers).json()
@@ -498,6 +503,61 @@ def test_must_change_column_is_added_to_an_older_table(tmp_path, monkeypatch):
         store.ensure(con)
         cols = [r[1] for r in con.execute("pragma table_info(ac_astrologer)").fetchall()]
     assert "must_change" in cols
+
+
+def test_chat_keeps_one_bubble_and_one_poll():
+    root = os.path.join(os.path.dirname(__file__), "..")
+    connect = open(os.path.join(root, "web", "connect.js"), encoding="utf-8").read()
+    html = open(os.path.join(root, "web", "index.html"), encoding="utf-8").read()
+    assert connect.count("setInterval(() => beat()") == 1
+    assert "clearInterval(timer)" in connect and "if (!live || beating) return" in connect
+    assert "if (!text || !live || sending) return" in connect and "lockSend(true)" in connect
+    assert 'id="connectSend"' in connect
+    assert "function claimMessage" in connect and "data-pending" in connect
+    assert "className = 'bubble ' + (mine ? 'me' : 'them')" in connect
+    assert "who.className = 'who'" in connect
+    assert "addMsg({id: 0" not in connect
+    assert "DrishtiConnect.stop" in html
+    assert ".connect-log .bubble.me{align-self:flex-end" in html
+    assert ".connect-log .bubble.them{align-self:flex-start" in html
+    assert ".connect-log .bubble.me p{background:var(--primary-tint)}" in html
+    assert ".connect-log .bubble.them p{background:var(--sunk)}" in html
+    assert ".connect-log .who{" in html
+    script = r"""
+const fs = require('fs');
+const src = fs.readFileSync(process.argv[1], 'utf8');
+const start = src.indexOf('function claimMessage');
+const end = src.indexOf('function mineRole');
+eval(src.slice(start, end));
+const seen = {};
+const pending = [];
+function apply(message) {
+  const claim = claimMessage(seen, pending, message);
+  if (claim.action === 'skip') return 'skip';
+  if (claim.action === 'adopt') {
+    const i = pending.findIndex(item => item.id === claim.tempId);
+    if (i < 0) return 'missing';
+    pending.splice(i, 1);
+    delete seen[claim.tempId];
+    seen[claim.id] = true;
+    return 'adopt';
+  }
+  seen[claim.id] = true;
+  if (String(claim.id).indexOf('tmp-') === 0) pending.push({id: claim.id, sender: message.sender, body: message.body});
+  return 'append';
+}
+if (apply({id: 'tmp-1', sender: 'user', body: 'Hi'}) !== 'append') process.exit(2);
+if (apply({id: '7', sender: 'user', body: 'Hi'}) !== 'adopt') process.exit(3);
+if (apply({id: '7', sender: 'user', body: 'Hi'}) !== 'skip') process.exit(4);
+if (apply({id: '8', sender: 'astrologer', body: 'Hello'}) !== 'append') process.exit(5);
+if (apply({id: '8', sender: 'astrologer', body: 'Hello'}) !== 'skip') process.exit(6);
+if (pending.length !== 0) process.exit(7);
+if (apply({id: 'tmp-2', sender: 'astrologer', body: 'Hi'}) !== 'append') process.exit(8);
+if (apply({id: '9', sender: 'user', body: 'Hi'}) !== 'append') process.exit(9);
+if (apply({id: '10', sender: 'astrologer', body: 'Hi'}) !== 'adopt') process.exit(10);
+"""
+    ran = subprocess.run(["node", "-e", script, os.path.join(root, "web", "connect.js")], capture_output=True, text=True)
+    assert ran.returncode == 0, ran.stderr or ran.stdout
 
 
 def test_stripe_signature_helper_rejects_a_stale_event():
