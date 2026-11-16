@@ -51,6 +51,23 @@ def _form(secret: str, path: str, data: dict, idempotency_key: str | None = None
     return res.json()
 
 
+def retrieve_payment_intent(secret: str, intent_id: str) -> dict:
+    intent_id = (intent_id or "").strip()
+    if not intent_id.startswith("pi_") or not intent_id.replace("_", "").isalnum():
+        raise StripeError("bad_payment")
+    try:
+        res = httpx.get(
+            "https://api.stripe.com/v1/payment_intents/" + intent_id,
+            auth=(secret, ""),
+            timeout=20,
+        )
+    except httpx.HTTPError as e:
+        raise StripeError("stripe_unavailable") from e
+    if res.status_code >= 400:
+        raise StripeError("stripe_rejected")
+    return res.json()
+
+
 def create_payment_intent(secret: str, amount_cents: int, metadata: dict, idempotency_key: str) -> dict:
     flat = {
         "amount": str(int(amount_cents)),

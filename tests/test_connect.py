@@ -219,6 +219,38 @@ def test_stripe_webhook_credits_once(client, monkeypatch):
     assert bad.status_code == 400
 
 
+def test_wallet_confirm_shares_the_webhook_id(client, monkeypatch):
+    monkeypatch.setenv("STRIPE_SECRET_KEY", "sk_test")
+    monkeypatch.setenv("STRIPE_WEBHOOK_SECRET", "whsec_test")
+    seen = {"id": "pi_confirm", "status": "succeeded", "metadata": {"purpose": "wallet", "device": "phone", "product_id": "wallet_5"}}
+
+    def retrieve(secret, intent_id):
+        assert secret == "sk_test" and intent_id == seen["id"]
+        return dict(seen)
+
+    monkeypatch.setattr(connect_stripe, "retrieve_payment_intent", retrieve)
+    first = client.post("/api/connect/wallet/confirm", json={"device": "phone", "payment_intent": "pi_confirm"})
+    assert first.status_code == 200 and first.json()["credited"] is True and first.json()["balance_cents"] == 500
+    again = client.post("/api/connect/wallet/confirm", json={"device": "phone", "payment_intent": "pi_confirm"})
+    assert again.status_code == 200 and again.json()["credited"] is False
+    payload = json.dumps({"type": "payment_intent.succeeded", "data": {"object": seen}}).encode()
+    stamp = str(int(time.time()))
+    sig = hmac.new(b"whsec_test", stamp.encode() + b"." + payload, hashlib.sha256).hexdigest()
+    hooked = client.post("/api/connect/stripe/webhook", content=payload, headers={"Stripe-Signature": f"t={stamp},v1={sig}"})
+    assert hooked.status_code == 200 and hooked.json()["credited"] is False
+    assert store.wallet_view("phone")["stripe_cents"] == 500
+    seen["metadata"] = {"purpose": "wallet", "device": "other", "product_id": "wallet_5"}
+    seen["id"] = "pi_other"
+    mismatch = client.post("/api/connect/wallet/confirm", json={"device": "phone", "payment_intent": "pi_other"})
+    assert mismatch.status_code == 400 and mismatch.json()["detail"] == "payment_invalid"
+    seen["status"] = "processing"
+    seen["metadata"] = {"purpose": "wallet", "device": "phone", "product_id": "wallet_5"}
+    seen["id"] = "pi_wait"
+    pending = client.post("/api/connect/wallet/confirm", json={"device": "phone", "payment_intent": "pi_wait"})
+    assert pending.status_code == 409 and pending.json()["detail"] == "payment_pending"
+    assert store.wallet_view("phone")["stripe_cents"] == 500
+
+
 def test_apple_question_is_consumed_once(client, monkeypatch):
     def fake(transaction_id):
         return {"transaction_id": transaction_id, "product_id": "acharya_question", "bundle_id": "com.ikshana.drishti"}

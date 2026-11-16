@@ -168,6 +168,12 @@ class IntentIn(BaseModel):
     idempotency_key: str = ""
 
 
+class ConfirmIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    device: str
+    payment_intent: str
+
+
 class AppleIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
     device: str
@@ -293,7 +299,30 @@ def api_intent(body: IntentIn):
         "product_id": body.product_id,
         "purpose": "wallet",
     }, "pi-" + nonce)
-    return {"client_secret": intent.get("client_secret"), "product_id": body.product_id, "amount_cents": cents}
+    return {"id": intent.get("id") or "", "client_secret": intent.get("client_secret"), "product_id": body.product_id, "amount_cents": cents}
+
+
+@router.post("/api/connect/wallet/confirm")
+def api_confirm(body: ConfirmIn):
+    _gate()
+    secret = (os.environ.get("STRIPE_SECRET_KEY") or "").strip()
+    if not secret:
+        raise HTTPException(503, "stripe_not_configured")
+    try:
+        intent = connect_stripe.retrieve_payment_intent(secret, body.payment_intent)
+    except connect_stripe.StripeError as e:
+        raise HTTPException(502, e.code) from e
+    status = str(intent.get("status") or "")
+    meta = intent.get("metadata") or {}
+    if status != "succeeded":
+        if status in ("processing", "requires_action", "requires_confirmation", "requires_capture"):
+            raise HTTPException(409, "payment_pending")
+        raise HTTPException(400, "payment_invalid")
+    device = (body.device or "").strip()
+    if meta.get("purpose") != "wallet" or str(meta.get("device") or "") != device:
+        raise HTTPException(400, "payment_invalid")
+    result = _run(lambda: store.credit_topup(device, "stripe", str(meta.get("product_id") or ""), str(intent.get("id") or "")))
+    return {"ok": True, **result}
 
 
 @router.post("/api/connect/wallet/apple")

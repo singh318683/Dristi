@@ -7,6 +7,9 @@
   let timer = 0;
   let clock = 0;
   let live = null;
+  let portalPoll = 0;
+  let titleFlash = 0;
+  const seenIncoming = {};
 
   function on() {
     return !!(typeof S !== 'undefined' && S.status && S.status.astrologer_connect);
@@ -93,6 +96,7 @@
     unauthorized: ['That sign-in was not accepted.', 'यह साइन-इन स्वीकार नहीं हुआ।'],
     invalid_rate: ['Enter a per-minute rate between $0.30 and $5.00.', 'प्रति मिनट दर $0.30 से $5.00 के बीच डालें।'],
     bad_rate: ['Enter a per-minute rate between $0.30 and $5.00.', 'प्रति मिनट दर $0.30 से $5.00 के बीच डालें।'],
+    payment_pending: ['The payment is still pending. Your wallet will update when it clears.', 'भुगतान अभी लंबित है। पूरा होते ही वॉलेट अपडेट होगा।'],
   };
   function friendly(code) {
     const row = PORTAL_ERRORS[code];
@@ -175,38 +179,70 @@
       else begin(id, mode).catch(showErr);
     };
   }
+  function clearPayForm() {
+    const box = document.getElementById('stripePay');
+    if (box) box.remove();
+    const pay = document.getElementById('stripePayBtn');
+    if (pay) pay.remove();
+  }
+  function setPacksDisabled(disabled) {
+    document.querySelectorAll('#sheet [data-pack], #connectStart').forEach(b => { b.disabled = !!disabled; });
+  }
   async function topup(product) {
-    const key = S.status && S.status.stripe_publishable_key;
-    const intent = await api('/api/connect/wallet/intent', {device: DEVICE, product_id: product, idempotency_key: (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()))});
-    if (!key || !intent.client_secret) throw new Error(tr('Card payments are not set up yet.', 'कार्ड भुगतान अभी सेट नहीं है।'));
-    if (!window.Stripe) {
+    clearPayForm();
+    setPacksDisabled(true);
+    try {
+      const key = S.status && S.status.stripe_publishable_key;
+      const intent = await api('/api/connect/wallet/intent', {device: DEVICE, product_id: product, idempotency_key: (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()))});
+      if (!key || !intent.client_secret) throw new Error(tr('Card payments are not set up yet.', 'कार्ड भुगतान अभी सेट नहीं है।'));
+      if (!window.Stripe) {
+        await new Promise((resolve, reject) => {
+          const s = document.createElement('script');
+          s.src = 'https://js.stripe.com/v3/';
+          s.onload = resolve;
+          s.onerror = () => reject(new Error('stripe'));
+          document.head.appendChild(s);
+        });
+      }
+      clearPayForm();
+      const stripe = window.Stripe(key);
+      const elements = stripe.elements({clientSecret: intent.client_secret});
+      const box = document.createElement('div');
+      box.id = 'stripePay';
+      const host = document.querySelector('#sheet .sheet');
+      host.appendChild(box);
+      elements.create('payment').mount('#stripePay');
+      const pay = document.createElement('button');
+      pay.type = 'button';
+      pay.id = 'stripePayBtn';
+      pay.className = 'btn block';
+      pay.textContent = tr('Pay', 'भुगतान');
+      host.appendChild(pay);
       await new Promise((resolve, reject) => {
-        const s = document.createElement('script');
-        s.src = 'https://js.stripe.com/v3/';
-        s.onload = resolve;
-        s.onerror = () => reject(new Error('stripe'));
-        document.head.appendChild(s);
+        pay.onclick = async () => {
+          if (pay.disabled) return;
+          pay.disabled = true;
+          try {
+            const result = await stripe.confirmPayment({elements: elements, redirect: 'if_required'});
+            if (result.error) throw new Error(result.error.message);
+            const pi = result.paymentIntent || {};
+            if (!pi.id || (pi.status && pi.status !== 'succeeded')) {
+              const err = new Error('payment_pending');
+              err.code = 'payment_pending';
+              throw err;
+            }
+            await api('/api/connect/wallet/confirm', {device: DEVICE, payment_intent: pi.id});
+            resolve(result);
+          } catch (err) {
+            pay.disabled = false;
+            reject(err);
+          }
+        };
       });
+    } catch (err) {
+      setPacksDisabled(false);
+      throw err;
     }
-    const stripe = window.Stripe(key);
-    const elements = stripe.elements({clientSecret: intent.client_secret});
-    const box = document.createElement('div');
-    box.id = 'stripePay';
-    const host = document.querySelector('#sheet .sheet');
-    host.appendChild(box);
-    elements.create('payment').mount('#stripePay');
-    const pay = document.createElement('button');
-    pay.type = 'button';
-    pay.className = 'btn block';
-    pay.textContent = tr('Pay', 'भुगतान');
-    host.appendChild(pay);
-    await new Promise((resolve, reject) => {
-      pay.onclick = async () => {
-        const result = await stripe.confirmPayment({elements: elements, redirect: 'if_required'});
-        if (result.error) reject(new Error(result.error.message));
-        else resolve(result);
-      };
-    });
   }
   async function begin(id, mode) {
     const key = crypto.randomUUID ? crypto.randomUUID() : String(Date.now());
@@ -428,7 +464,74 @@
       <button class="btn block" type="submit">${tr('Create account', 'खाता बनाएँ')}</button>
       <button class="btn quiet" type="button" id="showLogin">${tr('I already have an account', 'मेरा खाता पहले से है')}</button></form>`;
   }
+  function stopPortalPoll() {
+    if (portalPoll) clearInterval(portalPoll);
+    portalPoll = 0;
+  }
+  function chime() {
+    try {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!Ctx) return;
+      const ctx = new Ctx();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(660, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.18);
+      gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.06, ctx.currentTime + 0.03);
+      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.45);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.48);
+      osc.onended = () => { try { ctx.close(); } catch (e) { /* already closed */ } };
+    } catch (e) { /* autoplay can block the chime */ }
+    if (navigator.vibrate) { try { navigator.vibrate([120, 60, 120]); } catch (e) { /* no vibrator */ } }
+  }
+  function flashTitle() {
+    if (titleFlash) clearInterval(titleFlash);
+    const original = document.title;
+    let on = false;
+    let n = 0;
+    titleFlash = setInterval(() => {
+      on = !on;
+      document.title = on ? tr('New request', 'नया अनुरोध') : original;
+      if (++n >= 8) { clearInterval(titleFlash); titleFlash = 0; document.title = original; }
+    }, 700);
+  }
+  function noteIncoming(sessions) {
+    let fresh = false;
+    (sessions || []).forEach(s => {
+      if (!s || s.status !== 'ringing' || seenIncoming[s.id]) return;
+      seenIncoming[s.id] = true;
+      fresh = true;
+    });
+    if (!fresh) return;
+    chime();
+    flashTitle();
+  }
+  function paintIncoming(sessions, token) {
+    const host = document.getElementById('incoming');
+    if (!host) return;
+    noteIncoming(sessions);
+    const waiting = (sessions || []).filter(s => s && s.status === 'ringing');
+    const key = waiting.map(s => s.id).join(',');
+    if (host.dataset.key === key) return;
+    host.dataset.key = key;
+    host.innerHTML = waiting.map(s => `<div class="card incoming-banner"><b>${tr('New request', 'नया अनुरोध')}</b><p>${esc(s.mode)} · ${esc(s.question || '')}</p><button type="button" class="btn" data-accept="${esc(s.id)}">${tr('Accept', 'स्वीकार')}</button></div>`).join('')
+      || `<p class="sub">${tr('No waiting chat or call.', 'कोई प्रतीक्षारत चैट या कॉल नहीं।')}</p>`;
+    host.querySelectorAll('[data-accept]').forEach(b => b.onclick = () => api('/api/connect/sessions/' + b.dataset.accept + '/accept', {}, token).then(() => render()).catch(showErr));
+  }
+  function watchIncoming(token) {
+    stopPortalPoll();
+    portalPoll = setInterval(() => {
+      if (location.hash !== '#astro') { stopPortalPoll(); return; }
+      api('/api/connect/astro/incoming', null, token).then(data => paintIncoming(data.sessions || [], token)).catch(() => {});
+    }, 5000);
+  }
   async function renderPortal() {
+    stopPortalPoll();
     const body = portalRoot(tr('Astrologer', 'ज्योतिषी'));
     const token = sessionStorage.getItem('dr-astro-token') || '';
     if (!on()) { body.innerHTML = `<p>${tr('This is not switched on yet.', 'यह अभी चालू नहीं है।')}</p>`; return; }
@@ -498,8 +601,6 @@
     }
     const plans = planCards();
     const needsPlan = !money.plan_status || money.plan_status === 'none' || money.plan_status === 'canceled';
-    const rows = (incoming.sessions || []).map(s => `<div class="card"><b>${esc(s.mode)} · ${esc(s.status)}</b><p>${esc(s.question || '')}</p>
-      <button type="button" class="btn" data-accept="${esc(s.id)}">${tr('Accept', 'स्वीकार')}</button></div>`).join('');
     body.innerHTML = `${needsPlan ? `<div class="card" id="planPicker"><h3>${tr('Choose a plan', 'योजना चुनें')}</h3>
       <button type="button" class="btn block" id="planTrial">${plans.days} ${tr('day free trial', 'दिन का निःशुल्क परीक्षण')}</button>
       <p class="sub">${plans.days} ${tr('days free. No card.', 'दिन मुफ़्त। कार्ड नहीं।')}</p>
@@ -509,7 +610,7 @@
       <div class="card"><label class="spread">${tr('Online', 'ऑनलाइन')}<input type="checkbox" id="astroOnline"></label>
       <p class="sub">${tr('You keep 95%. Drishti keeps 5% of each session.', 'आप 95% रखते हैं। दृष्टि हर सत्र का 5% रखती है।')}</p>
       <p class="sub">${tr('Plan', 'योजना')}: ${esc(money.plan_status || 'none')}${money.renews_at ? ' · ' + esc(String(money.renews_at).slice(0, 10)) : ''}</p></div>
-      ${rows || `<p class="sub">${tr('No waiting chat or call.', 'कोई प्रतीक्षारत चैट या कॉल नहीं।')}</p>`}
+      <div id="incoming"></div>
       <div class="card" id="earnings"><h3>${tr('Earnings', 'कमाई')}</h3>
         <p>${tr('Gross', 'कुल')} ${esc(money.gross_label || '$0.00')}</p>
         <p>${tr('Drishti fee', 'दृष्टि शुल्क')} ${esc(money.fee_label || '$0.00')}</p>
@@ -520,7 +621,8 @@
     if (trial) trial.onclick = () => api('/api/connect/astro/trial', {}, token).then(() => render()).catch(showErr);
     bindPaidButtons(token);
     $('#astroOnline').onchange = e => api('/api/connect/astro/online', {online: e.target.checked}, token).catch(showErr);
-    document.querySelectorAll('[data-accept]').forEach(b => b.onclick = () => api('/api/connect/sessions/' + b.dataset.accept + '/accept', {}, token).then(() => render()).catch(showErr));
+    paintIncoming(incoming.sessions || [], token);
+    watchIncoming(token);
     $('#astroStripe').onclick = () => api('/api/connect/astro/stripe', {}, token).then(d => { if (d.url) location.href = d.url; }).catch(showErr);
     $('#managePlan').onclick = () => {
       if (!money.has_billing_account) { revealPaidPlans(money, token); return; }
@@ -541,6 +643,7 @@
     });
   }
   async function renderAdmin() {
+    stopPortalPoll();
     const body = portalRoot(tr('Admin', 'एडमिन'));
     if (!on()) { body.innerHTML = `<p>${tr('This is not switched on yet.', 'यह अभी चालू नहीं है।')}</p>`; return; }
     const token = sessionStorage.getItem('dr-admin-token') || '';

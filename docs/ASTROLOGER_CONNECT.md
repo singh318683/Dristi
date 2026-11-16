@@ -22,7 +22,7 @@ The iOS shell does not load that production site. GitHub Actions writes the repo
 | `STRIPE_PRICE_PROVIDER_MONTHLY` | unset | Stripe Billing price id for the monthly plan. |
 | `STRIPE_PRICE_PROVIDER_YEARLY` | unset | Stripe Billing price id for the yearly plan. |
 | `STRIPE_SECRET_KEY` | unset | PaymentIntents, subscriptions, Connect, and the customer portal. |
-| `STRIPE_WEBHOOK_SECRET` | unset | Signs `POST /api/connect/stripe/webhook`. |
+| `STRIPE_WEBHOOK_SECRET` | unset | Signs `POST /api/connect/stripe/webhook`. The endpoint in Stripe must include `payment_intent.succeeded`. |
 | `STRIPE_PUBLISHABLE_KEY` | unset | Wallet top-up in the browser, including Apple Pay. |
 | `APP_PUBLIC_URL` | unset | Success and return URLs for Checkout, the portal, and Connect. |
 | `CRON_SECRET` | unset | `Authorization: Bearer` for the Monday payout cron. |
@@ -38,7 +38,7 @@ Stripe webhooks update that state: `customer.subscription.created`, `updated`, a
 
 ## Money
 
-Wallet packs `wallet_5`, `wallet_10`, and `wallet_20` are Stripe PaymentIntents. A session holds five minutes at the provider's stored rate. The server clock starts when they accept. Heartbeats and the LiveKit webhook end the session. The charge is elapsed seconds times the rate, floored to the cent, and never more than the hold. Unused hold returns to the wallet.
+Wallet packs `wallet_5`, `wallet_10`, and `wallet_20` are Stripe PaymentIntents. After the browser confirms a payment, the server reads that PaymentIntent from Stripe and credits it. The Stripe webhook must include `payment_intent.succeeded` and uses the same payment id, so a retry does not credit the wallet twice. A session holds five minutes at the provider's stored rate. The server clock starts when they accept. Heartbeats and the LiveKit webhook end the session. The charge is elapsed seconds times the rate, floored to the cent, and never more than the hold. Unused hold returns to the wallet.
 
 Of the gross, Drishti takes `PLATFORM_COMMISSION_RATE` and the provider the remainder. Twelve minutes at $1.00 is $12.00 gross, $0.60 Drishti, $11.40 provider. Amounts are integer cents and the two shares sum to the gross. There is no 75/25 split and no App Store commission taken out of a live session.
 
