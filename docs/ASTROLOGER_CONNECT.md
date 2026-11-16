@@ -24,7 +24,7 @@ The iOS shell does not load that production site. GitHub Actions writes the repo
 | `STRIPE_SECRET_KEY` | unset | PaymentIntents, subscriptions, Connect, and the customer portal. |
 | `STRIPE_WEBHOOK_SECRET` | unset | Signs `POST /api/connect/stripe/webhook`. The endpoint in Stripe must include `payment_intent.succeeded`. |
 | `STRIPE_PUBLISHABLE_KEY` | unset | Wallet top-up in the browser, including Apple Pay. |
-| `APP_PUBLIC_URL` | unset | Success and return URLs for Checkout, the portal, and Connect. |
+| `APP_PUBLIC_URL` | unset | Success and return URLs for Checkout, the portal, and Connect. Wallet 3DS returns to `{APP_PUBLIC_URL}/#wallet`. |
 | `CRON_SECRET` | unset | `Authorization: Bearer` for the Monday payout cron. |
 | `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` | unset | Voice rooms. Tokens are minted only after a hold and an accepted call. |
 

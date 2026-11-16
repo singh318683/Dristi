@@ -72,7 +72,7 @@ def create_payment_intent(secret: str, amount_cents: int, metadata: dict, idempo
     flat = {
         "amount": str(int(amount_cents)),
         "currency": "usd",
-        "automatic_payment_methods[enabled]": "true",
+        "payment_method_types[]": "card",
     }
     for key, value in metadata.items():
         flat[f"metadata[{key}]"] = str(value)

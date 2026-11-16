@@ -185,6 +185,63 @@
     const pay = document.getElementById('stripePayBtn');
     if (pay) pay.remove();
   }
+  function payLog(step, err) {
+    console.error('pay:' + step, err);
+  }
+  function withTimeout(promise, ms, step) {
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        const err = new Error('timeout');
+        err.code = 'timeout';
+        err.step = step;
+        payLog(step, err);
+        reject(err);
+      }, ms);
+      Promise.resolve(promise).then(value => {
+        clearTimeout(timer);
+        resolve(value);
+      }, err => {
+        clearTimeout(timer);
+        if (err) err.step = err.step || step;
+        payLog(step, err);
+        reject(err);
+      });
+    });
+  }
+  function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+  async function waitForBalance(startCents, signal) {
+    const deadline = Date.now() + 60000;
+    while (Date.now() < deadline) {
+      await sleep(3000);
+      if (signal.done) return false;
+      try {
+        const view = await api('/api/connect/wallet?device=' + encodeURIComponent(DEVICE));
+        if ((Number(view.balance_cents) || 0) > startCents) return true;
+      } catch (err) {
+        payLog('wallet-poll', err);
+      }
+    }
+    return false;
+  }
+  function slowPayError() {
+    return new Error(tr(
+      'Payment is taking longer than usual. If your card was charged, your balance will update shortly.',
+      'भुगतान में सामान्य से अधिक समय लग रहा है। अगर कार्ड से पैसे कट गए, तो बैलेंस जल्दी अपडेट हो जाएगा।'
+    ));
+  }
+  function showPayBusy(pay) {
+    pay.disabled = true;
+    pay.setAttribute('aria-busy', 'true');
+    pay.innerHTML = '<span class="pay-spin" aria-hidden="true"></span>' + tr('Processing…', 'प्रक्रिया जारी…');
+  }
+  function clearPayBusy(pay) {
+    if (!pay || !pay.isConnected) return;
+    pay.disabled = false;
+    pay.removeAttribute('aria-busy');
+    pay.textContent = tr('Pay', 'भुगतान');
+  }
   function setPacksDisabled(disabled) {
     document.querySelectorAll('#sheet [data-pack], #connectStart').forEach(b => { b.disabled = !!disabled; });
   }
@@ -211,19 +268,51 @@
       box.id = 'stripePay';
       const host = document.querySelector('#sheet .sheet');
       host.appendChild(box);
-      elements.create('payment').mount('#stripePay');
+      elements.create('payment', {wallets: {applePay: 'never', googlePay: 'never'}}).mount('#stripePay');
       const pay = document.createElement('button');
       pay.type = 'button';
       pay.id = 'stripePayBtn';
       pay.className = 'btn block';
       pay.textContent = tr('Pay', 'भुगतान');
       host.appendChild(pay);
+      const returnUrl = intent.return_url || (location.origin + '/#wallet');
       await new Promise((resolve, reject) => {
         pay.onclick = async () => {
           if (pay.disabled) return;
-          pay.disabled = true;
+          showPayBusy(pay);
+          const signal = {done: false};
+          let settled = false;
+          const finish = (err, value) => {
+            if (settled) return;
+            settled = true;
+            signal.done = true;
+            if (err) {
+              clearPayBusy(pay);
+              setPacksDisabled(false);
+              reject(err);
+            } else resolve(value);
+          };
+          let startCents = 0;
           try {
-            const result = await stripe.confirmPayment({elements: elements, redirect: 'if_required'});
+            const startView = await api('/api/connect/wallet?device=' + encodeURIComponent(DEVICE));
+            startCents = Number(startView.balance_cents) || 0;
+          } catch (err) {
+            payLog('wallet-before', err);
+          }
+          const poll = waitForBalance(startCents, signal).then(ok => {
+            if (ok) finish(null, {credited: true});
+            return ok;
+          }).catch(err => {
+            payLog('wallet-poll', err);
+            return false;
+          });
+          try {
+            const result = await withTimeout(stripe.confirmPayment({
+              elements: elements,
+              redirect: 'if_required',
+              confirmParams: {return_url: returnUrl},
+            }), 30000, 'confirmPayment');
+            if (settled) return;
             if (result.error) throw new Error(result.error.message);
             const pi = result.paymentIntent || {};
             if (!pi.id || (pi.status && pi.status !== 'succeeded')) {
@@ -231,11 +320,19 @@
               err.code = 'payment_pending';
               throw err;
             }
-            await api('/api/connect/wallet/confirm', {device: DEVICE, payment_intent: pi.id});
-            resolve(result);
+            await withTimeout(api('/api/connect/wallet/confirm', {device: DEVICE, payment_intent: pi.id}), 30000, 'wallet-confirm');
+            finish(null, result);
           } catch (err) {
-            pay.disabled = false;
-            reject(err);
+            if (settled) return;
+            const step = (err && err.step) || 'confirmPayment';
+            payLog(step, err);
+            if (err && err.code === 'timeout') {
+              const ok = await poll;
+              if (ok) { finish(null, {credited: true}); return; }
+              finish(slowPayError());
+              return;
+            }
+            finish(err);
           }
         };
       });

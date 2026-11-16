@@ -299,7 +299,14 @@ def api_intent(body: IntentIn):
         "product_id": body.product_id,
         "purpose": "wallet",
     }, "pi-" + nonce)
-    return {"id": intent.get("id") or "", "client_secret": intent.get("client_secret"), "product_id": body.product_id, "amount_cents": cents}
+    public = (os.environ.get("APP_PUBLIC_URL") or "").strip().rstrip("/")
+    return {
+        "id": intent.get("id") or "",
+        "client_secret": intent.get("client_secret"),
+        "product_id": body.product_id,
+        "amount_cents": cents,
+        "return_url": (public + "/#wallet") if public else "",
+    }
 
 
 @router.post("/api/connect/wallet/confirm")

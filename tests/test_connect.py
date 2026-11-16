@@ -219,6 +219,25 @@ def test_stripe_webhook_credits_once(client, monkeypatch):
     assert bad.status_code == 400
 
 
+def test_wallet_intent_is_card_only(client, monkeypatch):
+    monkeypatch.setenv("STRIPE_SECRET_KEY", "sk_test")
+    monkeypatch.setenv("APP_PUBLIC_URL", "https://drishti-ios.vercel.app/")
+    captured = {}
+
+    def fake(secret, path, data, idempotency_key=None):
+        captured["path"] = path
+        captured["data"] = dict(data)
+        return {"id": "pi_card", "client_secret": "sec_card"}
+
+    monkeypatch.setattr(connect_stripe, "_form", fake)
+    res = client.post("/api/connect/wallet/intent", json={"device": "phone", "product_id": "wallet_5", "idempotency_key": "once"})
+    assert res.status_code == 200
+    assert res.json()["return_url"] == "https://drishti-ios.vercel.app/#wallet"
+    assert captured["path"] == "payment_intents"
+    assert captured["data"]["payment_method_types[]"] == "card"
+    assert "automatic_payment_methods[enabled]" not in captured["data"]
+
+
 def test_wallet_confirm_shares_the_webhook_id(client, monkeypatch):
     monkeypatch.setenv("STRIPE_SECRET_KEY", "sk_test")
     monkeypatch.setenv("STRIPE_WEBHOOK_SECRET", "whsec_test")

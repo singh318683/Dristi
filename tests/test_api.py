@@ -141,7 +141,7 @@ def test_background_music_is_one_synthesized_drone():
     assert "drishtiUnlockAudio" in html
     assert ".mp3" not in html and ".ogg" not in html and ".m4a" not in html
     assert "Web Audio" in credits and "no third-party music license" in credits
-    assert "drishti-v27" in open(os.path.join(root, "web", "sw.js"), encoding="utf-8").read()
+    assert "drishti-v28" in open(os.path.join(root, "web", "sw.js"), encoding="utf-8").read()
 
 
 def test_home_asks_for_the_device_date():
@@ -168,7 +168,7 @@ def test_home_periods_card_and_local_clock():
     assert "Good evening" in greet and "clock.getHours() < 5" in greet
     assert "function glanceTitle" in html and "function horoGlanceSentence" in html
     assert "glanceHoroLine" not in html
-    assert "drishti-v27" in open(os.path.join(os.path.dirname(__file__), "..", "web", "sw.js"), encoding="utf-8").read()
+    assert "drishti-v28" in open(os.path.join(os.path.dirname(__file__), "..", "web", "sw.js"), encoding="utf-8").read()
 
 
 def test_profile_screen_drops_invite_and_sign_in():
@@ -229,7 +229,7 @@ def test_owned_play_question_is_sent_again_instead_of_bought():
     assert "buyPlayQuestion" in ask and "buyFreshPlayQuestion" in ask
     assert "payment_invalid" in ask and "keepPlayToken(purchaseToken)" in ask
     assert "response.complete('success')" in html
-    assert "drishti-v27" in open(os.path.join(root, "web", "sw.js"), encoding="utf-8").read()
+    assert "drishti-v28" in open(os.path.join(root, "web", "sw.js"), encoding="utf-8").read()
 
 
 def test_answer_opens_in_a_reading_sheet():
@@ -243,7 +243,7 @@ def test_answer_opens_in_a_reading_sheet():
     assert "openAnswerSheet(aiEl, true)" in ask
     assert "openAnswerSheet(painted, true)" in ask
     assert "id=\"askSend\"" in html and "priceLabel()" in html
-    assert "drishti-v27" in open(os.path.join(os.path.dirname(__file__), "..", "web", "sw.js"), encoding="utf-8").read()
+    assert "drishti-v28" in open(os.path.join(os.path.dirname(__file__), "..", "web", "sw.js"), encoding="utf-8").read()
 
 
 def test_rate_prompt_is_quiet_and_remembers_a_dismissal():
@@ -263,7 +263,7 @@ def test_rate_prompt_is_quiet_and_remembers_a_dismissal():
     assert "closeSheet({skipRate: true})" in ask
     closed = html.split("function closeSheet", 1)[1].split("function bindSheetSwipe", 1)[0]
     assert "answer-read" in closed and "v.read = true" in closed
-    assert "drishti-v27" in open(os.path.join(os.path.dirname(__file__), "..", "web", "sw.js"), encoding="utf-8").read()
+    assert "drishti-v28" in open(os.path.join(os.path.dirname(__file__), "..", "web", "sw.js"), encoding="utf-8").read()
     assert "Rate on the App Store" in rate and "App Store पर रेट करें" in rate
     assert "apps.apple.com" in rate and "if (inIosApp())" in rate
 
@@ -372,6 +372,30 @@ def test_live_astrologer_entries_are_visible_when_the_flag_is_on():
     assert "New request" in connect and "नया अनुरोध" in connect
     assert "seenIncoming" in connect and "incoming-banner" in connect
     assert "payment_intent.succeeded" in open(os.path.join(root, "docs", "ASTROLOGER_CONNECT.md"), encoding="utf-8").read()
+    assert "Processing…" in connect and "प्रक्रिया जारी…" in connect
+    assert "applePay: 'never'" in connect and "googlePay: 'never'" in connect
+    assert "confirmParams: {return_url: returnUrl}" in connect
+    assert "30000, 'confirmPayment'" in connect and "30000, 'wallet-confirm'" in connect
+    assert "Payment is taking longer than usual." in connect
+    assert "function withTimeout" in connect and "function waitForBalance" in connect
+    script = r"""
+const fs = require('fs');
+const src = fs.readFileSync(process.argv[1], 'utf8');
+const start = src.indexOf('function withTimeout');
+const end = src.indexOf('function sleep');
+function payLog() {}
+eval(src.slice(start, end));
+let timed = null;
+withTimeout(new Promise(() => {}), 40, 'confirmPayment').catch(err => { timed = err; });
+setTimeout(() => {
+  if (!timed || timed.code !== 'timeout' || timed.step !== 'confirmPayment') process.exit(2);
+  withTimeout(Promise.resolve('ok'), 200, 'wallet-confirm').then(value => {
+    if (value !== 'ok') process.exit(3);
+  }).catch(() => process.exit(4));
+}, 80);
+"""
+    ran = subprocess.run(["node", "-e", script, os.path.join(root, "web", "connect.js")], capture_output=True, text=True)
+    assert ran.returncode == 0, ran.stderr or ran.stdout
 
 
 def test_signup_rate_accepts_a_dollar_sign_and_errors_stay_readable():
@@ -440,7 +464,7 @@ def test_planet_detail_opens_in_a_sheet():
     assert "max-height:58px" not in html
     assert "body.app-fit .info .m{display:-webkit-box" not in html
     assert "if (o) openReading(o, src)" in html
-    assert "drishti-v27" in open(os.path.join(root, "web", "sw.js"), encoding="utf-8").read()
+    assert "drishti-v28" in open(os.path.join(root, "web", "sw.js"), encoding="utf-8").read()
 
 
 def test_panchang_and_pdf_endpoints(client):
