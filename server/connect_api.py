@@ -78,13 +78,16 @@ def _admin(request: Request) -> None:
         raise HTTPException(401, "unauthorized")
 
 
-def _astro_id(request: Request) -> str:
+def _astro_id(request: Request, *, allow_password_change: bool = False) -> str:
     header = request.headers.get("authorization") or ""
     bearer = header[7:].strip() if header.lower().startswith("bearer ") else ""
     try:
-        return store.astro_from_token(bearer)
+        astro_id = store.astro_from_token(bearer)
     except store.ConnectError as e:
         raise HTTPException(e.status, e.code) from e
+    if not allow_password_change and store.password_must_change(astro_id):
+        raise HTTPException(409, "must_change")
+    return astro_id
 
 
 def _run(fn):
@@ -111,6 +114,11 @@ class ApplyIn(BaseModel):
 class LoginIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
     email: str
+    password: str
+
+
+class PasswordIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     password: str
 
 
@@ -208,6 +216,13 @@ def api_apply(body: ApplyIn):
 def api_login(body: LoginIn):
     _gate()
     return _run(lambda: store.astro_login(body.email, body.password))
+
+
+@router.post("/api/connect/astro/password")
+def api_password(body: PasswordIn, request: Request):
+    _gate()
+    astro_id = _astro_id(request, allow_password_change=True)
+    return _run(lambda: store.change_astro_password(astro_id, body.password))
 
 
 @router.post("/api/connect/astro/online")
@@ -482,6 +497,12 @@ def api_admin_list(request: Request):
 def api_admin_decide(astrologer_id: str, body: DecideIn, request: Request):
     _admin(request)
     return _run(lambda: store.admin_decide(astrologer_id, body.action))
+
+
+@router.post("/api/connect/admin/astrologers/{astrologer_id}/reset-password")
+def api_admin_reset(astrologer_id: str, request: Request):
+    _admin(request)
+    return _run(lambda: store.reset_astro_password(astrologer_id))
 
 
 @router.post("/api/connect/astro/trial")

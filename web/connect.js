@@ -417,21 +417,30 @@
     const body = portalRoot(tr('Astrologer', 'ज्योतिषी'));
     const token = sessionStorage.getItem('dr-astro-token') || '';
     if (!on()) { body.innerHTML = `<p>${tr('This is not switched on yet.', 'यह अभी चालू नहीं है।')}</p>`; return; }
+    if (token && sessionStorage.getItem('dr-astro-must-change') === '1') {
+      showPasswordChange(body, token);
+      return;
+    }
     if (!token) {
       body.innerHTML = registerForm();
       $('#showLogin').onclick = () => {
         body.innerHTML = `<form class="card" id="astroLogin"><h3>${tr('Sign in', 'साइन इन')}</h3>
           <input class="input" id="astroEmail" type="email" autocomplete="username" aria-label="${tr('Email', 'ईमेल')}">
           <input class="input" id="astroPass" type="password" autocomplete="current-password" aria-label="${tr('Password', 'पासवर्ड')}">
-          <button class="btn block" type="submit">${tr('Sign in', 'साइन इन')}</button></form>`;
+          <button class="btn block" type="submit">${tr('Sign in', 'साइन इन')}</button>
+          <button class="btn quiet" type="button" id="forgotPass">${tr('Forgot password?', 'पासवर्ड भूल गए?')}</button>
+          <p class="sub" id="forgotNote" hidden>${tr('Contact Drishti support to reset your password.', 'पासवर्ड रीसेट करने के लिए दृष्टि सहायता से संपर्क करें।')} <a href="mailto:ikshanasolution123@gmail.com">ikshanasolution123@gmail.com</a></p></form>`;
+        // TODO: when SMTP_HOST, SMTP_USER, and SMTP_PASSWORD are set, email a one-time reset link instead of asking the astrologer to contact support.
         $('#astroLogin').onsubmit = async e => {
           e.preventDefault();
           try {
             const got = await api('/api/connect/astro/login', {email: $('#astroEmail').value, password: $('#astroPass').value});
-            sessionStorage.setItem('dr-astro-token', got.token);
+            rememberAstro(got);
             render();
-          } catch (err) { showErr(err); }
+          } catch (err) { showSignInErr(err); }
         };
+        const forgot = $('#forgotPass');
+        if (forgot) forgot.onclick = () => { const note = $('#forgotNote'); if (note) note.hidden = false; };
       };
       $('#astroRegister').onsubmit = async e => {
         e.preventDefault();
@@ -450,7 +459,7 @@
             rate_cents: Math.round(dollars * 100),
           });
           const got = await api('/api/connect/astro/login', {email: $('#regEmail').value, password: $('#regPass').value});
-          sessionStorage.setItem('dr-astro-token', got.token);
+          rememberAstro(got);
           render();
         } catch (err) { showErr(err); }
       };
@@ -461,7 +470,17 @@
     try {
       incoming = await api('/api/connect/astro/incoming', null, token);
       money = await api('/api/connect/astro/earnings', null, token);
-    } catch (e) { sessionStorage.removeItem('dr-astro-token'); render(); return; }
+    } catch (e) {
+      if (e && e.code === 'must_change') {
+        sessionStorage.setItem('dr-astro-must-change', '1');
+        render();
+        return;
+      }
+      sessionStorage.removeItem('dr-astro-token');
+      sessionStorage.removeItem('dr-astro-must-change');
+      render();
+      return;
+    }
     const plans = planCards();
     const needsPlan = !money.plan_status || money.plan_status === 'none' || money.plan_status === 'canceled';
     const rows = (incoming.sessions || []).map(s => `<div class="card"><b>${esc(s.mode)} · ${esc(s.status)}</b><p>${esc(s.question || '')}</p>
@@ -527,7 +546,18 @@
       <button type="button" class="btn" data-act="approve">${tr('Approve', 'स्वीकार')}</button>
       <button type="button" class="btn quiet" data-act="suspend">${tr('Suspend', 'रोकें')}</button>
       <button type="button" class="btn quiet" data-act="remove">${tr('Remove', 'हटाएँ')}</button>
+      <button type="button" class="btn quiet" data-reset="${esc(a.id)}">${tr('Reset password', 'पासवर्ड रीसेट')}</button>
     </div>`).join('') || `<p>${tr('No applications.', 'कोई आवेदन नहीं।')}</p>`;
+    document.querySelectorAll('#portalBody [data-reset]').forEach(b => b.onclick = async () => {
+      const card = b.closest('[data-id]');
+      try {
+        const got = await api('/api/connect/admin/astrologers/' + b.dataset.reset + '/reset-password', {}, token);
+        const note = document.createElement('p');
+        note.className = 'sub';
+        note.textContent = tr('Temporary password, shown once: ', 'अस्थायी पासवर्ड, एक बार दिखेगा: ') + (got.temporary_password || '');
+        card.appendChild(note);
+      } catch (err) { showErr(err); }
+    });
     document.querySelectorAll('#portalBody [data-act]').forEach(b => b.onclick = async () => {
       const card = b.closest('[data-id]');
       try {
@@ -535,6 +565,37 @@
         render();
       } catch (err) { showErr(err); }
     });
+  }
+  function rememberAstro(got) {
+    sessionStorage.setItem('dr-astro-token', got.token);
+    if (got.must_change) sessionStorage.setItem('dr-astro-must-change', '1');
+    else sessionStorage.removeItem('dr-astro-must-change');
+  }
+  function showSignInErr(err) {
+    if (err && (err.code === 'unauthorized' || err.message === 'unauthorized')) {
+      showErr(new Error(tr('Email or password is incorrect', 'ईमेल या पासवर्ड गलत है')));
+      return;
+    }
+    showErr(err);
+  }
+  function showPasswordChange(body, token) {
+    body.innerHTML = `<form class="card" id="changePass"><h3>${tr('Set a new password', 'नया पासवर्ड रखें')}</h3>
+      <p class="sub">${tr('Choose at least 8 characters before using the portal.', 'पोर्टल इस्तेमाल करने से पहले कम से कम 8 अक्षर चुनें।')}</p>
+      <input class="input" id="newPass" type="password" autocomplete="new-password" aria-label="${tr('New password', 'नया पासवर्ड')}">
+      <button class="btn block" type="submit">${tr('Save password', 'पासवर्ड सहेजें')}</button></form>`;
+    $('#changePass').onsubmit = async e => {
+      e.preventDefault();
+      const password = $('#newPass').value || '';
+      if (password.length < 8) {
+        showErr(new Error(tr('Use at least 8 characters.', 'कम से कम 8 अक्षर लिखें।')));
+        return;
+      }
+      try {
+        await api('/api/connect/astro/password', {password: password}, token);
+        sessionStorage.removeItem('dr-astro-must-change');
+        render();
+      } catch (err) { showErr(err); }
+    };
   }
   function takeover() {
     if (location.hash !== '#astro' && location.hash !== '#admin') return false;

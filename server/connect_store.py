@@ -64,6 +64,7 @@ def ensure(con) -> None:
             stripe_customer text,
             stripe_subscription text,
             trial_used int not null default 0,
+            must_change int not null default 0,
             created text not null)""",
         """create table if not exists ac_astro_token(
             token text primary key,
@@ -151,9 +152,19 @@ def ensure(con) -> None:
     ]
     for stmt in statements:
         con.execute(stmt)
+    _add_column(con, "ac_astrologer", "must_change", "must_change int not null default 0")
     con.execute("create unique index if not exists ac_session_idem on ac_session(device, idem_key)")
     con.execute("create index if not exists ac_message_session on ac_message(session_id, id)")
     con.execute("create index if not exists ac_ledger_tx on ac_ledger(tx_id)")
+
+
+def _add_column(con, table: str, column: str, ddl: str) -> None:
+    if con.dialect == "sqlite":
+        cols = [r[1] for r in con.execute(f"pragma table_info({table})").fetchall()]
+        if column not in cols:
+            con.execute(f"alter table {table} add column {ddl}")
+    else:
+        con.execute(f"alter table {table} add column if not exists {ddl}")
 
 
 def _lock_wallet(con, device: str) -> tuple[int, int]:
@@ -297,12 +308,12 @@ def astro_login(email: str, password: str) -> dict:
     email = (email or "").strip().lower()
     with db.connect() as con:
         ensure(con)
-        row = con.execute("select id, password_hash, name, status from ac_astrologer where email=?", (email,)).fetchone()
+        row = con.execute("select id, password_hash, name, status, must_change from ac_astrologer where email=?", (email,)).fetchone()
         if not row or not check_password(password or "", row[1]):
             raise ConnectError("unauthorized", 401)
         token = secrets.token_urlsafe(32)
         con.execute("insert into ac_astro_token(token, astrologer_id, created) values(?,?,?)", (token, row[0], _iso()))
-    return {"token": token, "astrologer_id": row[0], "name": row[2], "status": row[3]}
+    return {"token": token, "astrologer_id": row[0], "name": row[2], "status": row[3], "must_change": bool(row[4])}
 
 
 def astro_from_token(token: str) -> str:
@@ -315,6 +326,49 @@ def astro_from_token(token: str) -> str:
     if not row:
         raise ConnectError("unauthorized", 401)
     return row[0]
+
+
+def password_must_change(astrologer_id: str) -> bool:
+    with db.connect() as con:
+        ensure(con)
+        row = con.execute("select must_change from ac_astrologer where id=?", (astrologer_id,)).fetchone()
+    return bool(row and row[0])
+
+
+def _temporary_password() -> str:
+    while True:
+        value = secrets.token_urlsafe(9)
+        if len(value) >= 8:
+            return value
+
+
+def reset_astro_password(astrologer_id: str) -> dict:
+    temporary = _temporary_password()
+    with db.connect() as con:
+        ensure(con)
+        row = con.execute("select id from ac_astrologer where id=?", (astrologer_id,)).fetchone()
+        if not row:
+            raise ConnectError("not_found", 404)
+        con.execute(
+            "update ac_astrologer set password_hash=?, must_change=1 where id=?",
+            (hash_password(temporary), astrologer_id))
+        con.execute("delete from ac_astro_token where astrologer_id=?", (astrologer_id,))
+    return {"id": astrologer_id, "temporary_password": temporary}
+
+
+def change_astro_password(astrologer_id: str, password: str) -> dict:
+    password = password or ""
+    if len(password) < 8:
+        raise ConnectError("bad_password", 400)
+    with db.connect() as con:
+        ensure(con)
+        row = con.execute("select id from ac_astrologer where id=?", (astrologer_id,)).fetchone()
+        if not row:
+            raise ConnectError("not_found", 404)
+        con.execute(
+            "update ac_astrologer set password_hash=?, must_change=0 where id=?",
+            (hash_password(password), astrologer_id))
+    return {"ok": True}
 
 
 def _plan_live(status: str, trial_ends: str | None, period_end: str | None, grace_until: str | None, moment: datetime | None = None) -> bool:

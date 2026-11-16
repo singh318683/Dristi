@@ -11,7 +11,7 @@ The iOS shell does not load that production site. GitHub Actions writes the repo
 | `ASTROLOGER_CONNECT_ENABLED` | off | `1` shows registration, the connect sheet, and the API. |
 | `DATABASE_URL` | unset | Postgres. Neon: the **pooled** URL (host contains `-pooler`). Without it the flag cannot open a wallet and the rest of the app keeps working. |
 | `ASTROLOGER_CONNECT_ALLOW_SQLITE` | off | Tests only. Do not set this on Vercel. |
-| `ADMIN_TOKEN` | unset | Bearer token for `/#admin`. Approve, suspend, or remove a provider. The admin does not set the rate. |
+| `ADMIN_TOKEN` | unset | Bearer token for `/#admin`. Approve, suspend, remove, or reset a password. A reset shows a temporary password once. The admin does not set the rate. |
 | `ASTRO_RATE_MIN` | `0.30` | Lowest per-minute rate. A decimal is dollars. A whole number is cents (`30`). |
 | `ASTRO_RATE_MAX` | `5.00` | Highest per-minute rate. Same parsing. Default ceiling is $5.00 (`500` cents). |
 | `PLATFORM_COMMISSION_RATE` | `0.05` | Drishti's share of each session's gross. The provider keeps the rest (95%). |

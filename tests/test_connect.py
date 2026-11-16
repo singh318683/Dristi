@@ -10,6 +10,7 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "server"))
 import app  # noqa: E402
+import db  # noqa: E402
 import connect_livekit  # noqa: E402
 import connect_money as money  # noqa: E402
 import connect_store as store  # noqa: E402
@@ -338,6 +339,60 @@ def test_free_trial_has_no_billing_account(client):
     plan = open(os.path.join(os.path.dirname(__file__), "..", "server", "connect_api.py"), encoding="utf-8").read()
     body = plan.split("def api_plan", 1)[1].split("def api_portal", 1)[0]
     assert 'trial = 0 if info["trial_used"]' in body
+
+
+def test_admin_reset_password_is_shown_once_and_must_be_changed(client):
+    created = client.post("/api/connect/apply", json={
+        "email": "reset@example.com", "password": "correct-horse", "name": "Reset Ji",
+        "specialties": ["career"], "languages": ["Hindi"], "years": 6, "bio": "Needs a reset.", "rate_cents": 100,
+    })
+    assert created.status_code == 200
+    astro_id = created.json()["id"]
+    first = client.post("/api/connect/astro/login", json={"email": "reset@example.com", "password": "correct-horse"}).json()
+    assert first["must_change"] is False
+    old = auth(first["token"])
+    assert client.get("/api/connect/astro/earnings", headers=old).status_code == 200
+    admin = auth("admin-test-token")
+    listed = client.get("/api/connect/admin/astrologers", headers=admin).json()["astrologers"]
+    assert any(a["id"] == astro_id and a["email"] == "reset@example.com" for a in listed)
+    reset = client.post("/api/connect/admin/astrologers/" + astro_id + "/reset-password", headers=admin)
+    assert reset.status_code == 200
+    temporary = reset.json()["temporary_password"]
+    assert len(temporary) >= 8
+    with db.connect() as con:
+        stored = con.execute("select password_hash, must_change from ac_astrologer where id=?", (astro_id,)).fetchone()
+    assert temporary not in stored[0] and stored[1] == 1
+    assert client.get("/api/connect/astro/earnings", headers=old).status_code == 401
+    assert client.post("/api/connect/astro/login", json={"email": "reset@example.com", "password": "correct-horse"}).status_code == 401
+    second = client.post("/api/connect/astro/login", json={"email": "reset@example.com", "password": temporary}).json()
+    assert second["must_change"] is True
+    fresh = auth(second["token"])
+    blocked = client.get("/api/connect/astro/earnings", headers=fresh)
+    assert blocked.status_code == 409 and blocked.json()["detail"] == "must_change"
+    short = client.post("/api/connect/astro/password", headers=fresh, json={"password": "short"})
+    assert short.status_code == 400
+    changed = client.post("/api/connect/astro/password", headers=fresh, json={"password": "new-secret"})
+    assert changed.status_code == 200
+    assert client.post("/api/connect/astro/login", json={"email": "reset@example.com", "password": temporary}).status_code == 401
+    again = client.post("/api/connect/astro/login", json={"email": "reset@example.com", "password": "new-secret"}).json()
+    assert again["must_change"] is False
+    assert client.get("/api/connect/astro/earnings", headers=auth(again["token"])).status_code == 200
+    gone = client.get("/api/connect/admin/astrologers", headers=admin).json()["astrologers"]
+    assert temporary not in str(gone)
+
+
+def test_must_change_column_is_added_to_an_older_table(tmp_path, monkeypatch):
+    monkeypatch.setenv("DRISHTI_DB", str(tmp_path / "old.db"))
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    import sqlite3
+    raw = sqlite3.connect(tmp_path / "old.db")
+    raw.execute("create table ac_astrologer(id text primary key, email text)")
+    raw.commit()
+    raw.close()
+    with db.connect() as con:
+        store.ensure(con)
+        cols = [r[1] for r in con.execute("pragma table_info(ac_astrologer)").fetchall()]
+    assert "must_change" in cols
 
 
 def test_stripe_signature_helper_rejects_a_stale_event():
