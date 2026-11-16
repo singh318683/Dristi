@@ -18,7 +18,9 @@
 <ul>
 <li><b>Chart calculation:</b> birth date, time, coordinates and time zone are sent to our server to compute the chart, matching and dashas. The server does not keep them after replying.</li>
 <li><b>City search:</b> the letters you type are sent to look up cities in our bundled city list (GeoNames). No GPS is used.</li>
-<li><b>Acharya questions:</b> a random device ID is stored with the Google Play order id for each paid question, so one purchase can answer only one question. The purchase token is kept only until Google Play accepts that the question was delivered, then it is deleted. We keep the order id and a one-way hash of the token. We never receive your card number, UPI id, or Google password.</li>
+<li data-store="play"><b>Acharya questions:</b> a random device ID is stored with the Google Play order id for each paid question, so one purchase can answer only one question. The purchase token is kept only until Google Play accepts that the question was delivered, then it is deleted. We keep the order id and a one-way hash of the token. We never receive your card number, UPI id, or Google password.</li>
+<li data-store="ios" hidden><b>Acharya questions:</b> a random device ID is stored with the App Store transaction id for each paid question, so one purchase can answer only one question. The signed transaction is kept only until Apple accepts that the question was delivered, then it is deleted. We keep the transaction id and a one-way hash. We never receive your card number or Apple ID password.</li>
+<li data-store="ios" data-lang="hi" hidden><b>आचार्य प्रश्न:</b> हर सशुल्क प्रश्न के साथ एक यादृच्छिक डिवाइस आईडी और App Store लेनदेन आईडी रखी जाती है, ताकि एक खरीदारी केवल एक प्रश्न का उत्तर दे। हस्ताक्षरित लेनदेन तभी तक रहता है जब तक Apple स्वीकार न कर ले कि प्रश्न दिया जा चुका है, फिर वह हट जाता है। हम लेनदेन आईडी और उसका एक-तरफ़ा हैश रखते हैं। हम आपका कार्ड नंबर या Apple ID पासवर्ड नहीं लेते।</li>
 </ul>
 
 <h2>AI answers</h2>
@@ -26,7 +28,10 @@
 <p class="note">AI answers are astrological guidance for reflection and entertainment. They are not medical, legal, financial or psychological advice. For those, please talk to a qualified professional.</p>
 
 <h2>Payments</h2>
-<p>Each question to Acharya costs <b>$0.99</b>, paid as a Google Play consumable (one purchase, one question). There is no free question and no credit pack. Google Play handles the payment. We never see or store your card details.</p>
+<p data-store="play">Each question to Acharya costs <b>$0.99</b>, paid as a Google Play consumable (one purchase, one question). There is no free question and no credit pack. Google Play handles the payment. We never see or store your card details.</p>
+<p data-store="play" data-lang="hi" hidden>आचार्य का हर प्रश्न <b>$0.99</b> का है, Google Play से (एक खरीदारी, एक प्रश्न)। कोई मुफ़्त प्रश्न नहीं और कोई क्रेडिट पैक नहीं। भुगतान Google Play करता है। हम आपका कार्ड विवरण नहीं देखते और नहीं रखते।</p>
+<p data-store="ios" hidden>Each question to Acharya costs <b>$0.99</b>, paid through the App Store (one purchase, one question). There is no free question and no credit pack. Apple handles the payment. We never see or store your card details.</p>
+<p data-store="ios" data-lang="hi" hidden>आचार्य का हर प्रश्न <b>$0.99</b> का है, App Store से (एक खरीदारी, एक प्रश्न)। कोई मुफ़्त प्रश्न नहीं और कोई क्रेडिट पैक नहीं। भुगतान Apple करता है। हम आपका कार्ड विवरण नहीं देखते और नहीं रखते।</p>
 <p>The birth chart, life periods, dosha, panchang, matching, daily horoscope and kundli PDF are free and do not require a purchase.</p>
 
 <h2>Analytics, ads and tracking</h2>
@@ -40,4 +45,25 @@
 
 <h2>Contact</h2>
 <p>Questions: <b>ikshanasolution123@gmail.com</b></p>
+<script>
+function inIosApp() {
+  try {
+    var cap = window.Capacitor;
+    if (!cap) return false;
+    var platform = typeof cap.getPlatform === 'function' ? cap.getPlatform() : (cap.platform || '');
+    return platform === 'ios';
+  } catch (e) {
+    return false;
+  }
+}
+var ios = inIosApp();
+var hi = false;
+try { hi = JSON.parse(localStorage.getItem('dr-lang') || '"en"') === 'hi'; } catch (e) { hi = false; }
+document.querySelectorAll('[data-store]').forEach(function (el) {
+  var storeOk = el.getAttribute('data-store') === (ios ? 'ios' : 'play');
+  var lang = el.getAttribute('data-lang');
+  var langOk = !lang || (lang === 'hi' ? hi : !hi);
+  el.hidden = !(storeOk && langOk);
+});
+</script>
 </body></html>

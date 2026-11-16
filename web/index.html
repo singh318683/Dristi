@@ -1385,6 +1385,19 @@ function artSVG() {
     <path d="M80 52l28 28-28 28-28-28z" fill="none" stroke="var(--accent)" stroke-width="1.6" opacity=".7"/>
     <circle cx="80" cy="80" r="6" fill="var(--primary)"/></svg>`;
 }
+function inIosApp() {
+  try {
+    const cap = window.Capacitor;
+    if (!cap) return false;
+    const platform = typeof cap.getPlatform === 'function' ? cap.getPlatform() : (cap.platform || '');
+    return platform === 'ios';
+  } catch (e) {
+    return false;
+  }
+}
+function storeLine(playEn, playHi, iosEn, iosHi) {
+  return inIosApp() ? tr(iosEn, iosHi) : tr(playEn, playHi);
+}
 function onboarding() {
   const o = S.onb || (S.onb = {step: 0, relation: 'Self', unknown: false});
   if (o.step === 0) return `<div class="onb">
@@ -1398,7 +1411,7 @@ function onboarding() {
       <li><span class="bi">${I.ask(22)}</span><div><b>${tr('Answers in plain words', 'सरल भाषा में उत्तर')}</b><span>${tr('Career, marriage, money and health, in English or Hindi', 'करियर, विवाह, धन, स्वास्थ्य, हिंदी या अंग्रेज़ी में')}</span></div></li>
       <li><span class="bi">${I.match(22)}</span><div><b>${tr('Compatibility and daily horoscope', 'कुंडली मिलान और दैनिक राशिफल')}</b><span>${tr('36-guna matching for the whole family', 'पूरे परिवार के लिए 36 गुण मिलान')}</span></div></li></ul>
     <div class="actions" style="flex-direction:column"><button class="btn block" id="go1">${tr('Get started', 'शुरू करें')}</button>
-      <p class="small muted" style="text-align:center;margin:6px 0 0">${tr('Each Acharya question is $0.99 on Google Play. The chart, matching and horoscope are free.', 'आचार्य का हर प्रश्न Google Play पर $0.99 है। कुंडली, मिलान और राशिफल मुफ़्त हैं।')}</p>
+      <p class="small muted" style="text-align:center;margin:6px 0 0">${storeLine('Each Acharya question is $0.99 on Google Play. The chart, matching and horoscope are free.', 'आचार्य का हर प्रश्न Google Play पर $0.99 है। कुंडली, मिलान और राशिफल मुफ़्त हैं।', 'Each Acharya question is $0.99 on the App Store. The chart, matching and horoscope are free.', 'आचार्य का हर प्रश्न App Store पर $0.99 है। कुंडली, मिलान और राशिफल मुफ़्त हैं।')}</p>
       <p class="small muted" style="text-align:center;margin:6px 0 0">${tr('3 quick steps. Your details stay on this phone.', '3 छोटे चरण। आपकी जानकारी इसी फ़ोन पर रहती है।')} <a href="privacy.html">${tr('Privacy', 'गोपनीयता')}</a></p></div></div>`;
   const head = n => `<div class="spread" style="min-height:44px"><span class="stepl">${tr(`Step ${n} of 3`, `चरण ${n} / 3`)} · ${[tr('About', 'परिचय'), tr('Birth date & time', 'जन्म तिथि और समय'), tr('Birth place', 'जन्म स्थान')][n - 1]}</span><span class="onb-tools">${musicBtnHtml()}${S.profiles.length ? `<button class="btn quiet" id="cancel">${tr('Cancel', 'रद्द करें')}</button>` : ''}</span></div><div class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="3" aria-valuenow="${n}"><i style="width:${n / 3 * 100}%"></i></div>`;
   if (o.step === 1) return `<div class="onb">${head(1)}
@@ -2628,14 +2641,14 @@ const priceLabel = () => (S.wallet && S.wallet.price_label) || (S.status && S.st
 const playProductId = () => (S.wallet && S.wallet.product_id) || (S.status && S.status.product_id) || 'acharya_question';
 const ERR = {
   ai_not_configured: () => [tr('The astrologer is not switched on yet', 'AI ज्योतिषी अभी चालू नहीं है'), tr('Answers will start once the app owner adds an AI key on the server. Your chart, life periods and matching already work. You were not charged.', 'सर्वर पर AI कुंजी जुड़ते ही उत्तर मिलने लगेंगे। कुंडली, दशा और मिलान अभी भी काम करते हैं। शुल्क नहीं लगा।')],
-  payment_required: () => [tr('This question is $0.99', 'यह प्रश्न $0.99 का है'), tr('Pay with Google Play to ask. There is no free question. Your chart and the other tools stay free, and this question was not answered.', 'पूछने के लिए Google Play से भुगतान करें। कोई मुफ़्त प्रश्न नहीं। कुंडली और बाकी उपकरण मुफ़्त हैं, और इस प्रश्न का उत्तर नहीं दिया गया।')],
-  payment_invalid: () => [tr('Google Play did not accept that purchase', 'Google Play ने यह खरीदारी स्वीकार नहीं की'), tr('The question was not answered. You can try the purchase again.', 'प्रश्न का उत्तर नहीं दिया गया। खरीदारी फिर से कोशिश कर सकते हैं।')],
+  payment_required: () => [tr('This question is $0.99', 'यह प्रश्न $0.99 का है'), storeLine('Pay with Google Play to ask. There is no free question. Your chart and the other tools stay free, and this question was not answered.', 'पूछने के लिए Google Play से भुगतान करें। कोई मुफ़्त प्रश्न नहीं। कुंडली और बाकी उपकरण मुफ़्त हैं, और इस प्रश्न का उत्तर नहीं दिया गया।', 'Pay with Apple to ask. There is no free question. Your chart and the other tools stay free, and this question was not answered.', 'पूछने के लिए Apple से भुगतान करें। कोई मुफ़्त प्रश्न नहीं। कुंडली और बाकी उपकरण मुफ़्त हैं, और इस प्रश्न का उत्तर नहीं दिया गया।')],
+  payment_invalid: () => [storeLine('Google Play did not accept that purchase', 'Google Play ने यह खरीदारी स्वीकार नहीं की', 'The App Store did not accept that purchase', 'App Store ने यह खरीदारी स्वीकार नहीं की'), tr('The question was not answered. You can try the purchase again.', 'प्रश्न का उत्तर नहीं दिया गया। खरीदारी फिर से कोशिश कर सकते हैं।')],
   payment_used: () => [tr('That purchase was already used', 'वह खरीदारी पहले ही इस्तेमाल हो चुकी है'), tr('Each question needs its own $0.99 purchase.', 'हर प्रश्न के लिए अलग $0.99 खरीदारी चाहिए।')],
-  payment_pending: () => [tr('Google Play is still processing the payment', 'Google Play अभी भुगतान पूरा कर रहा है'), tr('The question was not answered. Try again in a moment. You were not charged twice.', 'प्रश्न का उत्तर नहीं दिया गया। थोड़ी देर बाद कोशिश करें। दोबारा शुल्क नहीं लगा।')],
+  payment_pending: () => [storeLine('Google Play is still processing the payment', 'Google Play अभी भुगतान पूरा कर रहा है', 'Apple is still processing the payment', 'Apple अभी भुगतान पूरा कर रहा है'), tr('The question was not answered. Try again in a moment. You were not charged twice.', 'प्रश्न का उत्तर नहीं दिया गया। थोड़ी देर बाद कोशिश करें। दोबारा शुल्क नहीं लगा।')],
   payment_in_progress: () => [tr('That purchase is already in use', 'वह खरीदारी पहले से इस्तेमाल हो रही है'), tr('Wait a moment, then ask again. You were not charged again.', 'थोड़ी देर रुककर फिर पूछें। दोबारा शुल्क नहीं लगा।')],
-  billing_not_configured: () => [tr('Play Billing is not ready on the server', 'सर्वर पर Play Billing तैयार नहीं है'), tr('The question was not answered, and the purchase was not used. The chart and the other tools still work.', 'प्रश्न का उत्तर नहीं दिया गया, और खरीदारी इस्तेमाल नहीं हुई। कुंडली और बाकी उपकरण काम करते हैं।')],
-  billing_unavailable: () => [tr('Google Play could not be reached', 'Google Play तक नहीं पहुँच सके'), tr('The question was not answered. Try again with the same purchase.', 'प्रश्न का उत्तर नहीं दिया गया। उसी खरीदारी के साथ फिर कोशिश करें।')],
-  play_unavailable: () => [tr('Google Play is not available here', 'यहाँ Google Play उपलब्ध नहीं है'), tr('Each Acharya question is $0.99 inside the Android app. This browser cannot start a Play purchase. Your chart, periods, dosha, panchang, matching, horoscope and kundli PDF stay free.', 'आचार्य का हर प्रश्न Android ऐप में $0.99 है। यह ब्राउज़र Play खरीदारी शुरू नहीं कर सकता। कुंडली, दशा, दोष, पंचांग, मिलान, राशिफल और कुंडली PDF मुफ़्त हैं।')],
+  billing_not_configured: () => [storeLine('Play Billing is not ready on the server', 'सर्वर पर Play Billing तैयार नहीं है', 'App Store billing is not ready on the server', 'सर्वर पर App Store बिलिंग तैयार नहीं है'), tr('The question was not answered, and the purchase was not used. The chart and the other tools still work.', 'प्रश्न का उत्तर नहीं दिया गया, और खरीदारी इस्तेमाल नहीं हुई। कुंडली और बाकी उपकरण काम करते हैं।')],
+  billing_unavailable: () => [storeLine('Google Play could not be reached', 'Google Play तक नहीं पहुँच सके', 'The App Store could not be reached', 'App Store तक नहीं पहुँच सके'), tr('The question was not answered. Try again with the same purchase.', 'प्रश्न का उत्तर नहीं दिया गया। उसी खरीदारी के साथ फिर कोशिश करें।')],
+  play_unavailable: () => [storeLine('Google Play is not available here', 'यहाँ Google Play उपलब्ध नहीं है', 'The App Store is not available here', 'यहाँ App Store उपलब्ध नहीं है'), storeLine('Each Acharya question is $0.99 inside the Android app. This browser cannot start a Play purchase. Your chart, periods, dosha, panchang, matching, horoscope and kundli PDF stay free.', 'आचार्य का हर प्रश्न Android ऐप में $0.99 है। यह ब्राउज़र Play खरीदारी शुरू नहीं कर सकता। कुंडली, दशा, दोष, पंचांग, मिलान, राशिफल और कुंडली PDF मुफ़्त हैं।', 'Each Acharya question is $0.99 inside the iPhone app. This browser cannot start an App Store purchase. Your chart, periods, dosha, panchang, matching, horoscope and kundli PDF stay free.', 'आचार्य का हर प्रश्न iPhone ऐप में $0.99 है। यह ब्राउज़र App Store खरीदारी शुरू नहीं कर सकता। कुंडली, दशा, दोष, पंचांग, मिलान, राशिफल और कुंडली PDF मुफ़्त हैं।')],
   payment_cancelled: () => [tr('Purchase cancelled', 'खरीदारी रद्द'), tr('The question was not sent.', 'प्रश्न नहीं भेजा गया।')],
   network: () => [tr("Couldn't reach the astrologer", 'ज्योतिषी से संपर्क नहीं हो सका'), tr('Check your connection and try again. If you already paid, use that purchase again. You were not charged a second time.', 'कनेक्शन जाँचें और फिर कोशिश करें। अगर भुगतान हो चुका है, तो वही खरीदारी फिर इस्तेमाल करें। दूसरी बार शुल्क नहीं लगा।')],
   llm_error: () => [tr('Something went wrong', 'कुछ गड़बड़ हुई'), tr('If the answer never started, the same purchase can be used again.', 'अगर उत्तर शुरू नहीं हुआ, तो वही खरीदारी फिर इस्तेमाल हो सकती है।')],
@@ -2797,7 +2810,7 @@ function updateQuota() {
   if (send) send.textContent = `${tr('Ask', 'पूछें')} · ${priceLabel()}`;
 }
 function openPrice() {
-  openDetail(tr('Acharya questions', 'आचार्य प्रश्न'), `<p><b>$0.99</b> ${tr('each, through Google Play. One purchase, one question. There is no free question and no bundle.', 'प्रत्येक, Google Play से। एक खरीदारी, एक प्रश्न। कोई मुफ़्त प्रश्न नहीं और कोई पैक नहीं।')}</p><p class="small muted">${tr('The chart, life periods, dosha, panchang, matching, daily horoscope and kundli PDF stay free. If an answer fails before it starts, the same purchase can be used again.', 'कुंडली, दशा, दोष, पंचांग, मिलान, दैनिक राशिफल और कुंडली PDF मुफ़्त हैं। उत्तर शुरू होने से पहले असफल हो तो वही खरीदारी फिर इस्तेमाल हो सकती है।')}</p>`);
+  openDetail(tr('Acharya questions', 'आचार्य प्रश्न'), `<p><b>$0.99</b> ${storeLine('each, through Google Play. One purchase, one question. There is no free question and no bundle.', 'प्रत्येक, Google Play से। एक खरीदारी, एक प्रश्न। कोई मुफ़्त प्रश्न नहीं और कोई पैक नहीं।', 'each, through the App Store. One purchase, one question. There is no free question and no bundle.', 'प्रत्येक, App Store से। एक खरीदारी, एक प्रश्न। कोई मुफ़्त प्रश्न नहीं और कोई पैक नहीं।')}</p><p class="small muted">${tr('The chart, life periods, dosha, panchang, matching, daily horoscope and kundli PDF stay free. If an answer fails before it starts, the same purchase can be used again.', 'कुंडली, दशा, दोष, पंचांग, मिलान, दैनिक राशिफल और कुंडली PDF मुफ़्त हैं। उत्तर शुरू होने से पहले असफल हो तो वही खरीदारी फिर इस्तेमाल हो सकती है।')}</p>`);
 }
 const PLAY_BILLING = 'https://play.google.com/billing';
 function purchaseTokenOf(row) {
@@ -3153,7 +3166,7 @@ function pageMe() {
   $('#app').innerHTML = header() + `<main class="fit" id="me"><div><div class="h1">${tr('Profile', 'प्रोफ़ाइल')}</div><p class="sub">${tr('Acharya is an AI astrologer.', 'आचार्य एक AI ज्योतिषी हैं।')}</p></div>
     <button class="card link" id="personRow"><div class="minirow"><span class="avatar lg">${initial(cur.name)}</span><span class="grow"><b>${esc(cur.name)}</b><span class="small muted" style="display:block">${esc(relName(cur.relation))} · ${fmtDate(cur.date)} · ${esc(cur.place.name.split(',')[0])}</span></span>${I.chev()}</div></button>
     <section class="card"><div class="spread"><div><b id="credN">${esc(price)}</b> <span class="muted">${tr('per Acharya question', 'प्रति आचार्य प्रश्न')}</span></div></div>
-      <p class="small muted">${tr('Paid on Google Play, one question at a time. There is no free question and no credit pack. The chart, periods, dosha, panchang, matching, horoscope and kundli PDF stay free.', 'Google Play पर भुगतान, एक बार में एक प्रश्न। कोई मुफ़्त प्रश्न नहीं और कोई क्रेडिट पैक नहीं। कुंडली, दशा, दोष, पंचांग, मिलान, राशिफल और कुंडली PDF मुफ़्त हैं।')}</p></section>
+      <p class="small muted">${storeLine('Paid on Google Play, one question at a time. There is no free question and no credit pack. The chart, periods, dosha, panchang, matching, horoscope and kundli PDF stay free.', 'Google Play पर भुगतान, एक बार में एक प्रश्न। कोई मुफ़्त प्रश्न नहीं और कोई क्रेडिट पैक नहीं। कुंडली, दशा, दोष, पंचांग, मिलान, राशिफल और कुंडली PDF मुफ़्त हैं।', 'Paid on the App Store, one question at a time. There is no free question and no credit pack. The chart, periods, dosha, panchang, matching, horoscope and kundli PDF stay free.', 'App Store पर भुगतान, एक बार में एक प्रश्न। कोई मुफ़्त प्रश्न नहीं और कोई क्रेडिट पैक नहीं। कुंडली, दशा, दोष, पंचांग, मिलान, राशिफल और कुंडली PDF मुफ़्त हैं।')}</p></section>
     <section class="card" id="prefs"><div class="setrow"><span>${tr('Language', 'भाषा')}</span><div class="seg" id="setLang"><button data-v="en" aria-pressed="${!hi()}">EN</button><button data-v="hi" aria-pressed="${hi()}">हि</button></div></div>
       <div class="setrow"><span>${tr('Chart', 'कुंडली')}</span><div class="seg" id="setSty"><button data-v="north" aria-pressed="${S.style === 'north'}">${tr('North', 'उत्तर')}</button><button data-v="south" aria-pressed="${S.style === 'south'}">${tr('South', 'दक्षिण')}</button></div></div></section>
     <div class="chips wrap">${(S.status && S.status.astrologer_connect) ? `<button class="chip" id="astroJoin">${tr('Register as a live astrologer', 'लाइव ज्योतिषी बनें')}</button>` : ''}<button class="chip" id="aboutBtn">${tr('About', 'जानकारी')}</button><button class="chip" id="clr">${tr('Clear chat', 'चैट मिटाएँ')}</button></div></main>`;
@@ -3171,6 +3184,7 @@ function pageMe() {
 const PLAY_STORE_ID = 'com.ikshana.drishti';
 const PLAY_STORE_HTTPS = 'https://play.google.com/store/apps/details?id=' + PLAY_STORE_ID;
 const PLAY_STORE_MARKET = 'market://details?id=' + PLAY_STORE_ID;
+const APP_STORE_HTTPS = 'https://apps.apple.com/search?term=Drishti';
 function rateState() {
   const v = store.get('rate', {}) || {};
   const days = Array.isArray(v.days) ? v.days.filter(d => typeof d === 'string').slice(-14) : [];
@@ -3214,6 +3228,7 @@ function inPlayApp() {
   return Promise.resolve(window.getDigitalGoodsService(PLAY_BILLING)).then(s => !!s).catch(() => false);
 }
 async function openPlayListing() {
+  if (inIosApp()) { location.href = APP_STORE_HTTPS; return; }
   let inApp = false;
   try { inApp = await inPlayApp(); } catch (e) { inApp = false; }
   if (!inApp) {
@@ -3225,7 +3240,7 @@ async function openPlayListing() {
   setTimeout(() => { if (!document.hidden) location.href = PLAY_STORE_HTTPS; }, 1200);
 }
 function paintRate(el) {
-  el.innerHTML = `<h2 id="rateTitle">${tr('Enjoying Drishti?', 'दृष्टि पसंद आ रही है?')}</h2><p>${tr('A short review helps others find it.', 'एक छोटी समीक्षा औरों को इसे खोजने में मदद करती है।')}</p><div class="rate-acts"><button type="button" class="btn" id="rateYes">${tr('Rate on Google Play', 'Google Play पर रेट करें')}</button><button type="button" class="btn quiet" id="rateLater">${tr('Maybe later', 'बाद में')}</button></div>`;
+  el.innerHTML = `<h2 id="rateTitle">${tr('Enjoying Drishti?', 'दृष्टि पसंद आ रही है?')}</h2><p>${tr('A short review helps others find it.', 'एक छोटी समीक्षा औरों को इसे खोजने में मदद करती है।')}</p><div class="rate-acts"><button type="button" class="btn" id="rateYes">${storeLine('Rate on Google Play', 'Google Play पर रेट करें', 'Rate on the App Store', 'App Store पर रेट करें')}</button><button type="button" class="btn quiet" id="rateLater">${tr('Maybe later', 'बाद में')}</button></div>`;
   el.querySelector('#rateYes').onclick = async () => {
     const v = rateState();
     v.rated = true;

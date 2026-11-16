@@ -1,6 +1,7 @@
 """Wallet, referral credits, magic-link sign-in, panchang and kundli PDF endpoints."""
 import json
 import os
+import subprocess
 import sys
 from datetime import datetime, timedelta, timezone
 
@@ -140,7 +141,7 @@ def test_background_music_is_one_synthesized_drone():
     assert "drishtiUnlockAudio" in html
     assert ".mp3" not in html and ".ogg" not in html and ".m4a" not in html
     assert "Web Audio" in credits and "no third-party music license" in credits
-    assert "drishti-v20" in open(os.path.join(root, "web", "sw.js"), encoding="utf-8").read()
+    assert "drishti-v21" in open(os.path.join(root, "web", "sw.js"), encoding="utf-8").read()
 
 
 def test_home_asks_for_the_device_date():
@@ -167,7 +168,7 @@ def test_home_periods_card_and_local_clock():
     assert "Good evening" in greet and "clock.getHours() < 5" in greet
     assert "function glanceTitle" in html and "function horoGlanceSentence" in html
     assert "glanceHoroLine" not in html
-    assert "drishti-v20" in open(os.path.join(os.path.dirname(__file__), "..", "web", "sw.js"), encoding="utf-8").read()
+    assert "drishti-v21" in open(os.path.join(os.path.dirname(__file__), "..", "web", "sw.js"), encoding="utf-8").read()
 
 
 def test_profile_screen_drops_invite_and_sign_in():
@@ -228,7 +229,7 @@ def test_owned_play_question_is_sent_again_instead_of_bought():
     assert "buyPlayQuestion" in ask and "buyFreshPlayQuestion" in ask
     assert "payment_invalid" in ask and "keepPlayToken(purchaseToken)" in ask
     assert "response.complete('success')" in html
-    assert "drishti-v20" in open(os.path.join(root, "web", "sw.js"), encoding="utf-8").read()
+    assert "drishti-v21" in open(os.path.join(root, "web", "sw.js"), encoding="utf-8").read()
 
 
 def test_answer_opens_in_a_reading_sheet():
@@ -242,7 +243,7 @@ def test_answer_opens_in_a_reading_sheet():
     assert "openAnswerSheet(aiEl, true)" in ask
     assert "openAnswerSheet(painted, true)" in ask
     assert "id=\"askSend\"" in html and "priceLabel()" in html
-    assert "drishti-v20" in open(os.path.join(os.path.dirname(__file__), "..", "web", "sw.js"), encoding="utf-8").read()
+    assert "drishti-v21" in open(os.path.join(os.path.dirname(__file__), "..", "web", "sw.js"), encoding="utf-8").read()
 
 
 def test_rate_prompt_is_quiet_and_remembers_a_dismissal():
@@ -262,7 +263,73 @@ def test_rate_prompt_is_quiet_and_remembers_a_dismissal():
     assert "closeSheet({skipRate: true})" in ask
     closed = html.split("function closeSheet", 1)[1].split("function bindSheetSwipe", 1)[0]
     assert "answer-read" in closed and "v.read = true" in closed
-    assert "drishti-v20" in open(os.path.join(os.path.dirname(__file__), "..", "web", "sw.js"), encoding="utf-8").read()
+    assert "drishti-v21" in open(os.path.join(os.path.dirname(__file__), "..", "web", "sw.js"), encoding="utf-8").read()
+    assert "Rate on the App Store" in rate and "App Store पर रेट करें" in rate
+    assert "apps.apple.com" in rate and "if (inIosApp())" in rate
+
+
+def test_store_copy_follows_the_ios_shell():
+    root = os.path.join(os.path.dirname(__file__), "..")
+    html = open(os.path.join(root, "web", "index.html"), encoding="utf-8").read()
+    privacy = open(os.path.join(root, "web", "privacy.html"), encoding="utf-8").read()
+    helper = html.split("function inIosApp()", 1)[1].split("function onboarding()", 1)[0]
+    assert "getPlatform" in helper and "platform === 'ios'" in helper
+    assert "return inIosApp() ? tr(iosEn, iosHi) : tr(playEn, playHi);" in helper
+    pairs = [
+        ("Each Acharya question is $0.99 on Google Play.", "Each Acharya question is $0.99 on the App Store."),
+        ("आचार्य का हर प्रश्न Google Play पर $0.99 है।", "आचार्य का हर प्रश्न App Store पर $0.99 है।"),
+        ("Pay with Google Play to ask.", "Pay with Apple to ask."),
+        ("पूछने के लिए Google Play से भुगतान करें।", "पूछने के लिए Apple से भुगतान करें।"),
+        ("Google Play did not accept that purchase", "The App Store did not accept that purchase"),
+        ("Google Play ने यह खरीदारी स्वीकार नहीं की", "App Store ने यह खरीदारी स्वीकार नहीं की"),
+        ("Google Play is still processing the payment", "Apple is still processing the payment"),
+        ("Google Play अभी भुगतान पूरा कर रहा है", "Apple अभी भुगतान पूरा कर रहा है"),
+        ("Play Billing is not ready on the server", "App Store billing is not ready on the server"),
+        ("सर्वर पर Play Billing तैयार नहीं है", "सर्वर पर App Store बिलिंग तैयार नहीं है"),
+        ("Google Play could not be reached", "The App Store could not be reached"),
+        ("Google Play तक नहीं पहुँच सके", "App Store तक नहीं पहुँच सके"),
+        ("Google Play is not available here", "The App Store is not available here"),
+        ("यहाँ Google Play उपलब्ध नहीं है", "यहाँ App Store उपलब्ध नहीं है"),
+        ("inside the Android app", "inside the iPhone app"),
+        ("Android ऐप में $0.99 है", "iPhone ऐप में $0.99 है"),
+        ("each, through Google Play.", "each, through the App Store."),
+        ("प्रत्येक, Google Play से।", "प्रत्येक, App Store से।"),
+        ("Paid on Google Play, one question at a time.", "Paid on the App Store, one question at a time."),
+        ("Google Play पर भुगतान, एक बार में एक प्रश्न।", "App Store पर भुगतान, एक बार में एक प्रश्न।"),
+        ("Rate on Google Play", "Rate on the App Store"),
+        ("Google Play पर रेट करें", "App Store पर रेट करें"),
+    ]
+    for play, apple in pairs:
+        assert play in html and apple in html
+    assert "DrishtiPlay" in html and "getDigitalGoodsService" in html and "market://details?id=" in html
+    assert 'data-store="play"' in privacy and 'data-store="ios" hidden' in privacy
+    assert "Google Play handles the payment" in privacy and "Apple handles the payment" in privacy
+    assert "Apple ID password" in privacy
+    assert "आचार्य का हर प्रश्न" in privacy and "App Store से" in privacy and "भुगतान Apple करता है" in privacy
+    assert "platform === 'ios'" in privacy
+    script = r"""
+const fs = require('fs');
+const html = fs.readFileSync(process.argv[1], 'utf8');
+const src = html.split('function inIosApp()')[1].split('function onboarding()')[0];
+eval('function inIosApp()' + src);
+function tr(en, hi) { return global.lang === 'hi' ? hi : en; }
+function say() { return storeLine('on Google Play', 'Google Play पर', 'on the App Store', 'App Store पर'); }
+global.window = {};
+global.lang = 'en';
+if (say() !== 'on Google Play') process.exit(2);
+global.lang = 'hi';
+if (say() !== 'Google Play पर') process.exit(3);
+global.window = { Capacitor: { getPlatform() { return 'ios'; } } };
+global.lang = 'en';
+if (say() !== 'on the App Store') process.exit(4);
+global.lang = 'hi';
+if (say() !== 'App Store पर') process.exit(5);
+global.window = { Capacitor: { getPlatform() { return 'android'; } } };
+global.lang = 'en';
+if (say() !== 'on Google Play') process.exit(6);
+"""
+    ran = subprocess.run(["node", "-e", script, os.path.join(root, "web", "index.html")], capture_output=True, text=True)
+    assert ran.returncode == 0, ran.stderr or ran.stdout
 
 
 def test_planet_detail_opens_in_a_sheet():
@@ -275,7 +342,7 @@ def test_planet_detail_opens_in_a_sheet():
     assert "max-height:58px" not in html
     assert "body.app-fit .info .m{display:-webkit-box" not in html
     assert "if (o) openReading(o, src)" in html
-    assert "drishti-v20" in open(os.path.join(root, "web", "sw.js"), encoding="utf-8").read()
+    assert "drishti-v21" in open(os.path.join(root, "web", "sw.js"), encoding="utf-8").read()
 
 
 def test_panchang_and_pdf_endpoints(client):
