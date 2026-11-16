@@ -245,6 +245,13 @@ def api_incoming(request: Request):
     return {"sessions": _run(lambda: store.incoming(astro_id))}
 
 
+@router.get("/api/connect/astro/live")
+def api_astro_live(request: Request):
+    _gate()
+    astro_id = _astro_id(request)
+    return _run(lambda: store.astro_live(astro_id))
+
+
 @router.get("/api/connect/astro/earnings")
 def api_earnings(request: Request):
     _gate()

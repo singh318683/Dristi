@@ -15,6 +15,7 @@ import db
 import connect_money as money
 
 PBKDF2_ROUNDS = 50_000
+RING_WAIT_SECONDS = 120
 
 
 class ConnectError(Exception):
@@ -109,7 +110,8 @@ def ensure(con) -> None:
             started_at text,
             ended_at text,
             user_heartbeat text,
-            astro_heartbeat text)""",
+            astro_heartbeat text,
+            resume_online int not null default 0)""",
         f"""create table if not exists ac_message(
             {ident},
             session_id text not null,
@@ -153,6 +155,7 @@ def ensure(con) -> None:
     for stmt in statements:
         con.execute(stmt)
     _add_column(con, "ac_astrologer", "must_change", "must_change int not null default 0")
+    _add_column(con, "ac_session", "resume_online", "resume_online int not null default 0")
     con.execute("create unique index if not exists ac_session_idem on ac_session(device, idem_key)")
     con.execute("create index if not exists ac_message_session on ac_message(session_id, id)")
     con.execute("create index if not exists ac_ledger_tx on ac_ledger(tx_id)")
@@ -590,7 +593,10 @@ def session_view(session_id: str, con=None) -> dict:
             elapsed = 0
             if item.get("started_at") and item.get("ended_at"):
                 elapsed = max(0, int((_parse(item["ended_at"]) - _parse(item["started_at"])).total_seconds()))
-        preview = item["billed_cents"] if item["status"] == "ended" else money.elapsed_cost(item["rate_cents"], elapsed)
+        preview = item["billed_cents"] if item["status"] == "ended" else (
+            money.elapsed_cost(item["rate_cents"], elapsed) if item["status"] == "active" else 0)
+        net_cents, fee_cents = money.split_gross(preview)
+        chart = _chart(item.get("chart_json"))
         astro = con.execute("select name from ac_astrologer where id=?", (item["astrologer_id"],)).fetchone()
         balance = wallet_view_in(con, item["device"])
         return {
@@ -598,6 +604,7 @@ def session_view(session_id: str, con=None) -> dict:
             "device": item["device"],
             "astrologer_id": item["astrologer_id"],
             "astrologer_name": astro[0] if astro else "",
+            "seeker_name": _seeker_name(chart),
             "mode": item["mode"],
             "status": item["status"],
             "rate_cents": item["rate_cents"],
@@ -606,9 +613,13 @@ def session_view(session_id: str, con=None) -> dict:
             "elapsed_seconds": elapsed,
             "cost_cents": preview,
             "cost_label": money.money_label(preview),
+            "fee_cents": fee_cents,
+            "fee_label": money.money_label(fee_cents),
+            "net_cents": net_cents,
+            "net_label": money.money_label(net_cents),
             "end_reason": item.get("end_reason") or "",
             "question": item.get("question") or "",
-            "chart": _chart(item.get("chart_json")),
+            "chart": chart,
             "server_now": _iso(moment),
             **{k: balance[k] for k in ("balance_cents", "balance_label")},
         }
@@ -616,6 +627,11 @@ def session_view(session_id: str, con=None) -> dict:
         if own:
             con.raw.commit()
             con.raw.close()
+
+
+def _seeker_name(chart: dict) -> str:
+    name = str((chart or {}).get("name") or "").strip()
+    return name.split()[0] if name else ""
 
 
 def _chart(raw: str | None) -> dict:
@@ -650,10 +666,14 @@ def accept_session(session_id: str, astrologer_id: str) -> dict:
             return session_view(session_id, con)
         if item["status"] != "ringing":
             raise ConnectError("not_ringing", 409)
+        online = con.execute("select online from ac_astrologer where id=?", (astrologer_id,)).fetchone()
+        resume = 1 if online and online[0] else 0
         started = _iso()
         con.execute(
-            "update ac_session set status='active', started_at=?, user_heartbeat=?, astro_heartbeat=? where id=? and status='ringing'",
-            (started, started, started, session_id))
+            """update ac_session set status='active', started_at=?, user_heartbeat=?, astro_heartbeat=?, resume_online=?
+               where id=? and status='ringing'""",
+            (started, started, started, resume, session_id))
+        con.execute("update ac_astrologer set online=0 where id=?", (astrologer_id,))
         return session_view(session_id, con)
 
 
@@ -675,11 +695,21 @@ def heartbeat(session_id: str, role: str, device: str | None, astrologer_id: str
         return session_view(session_id, con)
 
 
+def expire_unanswered(con, moment: datetime | None = None) -> None:
+    moment = moment or now()
+    rows = con.execute("select id, created_at from ac_session where status='ringing'").fetchall()
+    for sid, created_at in rows:
+        created = _parse(created_at)
+        if not created or (moment - created).total_seconds() < RING_WAIT_SECONDS:
+            continue
+        item = _as_dict(con, _session_row(con, sid))
+        if item["status"] == "ringing":
+            _settle(con, item, moment, "unanswered")
+
+
 def _tick(con, item: dict, moment: datetime) -> None:
     if item["status"] == "ringing":
-        created = _parse(item["created_at"])
-        if created and (moment - created).total_seconds() >= 90:
-            _settle(con, item, moment, "unanswered")
+        expire_unanswered(con, moment)
         return
     if item["status"] != "active":
         return
@@ -792,6 +822,10 @@ def _settle(con, item: dict, moment: datetime, reason: str) -> None:
         (_iso(moment), charge, reason, current["id"]))
     if getattr(updated, "rowcount", 1) == 0:
         return
+    if int(current.get("resume_online") or 0) and current["status"] == "active":
+        astro = _load_astro(con, current["astrologer_id"])
+        if astro and astro[2] == "approved" and int(astro[4]) > 0 and _plan_live(astro[5], astro[6], astro[7], astro[8]):
+            con.execute("update ac_astrologer set online=1 where id=?", (current["astrologer_id"],))
 
 
 def post_message(session_id: str, sender: str, body: str, device: str | None, astrologer_id: str | None) -> dict:
@@ -1025,12 +1059,25 @@ def mark_payout(astrologer_id: str, amount_cents: int, transfer_id: str, moment:
 
 
 def incoming(astrologer_id: str) -> list[dict]:
+    return [s for s in astro_live(astrologer_id)["ringing"]]
+
+
+def astro_live(astrologer_id: str) -> dict:
     with db.connect() as con:
         ensure(con)
+        expire_unanswered(con)
         rows = con.execute(
             "select id from ac_session where astrologer_id=? and status in ('ringing','active') order by created_at",
             (astrologer_id,)).fetchall()
-        return [session_view(r[0], con) for r in rows]
+        sessions = [session_view(r[0], con) for r in rows]
+        astro = _load_astro(con, astrologer_id)
+    active = next((s for s in sessions if s["status"] == "active"), None)
+    return {
+        "online": bool(astro and astro[3]) and not active,
+        "in_session": bool(active),
+        "session": active,
+        "ringing": [s for s in sessions if s["status"] == "ringing"],
+    }
 
 
 def redeem_apple_question(device: str, transaction_id: str, signed_transaction: str | None):

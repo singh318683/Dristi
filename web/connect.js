@@ -361,32 +361,49 @@
     if (node) node.textContent = m + ':' + s;
     if (cost) cost.textContent = live.cost;
   }
-  function watch(session) {
+  function watch(session, role, token) {
     stop();
-    live = {id: session.id, elapsed: session.elapsed_seconds || 0, at: Date.now(), cost: session.cost_label || '', room: null, after: 0};
+    live = {id: session.id, elapsed: session.elapsed_seconds || 0, at: Date.now(), cost: session.cost_label || '', room: null, after: 0, role: role || 'user', token: token || null, session: session};
     clock = setInterval(paintClock, 1000);
     paintClock();
     timer = setInterval(() => beat().catch(() => {}), 3000);
   }
+  function paintMeter(view) {
+    const fee = $('#connectFee');
+    const net = $('#connectNet');
+    if (fee) fee.textContent = view.fee_label || '';
+    if (net) net.textContent = view.net_label || '';
+  }
   async function beat() {
     if (!live) return;
-    const view = await api('/api/connect/sessions/' + live.id + '/heartbeat', {role: 'user', device: DEVICE});
+    const astro = live.role === 'astrologer';
+    const body = astro ? {role: 'astrologer', device: ''} : {role: 'user', device: DEVICE};
+    const view = await api('/api/connect/sessions/' + live.id + '/heartbeat', body, live.token);
     live.elapsed = view.elapsed_seconds || 0;
     live.at = Date.now();
     live.cost = view.cost_label || live.cost;
+    live.session = view;
     paintClock();
+    paintMeter(view);
     if (view.status === 'active') {
       const wait = document.querySelector('#connectLog .them');
-      if (wait && wait.textContent.indexOf('Waiting') === 0) wait.remove();
+      if (wait && /Waiting|प्रतीक्षा/.test(wait.textContent || '')) wait.remove();
     }
     if (view.status === 'ended') {
-      if (window.toast) toast(tr('Session ended', 'सत्र समाप्त') + ' · ' + (view.cost_label || ''));
       stop();
-      closeSheet();
+      if (astro) showAstroSummary(view);
+      else {
+        const missed = view.end_reason === 'unanswered';
+        if (window.toast) toast(missed
+          ? tr('No one accepted in time. Your hold was returned.', 'समय पर कोई स्वीकार नहीं किया। होल्ड लौटा दी गई।')
+          : tr('Session ended', 'सत्र समाप्त') + ' · ' + (view.cost_label || ''));
+        closeSheet();
+      }
       return;
     }
     if ($('#connectLog')) {
-      const msgs = await api('/api/connect/sessions/' + live.id + '/messages?device=' + encodeURIComponent(DEVICE) + '&after=' + live.after);
+      const q = astro ? ('after=' + live.after) : ('device=' + encodeURIComponent(DEVICE) + '&after=' + live.after);
+      const msgs = await api('/api/connect/sessions/' + live.id + '/messages?' + q, null, live.token);
       (msgs.messages || []).forEach(addMsg);
     }
   }
@@ -395,7 +412,8 @@
     if (!log || !m) return;
     live.after = Math.max(live.after || 0, m.id || 0);
     const p = document.createElement('p');
-    p.className = m.sender === 'user' ? 'me' : 'them';
+    const mine = live && live.role === 'astrologer' ? 'astrologer' : 'user';
+    p.className = m.sender === mine ? 'me' : 'them';
     p.textContent = m.body;
     log.appendChild(p);
     log.scrollTop = log.scrollHeight;
@@ -561,6 +579,108 @@
       <button class="btn block" type="submit">${tr('Create account', 'खाता बनाएँ')}</button>
       <button class="btn quiet" type="button" id="showLogin">${tr('I already have an account', 'मेरा खाता पहले से है')}</button></form>`;
   }
+  function seekerLabel(session) {
+    return (session && session.seeker_name) || tr('Seeker', 'साधक');
+  }
+  function chartLine(chart) {
+    if (!chart || typeof chart !== 'object') return '';
+    const place = chart.place && typeof chart.place === 'object' ? (chart.place.name || '') : (chart.place || '');
+    return [chart.date || '', chart.time || '', place].filter(Boolean).join(' · ');
+  }
+  function paintOnline(desk) {
+    const box = $('#astroOnline');
+    const label = $('#onlineLabel');
+    if (!box) return;
+    if (desk && desk.in_session) {
+      box.checked = false;
+      box.disabled = true;
+      if (label) label.textContent = tr('In a session', 'सत्र में');
+    } else {
+      box.disabled = false;
+      box.checked = !!(desk && desk.online);
+      if (label) label.textContent = tr('Online', 'ऑनलाइन');
+    }
+  }
+  function showAstroSummary(view) {
+    stopPortalPoll();
+    const body = $('#portalBody');
+    if (!body) { render(); return; }
+    const elapsed = view.elapsed_seconds || 0;
+    const clock = String(Math.floor(elapsed / 60)).padStart(2, '0') + ':' + String(elapsed % 60).padStart(2, '0');
+    body.innerHTML = `<div class="card astro-summary"><h3>${tr('Session ended', 'सत्र समाप्त')}</h3>
+      <p>${tr('Duration', 'अवधि')} ${clock}</p>
+      <p>${tr('Gross', 'कुल')} ${esc(view.cost_label || '$0.00')}</p>
+      <p>${tr('Drishti fee', 'दृष्टि शुल्क')} ${esc(view.fee_label || '$0.00')}</p>
+      <p><b>${tr('Net', 'शुद्ध')} ${esc(view.net_label || '$0.00')}</b></p>
+      <button type="button" class="btn block" id="astroDone">${tr('Back to dashboard', 'डैशबोर्ड पर वापस')}</button></div>`;
+    const done = $('#astroDone');
+    if (done) done.onclick = () => render();
+  }
+  async function sendAstro(token) {
+    const input = $('#connectInput');
+    const text = ((input && input.value) || '').trim();
+    if (!text || !live) return;
+    input.value = '';
+    await api('/api/connect/sessions/' + live.id + '/messages', {sender: 'astrologer', body: text, device: ''}, token);
+    addMsg({id: 0, sender: 'astrologer', body: text});
+  }
+  async function finishAstro(token) {
+    if (!live) { render(); return; }
+    const id = live.id;
+    stop();
+    const view = await api('/api/connect/sessions/' + id + '/end', {device: ''}, token);
+    showAstroSummary(view);
+  }
+  function openAstroSession(session, token) {
+    stopPortalPoll();
+    const body = $('#portalBody') || portalRoot(tr('Session', 'सत्र'));
+    const who = seekerLabel(session);
+    const asked = (session.question || '').trim() || tr('No question yet', 'अभी कोई प्रश्न नहीं');
+    const born = chartLine(session.chart);
+    const call = session.mode === 'call';
+    body.innerHTML = `<div class="astro-session" id="astroSession">
+      <div class="connect-head">
+        <div class="connect-av" aria-hidden="true">${esc(who.slice(0, 1) || '?')}</div>
+        <div class="grow"><b>${esc(who)}</b> <span class="tag">${tr('In a session', 'सत्र में')}</span>
+          <span class="connect-meter"><span id="connectClock">00:00</span> · ${tr('Gross', 'कुल')} <span id="connectCost">${esc(session.cost_label || '$0.00')}</span> · ${tr('Fee', 'शुल्क')} <span id="connectFee">${esc(session.fee_label || '$0.00')}</span> · ${tr('Net', 'शुद्ध')} <span id="connectNet">${esc(session.net_label || '$0.00')}</span></span>
+        </div>
+      </div>
+      <p>${esc(asked)}</p>
+      ${born ? `<p class="sub">${esc(born)}</p>` : ''}
+      ${call ? `<p class="sub" id="connectVoice"></p><div class="call-controls"><button type="button" class="btn quiet" id="connectMute" aria-pressed="false">${tr('Mute', 'म्यूट')}</button><button type="button" class="btn" id="connectEnd">${tr('End session', 'सत्र समाप्त')}</button></div>` : `<button type="button" class="btn" id="connectEnd">${tr('End session', 'सत्र समाप्त')}</button>`}
+      <div class="connect-log" id="connectLog"></div>
+      <form id="connectForm" class="ask-bar"><textarea id="connectInput" rows="1" maxlength="2000" aria-label="${tr('Message', 'संदेश')}"></textarea><button type="submit" class="btn">${tr('Send', 'भेजें')}</button></form>
+      <button type="button" class="btn quiet" id="connectReport">${tr('Report', 'रिपोर्ट')}</button>
+      <button type="button" class="btn quiet" id="connectBlock">${tr('Block', 'ब्लॉक')}</button>
+    </div>`;
+    watch(session, 'astrologer', token);
+    if (call) {
+      api('/api/connect/sessions/' + session.id + '/call-token', {device: ''}, token).then(info => attachVoice(info)).catch(() => {
+        const note = $('#connectVoice');
+        if (note) note.textContent = tr('Voice is not ready yet. Ending still stops the bill.', 'वॉइस अभी तैयार नहीं। समाप्त करने पर शुल्क रुक जाता है।');
+      });
+      const mute = $('#connectMute');
+      if (mute) mute.onclick = ev => {
+        const pressed = ev.currentTarget.getAttribute('aria-pressed') === 'true';
+        ev.currentTarget.setAttribute('aria-pressed', pressed ? 'false' : 'true');
+        const room = live && live.room;
+        if (room && room.localParticipant) room.localParticipant.setMicrophoneEnabled(pressed);
+      };
+    }
+    const end = $('#connectEnd');
+    if (end) end.onclick = () => finishAstro(token).catch(showErr);
+    const form = $('#connectForm');
+    if (form) form.onsubmit = e => { e.preventDefault(); sendAstro(token).catch(showErr); };
+    const reportBtn = $('#connectReport');
+    if (reportBtn) reportBtn.onclick = () => api('/api/connect/report', {
+      device: session.device, astrologer_id: session.astrologer_id, session_id: session.id, reason: tr('Report from the session', 'सत्र से रिपोर्ट'),
+    }, token).then(() => { if (window.toast) toast(tr('Report sent', 'रिपोर्ट भेज दी गई')); }).catch(showErr);
+    const blockBtn = $('#connectBlock');
+    if (blockBtn) blockBtn.onclick = () => api('/api/connect/block', {device: session.device, astrologer_id: session.astrologer_id}, token).then(() => {
+      if (window.toast) toast(tr('Seeker blocked', 'साधक ब्लॉक हो गए'));
+      finishAstro(token).catch(showErr);
+    }).catch(showErr);
+  }
   function stopPortalPoll() {
     if (portalPoll) clearInterval(portalPoll);
     portalPoll = 0;
@@ -616,15 +736,25 @@
     const key = waiting.map(s => s.id).join(',');
     if (host.dataset.key === key) return;
     host.dataset.key = key;
-    host.innerHTML = waiting.map(s => `<div class="card incoming-banner"><b>${tr('New request', 'नया अनुरोध')}</b><p>${esc(s.mode)} · ${esc(s.question || '')}</p><button type="button" class="btn" data-accept="${esc(s.id)}">${tr('Accept', 'स्वीकार')}</button></div>`).join('')
+    host.innerHTML = waiting.map(s => {
+      const who = s.seeker_name || tr('Seeker', 'साधक');
+      const asked = (s.question || '').trim();
+      const question = asked ? (asked.length > 80 ? asked.slice(0, 77) + '…' : asked) : tr('No question yet', 'अभी कोई प्रश्न नहीं');
+      const mode = s.mode === 'call' ? tr('Call', 'कॉल') : tr('Chat', 'चैट');
+      return `<div class="card incoming-banner"><b>${tr('New request', 'नया अनुरोध')}</b><p>${esc(mode)} · ${esc(who)} · ${esc(s.rate_label || '')}</p><p>${esc(question)}</p><button type="button" class="btn" data-accept="${esc(s.id)}">${tr('Accept', 'स्वीकार')}</button></div>`;
+    }).join('')
       || `<p class="sub">${tr('No waiting chat or call.', 'कोई प्रतीक्षारत चैट या कॉल नहीं।')}</p>`;
-    host.querySelectorAll('[data-accept]').forEach(b => b.onclick = () => api('/api/connect/sessions/' + b.dataset.accept + '/accept', {}, token).then(() => render()).catch(showErr));
+    host.querySelectorAll('[data-accept]').forEach(b => b.onclick = () => api('/api/connect/sessions/' + b.dataset.accept + '/accept', {}, token).then(view => openAstroSession(view, token)).catch(showErr));
   }
   function watchIncoming(token) {
     stopPortalPoll();
     portalPoll = setInterval(() => {
       if (location.hash !== '#astro') { stopPortalPoll(); return; }
-      api('/api/connect/astro/incoming', null, token).then(data => paintIncoming(data.sessions || [], token)).catch(() => {});
+      api('/api/connect/astro/live', null, token).then(desk => {
+        if (desk.session && desk.session.status === 'active') { openAstroSession(desk.session, token); return; }
+        paintOnline(desk);
+        paintIncoming(desk.ringing || [], token);
+      }).catch(() => {});
     }, 5000);
   }
   async function renderPortal() {
@@ -680,10 +810,10 @@
       };
       return;
     }
-    let incoming = {sessions: []};
+    let desk = {online: false, in_session: false, session: null, ringing: []};
     let money = {sessions: [], payouts: [], gross_label: '$0.00', fee_label: '$0.00', net_label: '$0.00', plan_status: 'none', renews_at: ''};
     try {
-      incoming = await api('/api/connect/astro/incoming', null, token);
+      desk = await api('/api/connect/astro/live', null, token);
       money = await api('/api/connect/astro/earnings', null, token);
     } catch (e) {
       if (e && e.code === 'must_change') {
@@ -704,7 +834,7 @@
       <button type="button" class="btn block" id="planMonth">${tr('Monthly', 'मासिक')} ${esc(plans.month)}</button>
       <button type="button" class="btn block" id="planYear">${tr('Yearly', 'वार्षिक')} ${esc(plans.year)}</button>
       <p class="sub">${tr('Monthly or yearly starts after the free trial ends. No lifetime plan.', 'मासिक या वार्षिक योजना निःशुल्क परीक्षण के बाद शुरू होती है। कोई आजीवन योजना नहीं।')}</p></div>` : ''}
-      <div class="card"><label class="spread">${tr('Online', 'ऑनलाइन')}<input type="checkbox" id="astroOnline"></label>
+      <div class="card"><label class="spread"><span id="onlineLabel">${tr('Online', 'ऑनलाइन')}</span><input type="checkbox" id="astroOnline"></label>
       <p class="sub">${tr('You keep 95%. Drishti keeps 5% of each session.', 'आप 95% रखते हैं। दृष्टि हर सत्र का 5% रखती है।')}</p>
       <p class="sub">${tr('Plan', 'योजना')}: ${esc(money.plan_status || 'none')}${money.renews_at ? ' · ' + esc(String(money.renews_at).slice(0, 10)) : ''}</p></div>
       <div id="incoming"></div>
@@ -717,8 +847,10 @@
     const trial = $('#planTrial');
     if (trial) trial.onclick = () => api('/api/connect/astro/trial', {}, token).then(() => render()).catch(showErr);
     bindPaidButtons(token);
-    $('#astroOnline').onchange = e => api('/api/connect/astro/online', {online: e.target.checked}, token).catch(showErr);
-    paintIncoming(incoming.sessions || [], token);
+    if (desk.session && desk.session.status === 'active') { openAstroSession(desk.session, token); return; }
+    paintOnline(desk);
+    $('#astroOnline').onchange = e => api('/api/connect/astro/online', {online: !!e.target.checked}, token).then(view => paintOnline({online: view.online, in_session: false})).catch(err => { paintOnline(desk); showErr(err); });
+    paintIncoming(desk.ringing || [], token);
     watchIncoming(token);
     $('#astroStripe').onclick = () => api('/api/connect/astro/stripe', {}, token).then(d => { if (d.url) location.href = d.url; }).catch(showErr);
     $('#managePlan').onclick = () => {

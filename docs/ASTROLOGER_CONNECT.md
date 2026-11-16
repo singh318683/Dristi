@@ -38,7 +38,7 @@ Stripe webhooks update that state: `customer.subscription.created`, `updated`, a
 
 ## Money
 
-Wallet packs `wallet_5`, `wallet_10`, and `wallet_20` are Stripe PaymentIntents. After the browser confirms a payment, the server reads that PaymentIntent from Stripe and credits it. The Stripe webhook must include `payment_intent.succeeded` and uses the same payment id, so a retry does not credit the wallet twice. A session holds five minutes at the provider's stored rate. The server clock starts when they accept. Heartbeats and the LiveKit webhook end the session. The charge is elapsed seconds times the rate, floored to the cent, and never more than the hold. Unused hold returns to the wallet.
+Wallet packs `wallet_5`, `wallet_10`, and `wallet_20` are Stripe PaymentIntents. After the browser confirms a payment, the server reads that PaymentIntent from Stripe and credits it. The Stripe webhook must include `payment_intent.succeeded` and uses the same payment id, so a retry does not credit the wallet twice. A session holds five minutes at the provider's stored rate. The server clock starts when they accept, not while the request is still ringing. If nobody accepts within 2 minutes, the hold is returned in full. Heartbeats and the LiveKit webhook end the session. The charge is elapsed seconds times the rate, floored to the cent, and never more than the hold. Unused hold returns to the wallet.
 
 Of the gross, Drishti takes `PLATFORM_COMMISSION_RATE` and the provider the remainder. Twelve minutes at $1.00 is $12.00 gross, $0.60 Drishti, $11.40 provider. Amounts are integer cents and the two shares sum to the gross. There is no 75/25 split and no App Store commission taken out of a live session.
 

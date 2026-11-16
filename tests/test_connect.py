@@ -219,6 +219,60 @@ def test_stripe_webhook_credits_once(client, monkeypatch):
     assert bad.status_code == 400
 
 
+def test_ringing_waits_two_minutes_then_refunds(client, monkeypatch):
+    from datetime import datetime, timedelta, timezone
+    base = datetime(2026, 8, 1, tzinfo=timezone.utc)
+    monkeypatch.setattr(store, "now", lambda: base)
+    astro_id, token = seed(client, rate=100)
+    fund("phone", "wallet_5", "pi_ring")
+    started = client.post("/api/connect/sessions", json={
+        "device": "phone", "astrologer_id": astro_id, "mode": "chat", "question": "",
+        "profile": {"name": "Anuprita Khanna", "date": "1990-05-15", "time": "10:30", "place": {"name": "Delhi"}},
+        "idempotency_key": "ring",
+    }).json()
+    assert started["status"] == "ringing" and started["cost_cents"] == 0
+    assert started["seeker_name"] == "Anuprita"
+    monkeypatch.setattr(store, "now", lambda: base + timedelta(seconds=60))
+    mid = client.post("/api/connect/sessions/" + started["id"] + "/heartbeat", json={"role": "user", "device": "phone"}).json()
+    assert mid["status"] == "ringing" and mid["cost_cents"] == 0
+    assert store.wallet_view("phone")["balance_cents"] == 0
+    monkeypatch.setattr(store, "now", lambda: base + timedelta(seconds=120))
+    done = client.post("/api/connect/sessions/" + started["id"] + "/heartbeat", json={"role": "user", "device": "phone"}).json()
+    assert done["status"] == "ended" and done["end_reason"] == "unanswered" and done["cost_cents"] == 0
+    assert store.wallet_view("phone")["balance_cents"] == 500
+    headers = auth(token)
+    accepted_late = client.post("/api/connect/sessions/" + started["id"] + "/accept", headers=headers)
+    assert accepted_late.status_code == 409
+
+
+def test_accept_opens_the_session_and_restores_online(client):
+    astro_id, token = seed(client, rate=100)
+    fund("phone", "wallet_5", "pi_desk")
+    headers = auth(token)
+    started = client.post("/api/connect/sessions", json={
+        "device": "phone", "astrologer_id": astro_id, "mode": "chat", "question": "When is a good time?",
+        "profile": {"name": "Anuprita Khanna", "date": "1990-05-15", "place": {"name": "Delhi"}},
+        "idempotency_key": "desk",
+    }).json()
+    waiting = client.get("/api/connect/astro/live", headers=headers).json()
+    assert waiting["online"] is True and waiting["in_session"] is False
+    assert waiting["ringing"][0]["seeker_name"] == "Anuprita"
+    assert waiting["ringing"][0]["question"] == "When is a good time?"
+    accepted = client.post("/api/connect/sessions/" + started["id"] + "/accept", headers=headers).json()
+    assert accepted["status"] == "active" and accepted["cost_cents"] == 0
+    desk = client.get("/api/connect/astro/live", headers=headers).json()
+    assert desk["in_session"] is True and desk["online"] is False
+    assert desk["session"]["id"] == accepted["id"]
+    posted = client.post("/api/connect/sessions/" + started["id"] + "/messages", headers=headers, json={"sender": "astrologer", "body": "Namaste", "device": ""})
+    assert posted.status_code == 200
+    messages = client.get("/api/connect/sessions/" + started["id"] + "/messages", headers=headers).json()["messages"]
+    assert messages[0]["body"] == "Namaste" and messages[0]["sender"] == "astrologer"
+    ended = client.post("/api/connect/sessions/" + started["id"] + "/end", headers=headers, json={"device": ""}).json()
+    assert ended["status"] == "ended" and "net_label" in ended and "fee_label" in ended
+    after = client.get("/api/connect/astro/live", headers=headers).json()
+    assert after["online"] is True and after["in_session"] is False and after["session"] is None
+
+
 def test_wallet_intent_is_card_only(client, monkeypatch):
     monkeypatch.setenv("STRIPE_SECRET_KEY", "sk_test")
     monkeypatch.setenv("APP_PUBLIC_URL", "https://drishti-ios.vercel.app/")
