@@ -602,6 +602,42 @@ if (questionForSession('', '', []) !== '') process.exit(15);
     assert ran.returncode == 0, ran.stderr or ran.stdout
 
 
+def test_admin_buttons_match_the_astrologer_status():
+    root = os.path.join(os.path.dirname(__file__), "..")
+    connect = open(os.path.join(root, "web", "connect.js"), encoding="utf-8").read()
+    html = open(os.path.join(root, "web", "index.html"), encoding="utf-8").read()
+    assert "function adminActions" in connect and "adminActions(a.status)" in connect
+    assert "data-status=" in connect and "function adminDone" in connect
+    assert "if (window.toast) toast(tr(note[0], note[1]))" in connect
+    assert "showErr(err)" in connect
+    assert ".admin-acts" in html and ".tag.bad" in html
+    assert 'data-act="approve">${tr(\'Approve\'' not in connect
+    script = r"""
+const fs = require('fs');
+const src = fs.readFileSync(process.argv[1], 'utf8');
+const start = src.indexOf('function adminActions');
+const end = src.indexOf('async function renderAdmin');
+if (start < 0 || end < 0) process.exit(2);
+eval(src.slice(start, end));
+const acts = status => adminActions(status).map(item => item.act + ':' + item.label[0]).join(',');
+if (acts('pending') !== 'approve:Approve,remove:Reject') process.exit(3);
+if (acts('approved') !== 'suspend:Suspend,remove:Remove') process.exit(4);
+if (acts('suspended') !== 'approve:Reinstate,remove:Remove') process.exit(5);
+if (acts('removed') !== '' || acts('') !== '') process.exit(6);
+if (adminDone('approve', 'pending').join('|') !== 'Approved|स्वीकृत') process.exit(7);
+if (adminDone('approve', 'suspended').join('|') !== 'Reinstated|बहाल किया गया') process.exit(8);
+if (adminDone('suspend', 'approved')[0] !== 'Suspended') process.exit(9);
+if (adminDone('remove', 'pending')[0] !== 'Rejected') process.exit(10);
+if (adminDone('remove', 'approved')[0] !== 'Removed') process.exit(11);
+if (adminPill('pending') !== 'tag') process.exit(12);
+if (adminPill('approved') !== 'tag good') process.exit(13);
+if (adminPill('suspended') !== 'tag warn') process.exit(14);
+if (adminPill('removed') !== 'tag bad') process.exit(15);
+"""
+    ran = subprocess.run(["node", "-e", script, os.path.join(root, "web", "connect.js")], capture_output=True, text=True)
+    assert ran.returncode == 0, ran.stderr or ran.stdout
+
+
 def test_stripe_signature_helper_rejects_a_stale_event():
     payload = b"{}"
     stamp = str(int(time.time()) - 1000)

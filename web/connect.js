@@ -1001,6 +1001,42 @@
       reader.readAsDataURL(file);
     });
   }
+  function adminActions(status) {
+    if (status === 'pending') return [
+      {act: 'approve', label: ['Approve', 'स्वीकार'], quiet: false},
+      {act: 'remove', label: ['Reject', 'अस्वीकार'], quiet: true},
+    ];
+    if (status === 'approved') return [
+      {act: 'suspend', label: ['Suspend', 'रोकें'], quiet: true},
+      {act: 'remove', label: ['Remove', 'हटाएँ'], quiet: true},
+    ];
+    if (status === 'suspended') return [
+      {act: 'approve', label: ['Reinstate', 'बहाल'], quiet: false},
+      {act: 'remove', label: ['Remove', 'हटाएँ'], quiet: true},
+    ];
+    return [];
+  }
+  function adminStatusLabel(status) {
+    if (status === 'pending') return ['Pending', 'लंबित'];
+    if (status === 'approved') return ['Approved', 'स्वीकृत'];
+    if (status === 'suspended') return ['Suspended', 'रुका'];
+    if (status === 'removed') return ['Removed', 'हटाया'];
+    return [String(status || ''), String(status || '')];
+  }
+  function adminDone(action, from) {
+    if (action === 'approve' && from === 'suspended') return ['Reinstated', 'बहाल किया गया'];
+    if (action === 'approve') return ['Approved', 'स्वीकृत'];
+    if (action === 'suspend') return ['Suspended', 'रोक दिया गया'];
+    if (action === 'remove' && from === 'pending') return ['Rejected', 'अस्वीकार किया गया'];
+    if (action === 'remove') return ['Removed', 'हटा दिया गया'];
+    return ['Saved', 'सहेजा गया'];
+  }
+  function adminPill(status) {
+    if (status === 'approved') return 'tag good';
+    if (status === 'suspended') return 'tag warn';
+    if (status === 'removed') return 'tag bad';
+    return 'tag';
+  }
   async function renderAdmin() {
     stopPortalPoll();
     const body = portalRoot(tr('Admin', 'एडमिन'));
@@ -1016,15 +1052,19 @@
     let data;
     try { data = await api('/api/connect/admin/astrologers', null, token); }
     catch (e) { sessionStorage.removeItem('dr-admin-token'); body.innerHTML = `<p>${tr('That token was not accepted.', 'वह टोकन स्वीकार नहीं हुआ।')}</p>`; return; }
-    body.innerHTML = (data.astrologers || []).map(a => `<div class="card" data-id="${esc(a.id)}">
-      <b>${esc(a.name)}</b> <span>${esc(a.status)}</span>
+    body.innerHTML = (data.astrologers || []).map(a => {
+      const label = adminStatusLabel(a.status);
+      const actions = adminActions(a.status).map(item =>
+        `<button type="button" class="btn${item.quiet ? ' quiet' : ''}" data-act="${esc(item.act)}">${tr(item.label[0], item.label[1])}</button>`
+      ).join('');
+      const reset = a.status === 'removed' ? '' : `<button type="button" class="btn quiet" data-reset="${esc(a.id)}">${tr('Reset password', 'पासवर्ड रीसेट')}</button>`;
+      return `<div class="card" data-id="${esc(a.id)}" data-status="${esc(a.status)}">
+      <b>${esc(a.name)}</b> <span class="${adminPill(a.status)}">${esc(tr(label[0], label[1]))}</span>
       <p>${esc(a.email)} · ${esc(a.rate_label || '')} · ${esc(a.plan_status || '')}</p>
       <p>${esc((a.languages || []).join(', '))}</p>
-      <button type="button" class="btn" data-act="approve">${tr('Approve', 'स्वीकार')}</button>
-      <button type="button" class="btn quiet" data-act="suspend">${tr('Suspend', 'रोकें')}</button>
-      <button type="button" class="btn quiet" data-act="remove">${tr('Remove', 'हटाएँ')}</button>
-      <button type="button" class="btn quiet" data-reset="${esc(a.id)}">${tr('Reset password', 'पासवर्ड रीसेट')}</button>
-    </div>`).join('') || `<p>${tr('No applications.', 'कोई आवेदन नहीं।')}</p>`;
+      <div class="admin-acts">${actions}${reset}</div>
+    </div>`;
+    }).join('') || `<p>${tr('No applications.', 'कोई आवेदन नहीं।')}</p>`;
     document.querySelectorAll('#portalBody [data-reset]').forEach(b => b.onclick = async () => {
       const card = b.closest('[data-id]');
       try {
@@ -1037,10 +1077,19 @@
     });
     document.querySelectorAll('#portalBody [data-act]').forEach(b => b.onclick = async () => {
       const card = b.closest('[data-id]');
+      if (!card || b.disabled) return;
+      const from = card.dataset.status || '';
+      const action = b.dataset.act;
+      card.querySelectorAll('button').forEach(x => { x.disabled = true; });
       try {
-        await api('/api/connect/admin/astrologers/' + card.dataset.id, {action: b.dataset.act}, token);
+        await api('/api/connect/admin/astrologers/' + card.dataset.id, {action: action}, token);
+        const note = adminDone(action, from);
+        if (window.toast) toast(tr(note[0], note[1]));
         render();
-      } catch (err) { showErr(err); }
+      } catch (err) {
+        card.querySelectorAll('button').forEach(x => { x.disabled = false; });
+        showErr(err);
+      }
     });
   }
   function rememberAstro(got) {

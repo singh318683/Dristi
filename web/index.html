@@ -104,7 +104,7 @@ button:disabled:active,.btn:disabled:active{transform:none}
 .seg button[aria-pressed=true]{font-weight:700;background:var(--surface);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.12)}
 .seg.full{display:flex;width:100%} .seg.full button{flex:1;padding:0 8px}
 .tag{display:inline-flex;align-items:center;border-radius:999px;padding:1px 9px;font-size:12.5px;font-weight:600;background:var(--sunk);color:var(--muted);white-space:nowrap}
-.tag.good{background:var(--good-tint);color:var(--good)} .tag.warn{background:var(--primary-tint);color:var(--on-tint)}
+.tag.good{background:var(--good-tint);color:var(--good)} .tag.warn{background:var(--primary-tint);color:var(--on-tint)} .tag.bad{background:var(--bad-tint);color:var(--bad)}
 .bar{height:6px;border-radius:4px;background:var(--sunk);overflow:hidden}
 .bar i{display:block;height:100%;background:var(--primary);border-radius:4px}
 .notice{display:flex;gap:10px;align-items:flex-start;background:var(--primary-tint);color:var(--ink);border-radius:12px;padding:12px 14px;font-size:14.5px}
@@ -555,6 +555,7 @@ body.app-fit .sheet-bg.connect-live{bottom:calc(56px + env(safe-area-inset-botto
 .portal{max-width:560px;margin:0 auto;padding:16px 16px 32px;min-height:100dvh}
 #planPicker .btn,#paidPlans .btn{margin-bottom:8px}
 .portal .card{margin-bottom:12px}
+.admin-acts{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
 .bub.ai{cursor:pointer}
 .read-open{display:inline-flex;align-items:center;margin-top:8px;min-height:36px;padding:0;border:0;background:none;color:var(--on-tint);font-weight:700;font-size:13px}
 @keyframes sheetRise{from{transform:translateY(110%)}to{transform:none}}
