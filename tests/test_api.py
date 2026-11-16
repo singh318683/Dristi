@@ -141,7 +141,7 @@ def test_background_music_is_one_synthesized_drone():
     assert "drishtiUnlockAudio" in html
     assert ".mp3" not in html and ".ogg" not in html and ".m4a" not in html
     assert "Web Audio" in credits and "no third-party music license" in credits
-    assert "drishti-v22" in open(os.path.join(root, "web", "sw.js"), encoding="utf-8").read()
+    assert "drishti-v23" in open(os.path.join(root, "web", "sw.js"), encoding="utf-8").read()
 
 
 def test_home_asks_for_the_device_date():
@@ -168,7 +168,7 @@ def test_home_periods_card_and_local_clock():
     assert "Good evening" in greet and "clock.getHours() < 5" in greet
     assert "function glanceTitle" in html and "function horoGlanceSentence" in html
     assert "glanceHoroLine" not in html
-    assert "drishti-v22" in open(os.path.join(os.path.dirname(__file__), "..", "web", "sw.js"), encoding="utf-8").read()
+    assert "drishti-v23" in open(os.path.join(os.path.dirname(__file__), "..", "web", "sw.js"), encoding="utf-8").read()
 
 
 def test_profile_screen_drops_invite_and_sign_in():
@@ -229,7 +229,7 @@ def test_owned_play_question_is_sent_again_instead_of_bought():
     assert "buyPlayQuestion" in ask and "buyFreshPlayQuestion" in ask
     assert "payment_invalid" in ask and "keepPlayToken(purchaseToken)" in ask
     assert "response.complete('success')" in html
-    assert "drishti-v22" in open(os.path.join(root, "web", "sw.js"), encoding="utf-8").read()
+    assert "drishti-v23" in open(os.path.join(root, "web", "sw.js"), encoding="utf-8").read()
 
 
 def test_answer_opens_in_a_reading_sheet():
@@ -243,7 +243,7 @@ def test_answer_opens_in_a_reading_sheet():
     assert "openAnswerSheet(aiEl, true)" in ask
     assert "openAnswerSheet(painted, true)" in ask
     assert "id=\"askSend\"" in html and "priceLabel()" in html
-    assert "drishti-v22" in open(os.path.join(os.path.dirname(__file__), "..", "web", "sw.js"), encoding="utf-8").read()
+    assert "drishti-v23" in open(os.path.join(os.path.dirname(__file__), "..", "web", "sw.js"), encoding="utf-8").read()
 
 
 def test_rate_prompt_is_quiet_and_remembers_a_dismissal():
@@ -263,7 +263,7 @@ def test_rate_prompt_is_quiet_and_remembers_a_dismissal():
     assert "closeSheet({skipRate: true})" in ask
     closed = html.split("function closeSheet", 1)[1].split("function bindSheetSwipe", 1)[0]
     assert "answer-read" in closed and "v.read = true" in closed
-    assert "drishti-v22" in open(os.path.join(os.path.dirname(__file__), "..", "web", "sw.js"), encoding="utf-8").read()
+    assert "drishti-v23" in open(os.path.join(os.path.dirname(__file__), "..", "web", "sw.js"), encoding="utf-8").read()
     assert "Rate on the App Store" in rate and "App Store पर रेट करें" in rate
     assert "apps.apple.com" in rate and "if (inIosApp())" in rate
 
@@ -352,6 +352,35 @@ def test_live_astrologer_entries_are_visible_when_the_flag_is_on():
     assert 'id="connectEmpty"' in connect
 
 
+def test_signup_rate_accepts_a_dollar_sign_and_errors_stay_readable():
+    connect = open(os.path.join(os.path.dirname(__file__), "..", "web", "connect.js"), encoding="utf-8").read()
+    assert "parseFloat(String($('#regRate').value).replace(/[^0-9.]/g, ''))" in connect
+    assert "dollars < 0.3 || dollars > 5" in connect
+    assert "for example 1.50" in connect and "जैसे 1.50" in connect
+    assert "function detailText" in connect and "item.loc[item.loc.length - 1]" in connect
+    script = r"""
+const fs = require('fs');
+const src = fs.readFileSync(process.argv[1], 'utf8');
+const start = src.indexOf('function detailText');
+const end = src.indexOf('function api(');
+eval(src.slice(start, end));
+const arr = [
+  {loc: ['body', 'rate_cents'], msg: 'Input should be a valid integer'},
+  {loc: ['body', 'email'], msg: 'Field required'},
+];
+if (detailText(arr) !== 'rate_cents: Input should be a valid integer; email: Field required') process.exit(2);
+if (detailText('unauthorized') !== 'unauthorized') process.exit(3);
+if (detailText({message: 'Voice is not configured on the server.'}) !== 'Voice is not configured on the server.') process.exit(4);
+const obj = detailText({error: 'plan_required', hold_cents: 500});
+if (!obj || obj === '[object Object]' || obj.indexOf('plan_required') < 0) process.exit(5);
+const dollars = raw => parseFloat(String(raw).replace(/[^0-9.]/g, ''));
+if (dollars('$1') !== 1 || dollars('$1.50') !== 1.5 || dollars('1') !== 1) process.exit(6);
+if (isFinite(dollars('')) || isFinite(dollars('abc'))) process.exit(7);
+"""
+    ran = subprocess.run(["node", "-e", script, os.path.join(os.path.dirname(__file__), "..", "web", "connect.js")], capture_output=True, text=True)
+    assert ran.returncode == 0, ran.stderr or ran.stdout
+
+
 def test_planet_detail_opens_in_a_sheet():
     root = os.path.join(os.path.dirname(__file__), "..")
     html = open(os.path.join(root, "web", "index.html"), encoding="utf-8").read()
@@ -362,7 +391,7 @@ def test_planet_detail_opens_in_a_sheet():
     assert "max-height:58px" not in html
     assert "body.app-fit .info .m{display:-webkit-box" not in html
     assert "if (o) openReading(o, src)" in html
-    assert "drishti-v22" in open(os.path.join(root, "web", "sw.js"), encoding="utf-8").read()
+    assert "drishti-v23" in open(os.path.join(root, "web", "sw.js"), encoding="utf-8").read()
 
 
 def test_panchang_and_pdf_endpoints(client):

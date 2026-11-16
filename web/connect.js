@@ -11,6 +11,23 @@
   function on() {
     return !!(typeof S !== 'undefined' && S.status && S.status.astrologer_connect);
   }
+  function detailText(detail) {
+    if (typeof detail === 'string') return detail;
+    if (Array.isArray(detail)) {
+      return detail.map(item => {
+        if (!item || typeof item !== 'object') return item == null ? '' : String(item);
+        const loc = Array.isArray(item.loc) && item.loc.length ? String(item.loc[item.loc.length - 1]) : '';
+        const msg = typeof item.msg === 'string' ? item.msg : (typeof item.message === 'string' ? item.message : '');
+        if (loc && msg) return loc + ': ' + msg;
+        return msg || JSON.stringify(item);
+      }).filter(Boolean).join('; ');
+    }
+    if (detail && typeof detail === 'object') {
+      if (typeof detail.message === 'string' && detail.message) return detail.message;
+      try { return JSON.stringify(detail); } catch (e) { return ''; }
+    }
+    return detail == null ? '' : String(detail);
+  }
   function api(path, body, auth) {
     const headers = {'Content-Type': 'application/json'};
     if (auth) headers.Authorization = 'Bearer ' + auth;
@@ -21,7 +38,8 @@
     }).then(async r => {
       const data = await r.json().catch(() => ({}));
       if (!r.ok) {
-        const err = new Error((data && (data.detail && data.detail.error || data.detail)) || ('HTTP ' + r.status));
+        const text = data && detailText(data.detail);
+        const err = new Error(text || ('HTTP ' + r.status));
         err.status = r.status;
         err.body = data;
         throw err;
@@ -65,7 +83,9 @@
     $('#connectLater').onclick = () => closeSheet();
   }
   function showErr(e) {
-    const msg = (e && e.message) || tr('Something went wrong', 'कुछ गड़बड़ हुई');
+    let msg = e && typeof e.message === 'string' ? e.message : '';
+    if (!msg || msg === '[object Object]') msg = e && e.body ? detailText(e.body.detail) : detailText(e && e.message);
+    if (!msg) msg = tr('Something went wrong', 'कुछ गड़बड़ हुई');
     if (window.toast) toast(String(msg).slice(0, 180));
   }
   async function list() {
@@ -360,7 +380,11 @@
       };
       $('#astroRegister').onsubmit = async e => {
         e.preventDefault();
-        const dollars = Number($('#regRate').value);
+        const dollars = parseFloat(String($('#regRate').value).replace(/[^0-9.]/g, ''));
+        if (!isFinite(dollars) || dollars < 0.3 || dollars > 5) {
+          showErr(new Error(tr('Enter a per-minute rate between $0.30 and $5.00, for example 1.50', 'प्रति मिनट दर $0.30 से $5.00 के बीच डालें, जैसे 1.50')));
+          return;
+        }
         const photo = await readPhoto($('#regPhoto'));
         try {
           await api('/api/connect/apply', {
