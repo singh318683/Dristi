@@ -547,11 +547,12 @@ def test_chat_keeps_one_bubble_and_one_poll():
     assert "clearInterval(timer)" in connect and "if (!live || beating) return" in connect
     assert "if (!text || !live || sending) return" in connect and "lockSend(true)" in connect
     assert 'id="connectSend"' in connect
-    assert "function claimMessage" in connect and "data-pending" in connect
+    assert "function mergeById" in connect and "function showMessages" in connect and "function renderThread" in connect
+    assert "data-pending" in connect
     assert "className = 'bubble ' + (mine ? 'me' : 'them')" in connect
     assert "who.className = 'who'" in connect
-    assert "addMsg({id: 0" not in connect
-    assert "function mergeThread" in connect and "after=0" in connect
+    assert "addMsg" not in connect and "claimMessage" not in connect
+    assert "after=0" in connect and "keepLive" in html
     assert "cache: 'no-store'" in connect
     assert "sender=user" not in connect and "sender=astrologer" not in connect
     assert "function questionForSession" in connect
@@ -564,35 +565,30 @@ def test_chat_keeps_one_bubble_and_one_poll():
     script = r"""
 const fs = require('fs');
 const src = fs.readFileSync(process.argv[1], 'utf8');
-const start = src.indexOf('function claimMessage');
-const end = src.indexOf('function mineRole');
+const start = src.indexOf('function mergeById');
+const end = src.indexOf('function showMessages');
+if (start < 0 || end < 0) process.exit(2);
 eval(src.slice(start, end));
-const seen = {};
-const pending = [];
-function apply(message) {
-  const claim = claimMessage(seen, pending, message);
-  if (claim.action === 'skip') return 'skip';
-  if (claim.action === 'adopt') {
-    const i = pending.findIndex(item => item.id === claim.tempId);
-    if (i < 0) return 'missing';
-    pending.splice(i, 1);
-    delete seen[claim.tempId];
-    seen[claim.id] = true;
-    return 'adopt';
-  }
-  seen[claim.id] = true;
-  if (String(claim.id).indexOf('tmp-') === 0) pending.push({id: claim.id, sender: message.sender, body: message.body});
-  return 'append';
-}
-if (apply({id: 'tmp-1', sender: 'user', body: 'Hi'}) !== 'append') process.exit(2);
-if (apply({id: '7', sender: 'user', body: 'Hi'}) !== 'adopt') process.exit(3);
-if (apply({id: '7', sender: 'user', body: 'Hi'}) !== 'skip') process.exit(4);
-if (apply({id: '8', sender: 'astrologer', body: 'Hello'}) !== 'append') process.exit(5);
-if (apply({id: '8', sender: 'astrologer', body: 'Hello'}) !== 'skip') process.exit(6);
-if (pending.length !== 0) process.exit(7);
-if (apply({id: 'tmp-2', sender: 'astrologer', body: 'Hi'}) !== 'append') process.exit(8);
-if (apply({id: '9', sender: 'user', body: 'Hi'}) !== 'append') process.exit(9);
-if (apply({id: '10', sender: 'astrologer', body: 'Hi'}) !== 'adopt') process.exit(10);
+const ids = rows => rows.map(m => m.id + ':' + m.sender + ':' + m.body).join('|');
+let thread = mergeById([], [{id: 'tmp-1', sender: 'user', body: 'Hi'}]);
+thread = mergeById(thread, [
+  {id: 7, sender: 'user', body: 'Hi'},
+  {id: 8, sender: 'astrologer', body: 'Hello'},
+]);
+if (ids(thread) !== '7:user:Hi|8:astrologer:Hello') process.exit(3);
+thread = mergeById(thread, [{id: 7, sender: 'user', body: 'Hi'}]);
+if (ids(thread) !== '7:user:Hi|8:astrologer:Hello') process.exit(4);
+thread = mergeById(thread, [
+  {id: 7, sender: 'user', body: 'Hi'},
+  {id: 8, sender: 'astrologer', body: 'Hello'},
+]);
+if (ids(thread) !== '7:user:Hi|8:astrologer:Hello') process.exit(5);
+thread = mergeById(thread, [{id: 'tmp-2', sender: 'astrologer', body: 'Again'}]);
+if (ids(thread) !== '7:user:Hi|8:astrologer:Hello|tmp-2:astrologer:Again') process.exit(6);
+thread = mergeById(thread, [{id: 9, sender: 'user', body: 'Hi'}]);
+if (ids(thread) !== '7:user:Hi|8:astrologer:Hello|9:user:Hi|tmp-2:astrologer:Again') process.exit(7);
+thread = mergeById(thread, [{id: 10, sender: 'astrologer', body: 'Again'}]);
+if (ids(thread) !== '7:user:Hi|8:astrologer:Hello|9:user:Hi|10:astrologer:Again') process.exit(8);
 const qStart = src.indexOf('function questionForSession');
 const qEnd = src.indexOf('function lastQuestion');
 eval(src.slice(qStart, qEnd));
@@ -601,14 +597,6 @@ if (questionForSession('', '  From match  ', [{role: 'user', content: 'old'}]) !
 if (questionForSession('', '', [{role: 'assistant', content: 'x'}, {role: 'user', content: 'When?'}]) !== 'When?') process.exit(13);
 if (questionForSession('', '', [{role: 'user', content: 'first'}, {role: 'user', text: 'second'}]) !== 'second') process.exit(14);
 if (questionForSession('', '', []) !== '') process.exit(15);
-if (apply({id: 'tmp-q', sender: 'user', body: 'Is next spring better?'}) !== 'append') process.exit(16);
-const thread = [
-  {id: '21', sender: 'user', body: 'Is next spring better?'},
-  {id: '22', sender: 'astrologer', body: 'Yes, after Jupiter moves.'},
-];
-if (apply(thread[0]) !== 'adopt') process.exit(17);
-if (apply(thread[1]) !== 'append') process.exit(18);
-if (apply(thread[0]) !== 'skip' || apply(thread[1]) !== 'skip') process.exit(19);
 """
     ran = subprocess.run(["node", "-e", script, os.path.join(root, "web", "connect.js")], capture_output=True, text=True)
     assert ran.returncode == 0, ran.stderr or ran.stdout

@@ -388,7 +388,7 @@
   }
   function watch(session, role, token) {
     stop();
-    live = {id: session.id, elapsed: session.elapsed_seconds || 0, at: Date.now(), cost: session.cost_label || '', room: null, after: 0, role: role || 'user', token: token || null, session: session, seen: {}, gen: generation};
+    live = {id: session.id, elapsed: session.elapsed_seconds || 0, at: Date.now(), cost: session.cost_label || '', room: null, role: role || 'user', token: token || null, session: session, messages: [], gen: generation};
     clock = setInterval(paintClock, 1000);
     paintClock();
     timer = setInterval(() => beat().catch(() => {}), 3000);
@@ -416,10 +416,6 @@
       live.session = view;
       paintClock();
       paintMeter(view);
-      if (view.status === 'active') {
-        const wait = document.querySelector('#connectLog > p.them');
-        if (wait && /Waiting|प्रतीक्षा/.test(wait.textContent || '')) wait.remove();
-      }
       if (view.status === 'ended') {
         stop();
         if (astro) showAstroSummary(view);
@@ -436,28 +432,45 @@
         const q = (astro ? 'after=0' : ('device=' + encodeURIComponent(DEVICE) + '&after=0')) + '&t=' + Date.now();
         const msgs = await api('/api/connect/sessions/' + id + '/messages?' + q, null, token);
         if (!live || live.gen !== gen) return;
-        mergeThread(msgs && msgs.messages);
+        showMessages(msgs && msgs.messages);
       }
     } finally {
       beating = false;
     }
   }
-  function mergeThread(messages) {
-    (messages || []).forEach(m => {
-      if (!m || (m.sender !== 'user' && m.sender !== 'astrologer')) return;
-      addMsg(m);
+  function mergeById(current, incoming) {
+    const map = new Map();
+    (current || []).forEach(item => {
+      if (!item || item.id == null || (item.sender !== 'user' && item.sender !== 'astrologer')) return;
+      map.set(String(item.id), {id: String(item.id), sender: item.sender, body: String(item.body || '')});
+    });
+    (incoming || []).forEach(item => {
+      if (!item || item.id == null || (item.sender !== 'user' && item.sender !== 'astrologer')) return;
+      const id = String(item.id);
+      const body = String(item.body || '');
+      if (id.indexOf('tmp-') !== 0) {
+        for (const [key, prev] of map) {
+          if (key.indexOf('tmp-') === 0 && prev.sender === item.sender && prev.body === body) {
+            map.delete(key);
+            break;
+          }
+        }
+      }
+      map.set(id, {id: id, sender: item.sender, body: body});
+    });
+    return Array.from(map.values()).sort((a, b) => {
+      const aTmp = a.id.indexOf('tmp-') === 0;
+      const bTmp = b.id.indexOf('tmp-') === 0;
+      if (aTmp !== bTmp) return aTmp ? 1 : -1;
+      return (Number(a.id) || 0) - (Number(b.id) || 0);
     });
   }
-  function claimMessage(seen, pending, message) {
-    const id = message && message.id != null ? String(message.id) : '';
-    if (id && seen[id]) return {action: 'skip', id: id};
-    if (id && id.indexOf('tmp-') !== 0) {
-      for (let i = 0; i < pending.length; i++) {
-        const item = pending[i];
-        if (item && item.sender === message.sender && item.body === message.body) return {action: 'adopt', tempId: String(item.id), id: id};
-      }
-    }
-    return {action: 'append', id: id};
+  function showMessages(incoming, dropId) {
+    if (!live) return;
+    let next = mergeById(live.messages, incoming);
+    if (dropId) next = next.filter(item => item.id !== String(dropId));
+    live.messages = next;
+    renderThread();
   }
   function mineRole() {
     return live && live.role === 'astrologer' ? 'astrologer' : 'user';
@@ -466,21 +479,6 @@
     const session = (live && live.session) || {};
     if (live && live.role === 'astrologer') return seekerLabel(session);
     return session.astrologer_name || tr('Astrologer', 'ज्योतिषी');
-  }
-  function pendingMessages() {
-    const log = $('#connectLog');
-    if (!log) return [];
-    return Array.from(log.querySelectorAll('[data-pending="1"]')).map(el => ({
-      id: el.getAttribute('data-id'),
-      sender: el.getAttribute('data-sender'),
-      body: el.getAttribute('data-body'),
-    }));
-  }
-  function remember(id) {
-    if (!live || !id || String(id).indexOf('tmp-') === 0) return;
-    live.seen[String(id)] = true;
-    const n = Number(id);
-    if (n) live.after = Math.max(live.after || 0, n);
   }
   function bubbleNode(m) {
     const node = document.createElement('div');
@@ -501,38 +499,29 @@
     node.appendChild(p);
     return node;
   }
-  function addMsg(m) {
+  function renderThread() {
     const log = $('#connectLog');
-    if (!log || !m || !live) return;
-    if (!live.seen) live.seen = {};
-    const claim = claimMessage(live.seen, pendingMessages(), m);
-    if (claim.action === 'skip') return;
-    if (claim.action === 'adopt') {
-      const node = log.querySelector('[data-pending="1"][data-id="' + claim.tempId + '"]');
-      if (node) {
-        node.setAttribute('data-id', claim.id);
-        node.removeAttribute('data-pending');
-        delete live.seen[claim.tempId];
-      } else {
-        log.appendChild(bubbleNode({id: claim.id, sender: m.sender, body: m.body}));
-      }
-      remember(claim.id);
-      log.scrollTop = log.scrollHeight;
-      return;
+    if (!log || !live) return;
+    const frag = document.createDocumentFragment();
+    const items = live.messages || [];
+    if (!items.length && !(live.session && live.session.status === 'active')) {
+      const wait = document.createElement('p');
+      wait.className = 'them';
+      wait.textContent = tr('Waiting for them to join.', 'उनके जुड़ने की प्रतीक्षा।');
+      frag.appendChild(wait);
     }
-    const id = claim.id || ('tmp-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6));
-    if (live.seen[id]) return;
-    live.seen[id] = true;
-    log.appendChild(bubbleNode({id: id, sender: m.sender, body: m.body}));
-    remember(id);
-    log.scrollTop = log.scrollHeight;
-  }
-  function adoptMessage(serverId, sender, body) {
-    const id = serverId == null ? '' : String(serverId);
-    if (!live || !id) return;
-    addMsg({id: id, sender: sender, body: body});
+    items.forEach(m => frag.appendChild(bubbleNode(m)));
+    const nearEnd = log.scrollHeight - log.scrollTop - log.clientHeight < 48;
+    log.textContent = '';
+    log.appendChild(frag);
+    if (nearEnd) log.scrollTop = log.scrollHeight;
   }
   function openChat(session) {
+    if (live && live.id === session.id && live.role !== 'astrologer' && $('#connectLog')) {
+      live.session = session;
+      showMessages([]);
+      return;
+    }
     watch(session);
     sheet(`<div class="sheet connect-live" role="dialog" aria-modal="true" aria-label="${esc(session.astrologer_name)}">
       <div class="connect-head">
@@ -540,7 +529,7 @@
         <div class="grow"><b>${esc(session.astrologer_name)}</b><span class="connect-meter"><span id="connectClock">00:00</span> · <span id="connectCost">${esc(session.cost_label)}</span></span></div>
         <button type="button" class="btn quiet" id="connectEnd">${tr('End', 'समाप्त')}</button>
       </div>
-      <div class="connect-log" id="connectLog"><p class="them">${tr('Waiting for them to join.', 'उनके जुड़ने की प्रतीक्षा।')}</p></div>
+      <div class="connect-log" id="connectLog"></div>
       <form id="connectForm" class="ask-bar"><textarea id="connectInput" rows="1" maxlength="2000" aria-label="${tr('Message', 'संदेश')}"></textarea>
         <button type="submit" class="btn" id="connectSend">${tr('Send', 'भेजें')}</button></form>
       <button type="button" class="btn quiet" id="connectReport">${tr('Report', 'रिपोर्ट')}</button>
@@ -551,6 +540,7 @@
     $('#connectReport').onclick = () => report(session).catch(showErr);
     $('#connectBlock').onclick = () => block(session).catch(showErr);
     paintClock();
+    showMessages([]);
   }
   function lockSend(locked) {
     const btn = $('#connectSend');
@@ -567,17 +557,13 @@
     const gen = live.gen;
     const sessionId = live.id;
     input.value = '';
-    const waiting = document.querySelector('#connectLog > p.them');
-    if (waiting && /Waiting|प्रतीक्षा/.test(waiting.textContent || '')) waiting.remove();
     const tmp = 'tmp-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-    addMsg({id: tmp, sender: sender, body: text});
+    showMessages([{id: tmp, sender: sender, body: text}]);
     try {
       const saved = await api('/api/connect/sessions/' + sessionId + '/messages', {sender: sender, body: text, device: device}, token);
-      if (live && live.gen === gen) adoptMessage(saved && saved.id, sender, text);
+      if (live && live.gen === gen && saved && saved.id != null) showMessages([{id: saved.id, sender: sender, body: text}]);
     } catch (err) {
-      const node = document.querySelector('#connectLog [data-id="' + tmp + '"]');
-      if (node) node.remove();
-      if (live && live.seen) delete live.seen[tmp];
+      if (live && live.gen === gen) showMessages([], tmp);
       if (input && input.isConnected && !input.value) input.value = text;
       throw err;
     } finally {
@@ -767,6 +753,14 @@
     showAstroSummary(view);
   }
   function openAstroSession(session, token) {
+    if (live && live.role === 'astrologer' && live.id === session.id && $('#connectLog')) {
+      live.session = session;
+      live.token = token;
+      paintClock();
+      paintMeter(session);
+      showMessages([]);
+      return;
+    }
     stopPortalPoll();
     const body = $('#portalBody') || portalRoot(tr('Session', 'सत्र'));
     const who = seekerLabel(session);
@@ -815,6 +809,7 @@
       if (window.toast) toast(tr('Seeker blocked', 'साधक ब्लॉक हो गए'));
       finishAstro(token).catch(showErr);
     }).catch(showErr);
+    showMessages([]);
   }
   function stopPortalPoll() {
     if (portalPoll) clearInterval(portalPoll);

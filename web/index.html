@@ -934,7 +934,9 @@ const chipsHtml = (cls = 'chip') => CHIPS().map(q => `<button class="${cls}" dat
 function render() {
   document.documentElement.lang = S.lang;
   if (window.DrishtiConnect && DrishtiConnect.takeover()) return;
-  closeSheet();
+  const sh = document.getElementById('sheet');
+  const keepLive = sh && !sh.hidden && sh.classList.contains('connect-live');
+  if (!keepLive) closeSheet();
   const splash = document.getElementById('gita-splash');
   if (splash && !splash.hidden && window.__gitaShown && splash.dataset.lang !== S.lang && window.__fillGitaSplash) window.__fillGitaSplash(splash, window.__gitaShown);
   const root = $('#root');
