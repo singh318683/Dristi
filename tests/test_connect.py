@@ -686,8 +686,10 @@ def test_stripe_failures_are_502_and_do_not_save_a_missing_account(client, monke
     assert generic.status_code == 502 and generic.json()["detail"] == "payout_setup_failed"
     assert store.astrologer_private(astro_id)["stripe_account"] == ""
 
+    creates = []
+
     def created(secret, email, key):
-        assert key == "acct-astro-v2-" + astro_id
+        creates.append(key)
         return {"id": "acct_ok"}
 
     def link_fails(secret, account, refresh, back):
@@ -706,6 +708,7 @@ def test_stripe_failures_are_502_and_do_not_save_a_missing_account(client, monke
     monkeypatch.setattr(connect_stripe, "create_account_link", linked_ok)
     ready = client.post("/api/connect/astro/stripe", headers=headers)
     assert ready.status_code == 200 and ready.json()["url"] == "https://connect.stripe.com/setup/ok"
+    assert creates == ["acct-astro-v2-" + astro_id]
 
     def bad_intent(secret, cents, metadata, key):
         raise connect_stripe.StripeError("stripe_rejected", message="card error")
@@ -791,9 +794,20 @@ def test_connected_account_is_v2_with_stripe_losses(monkeypatch):
     onboarding = calls[1]["json"]["use_case"]
     assert calls[1]["url"] == "https://api.stripe.com/v2/core/account_links"
     assert onboarding["type"] == "account_onboarding"
-    assert onboarding["account_onboarding"]["configurations"] == ["merchant", "recipient"]
+    assert "configurations" not in onboarding["account_onboarding"]
+    assert onboarding["account_onboarding"]["collection_options"] == {"fields": "eventually_due"}
+    assert onboarding["account_onboarding"]["refresh_url"] == "https://app.example/#astro"
     assert onboarding["account_onboarding"]["return_url"] == "https://app.example/#astro"
+    assert calls[1]["data"] is None
+    assert calls[1]["headers"]["Content-Type"] == "application/json"
     assert calls[1]["headers"]["Stripe-Version"] == "2026-10-28.preview"
+    assert connect_stripe.transfers_active({}) is False
+    assert connect_stripe.transfers_active({
+        "configuration": {"recipient": {"capabilities": {"stripe_balance": {"stripe_transfers": {"status": "pending"}}}}},
+    }) is False
+    assert connect_stripe.transfers_active({
+        "configuration": {"recipient": {"capabilities": {"stripe_balance": {"stripe_transfers": {"status": "active"}}}}},
+    }) is True
 
     transfer = connect_stripe.create_transfer("sk_test_x", 2500, "acct_v2", "transfer-astro_1")
     assert transfer["id"] == "tr_1"
@@ -801,6 +815,37 @@ def test_connected_account_is_v2_with_stripe_losses(monkeypatch):
     assert calls[2]["data"] == {"amount": "2500", "currency": "usd", "destination": "acct_v2"}
     assert calls[2]["headers"]["Idempotency-Key"] == "transfer-astro_1"
     assert "Stripe-Version" not in calls[2]["headers"]
+
+
+def test_saved_account_is_not_ready_until_transfers_are_active(client, monkeypatch):
+    astro_id, token = seed(client)
+    monkeypatch.setenv("STRIPE_SECRET_KEY", "sk_test")
+    monkeypatch.setenv("CRON_SECRET", "cron-secret")
+    store.set_stripe_account(astro_id, "acct_saved")
+    state = {"status": "pending"}
+
+    def retrieve(secret, account_id):
+        assert secret == "sk_test" and account_id == "acct_saved"
+        return {"configuration": {"recipient": {"capabilities": {"stripe_balance": {"stripe_transfers": {"status": state["status"]}}}}}}
+
+    monkeypatch.setattr(connect_stripe, "retrieve_account", retrieve)
+    waiting = client.get("/api/connect/astro/earnings", headers=auth(token)).json()
+    assert waiting["has_payout_account"] is True and waiting["payouts_ready"] is False
+    state["status"] = "active"
+    ready = client.get("/api/connect/astro/earnings", headers=auth(token)).json()
+    assert ready["payouts_ready"] is True
+
+    sent = []
+    monkeypatch.setattr(store, "payout_candidates", lambda moment=None: [
+        {"astrologer_id": astro_id, "stripe_account": "acct_saved", "amount_cents": 500},
+    ])
+    monkeypatch.setattr(connect_stripe, "create_transfer", lambda *args: sent.append(args) or {"id": "tr_ready"})
+    state["status"] = "pending"
+    held = client.get("/api/cron/connect-payouts", headers={"Authorization": "Bearer cron-secret"})
+    assert held.status_code == 200 and held.json()["payouts"] == [] and sent == []
+    state["status"] = "active"
+    paid = client.get("/api/cron/connect-payouts", headers={"Authorization": "Bearer cron-secret"})
+    assert paid.status_code == 200 and len(paid.json()["payouts"]) == 1 and len(sent) == 1
 
 
 def test_stripe_signature_helper_rejects_a_stale_event():

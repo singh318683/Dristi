@@ -257,11 +257,27 @@ def api_astro_live(request: Request):
     return _run(lambda: store.astro_live(astro_id))
 
 
+def _payouts_ready(secret: str, account_id: str) -> bool:
+    if not secret or not account_id:
+        return False
+    try:
+        account = connect_stripe.retrieve_account(secret, account_id)
+    except connect_stripe.StripeError:
+        return False
+    return connect_stripe.transfers_active(account)
+
+
 @router.get("/api/connect/astro/earnings")
 def api_earnings(request: Request):
     _gate()
     astro_id = _astro_id(request)
-    return _run(lambda: store.earnings(astro_id))
+    view = _run(lambda: store.earnings(astro_id))
+    info = _run(lambda: store.astrologer_private(astro_id))
+    account = info.get("stripe_account") or ""
+    secret = (os.environ.get("STRIPE_SECRET_KEY") or "").strip()
+    view["has_payout_account"] = bool(account)
+    view["payouts_ready"] = _payouts_ready(secret, account)
+    return view
 
 
 @router.post("/api/connect/astro/stripe")
@@ -631,6 +647,8 @@ def api_cron(request: Request):
         return {"ok": True, "skipped": "stripe_not_configured"}
     sent = []
     for row in store.payout_candidates():
+        if not _payouts_ready(stripe_key, row["stripe_account"]):
+            continue
         try:
             transfer = connect_stripe.create_transfer(stripe_key, row["amount_cents"], row["stripe_account"], "transfer-" + row["astrologer_id"])
         except connect_stripe.StripeError:

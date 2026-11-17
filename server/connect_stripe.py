@@ -149,12 +149,13 @@ def connected_account_body(email: str) -> dict:
 
 
 def account_link_body(account_id: str, refresh_url: str, return_url: str) -> dict:
+    # This API version chooses which account setups to collect. Do not send that list.
     return {
         "account": account_id,
         "use_case": {
             "type": "account_onboarding",
             "account_onboarding": {
-                "configurations": ["merchant", "recipient"],
+                "collection_options": {"fields": "eventually_due"},
                 "refresh_url": refresh_url,
                 "return_url": return_url,
             },
@@ -162,8 +163,16 @@ def account_link_body(account_id: str, refresh_url: str, return_url: str) -> dic
     }
 
 
+def transfers_active(account: dict) -> bool:
+    try:
+        cap = account["configuration"]["recipient"]["capabilities"]["stripe_balance"]["stripe_transfers"]
+    except (KeyError, TypeError):
+        return False
+    return isinstance(cap, dict) and cap.get("status") == "active"
+
+
 def _json(secret: str, path: str, payload: dict, idempotency_key: str | None = None) -> dict:
-    headers = {"Stripe-Version": ACCOUNT_API_VERSION}
+    headers = {"Stripe-Version": ACCOUNT_API_VERSION, "Content-Type": "application/json"}
     if idempotency_key:
         headers["Idempotency-Key"] = idempotency_key
     try:
@@ -188,6 +197,27 @@ def create_express_account(secret: str, email: str, idempotency_key: str) -> dic
 
 def create_account_link(secret: str, account_id: str, refresh_url: str, return_url: str) -> dict:
     return _json(secret, "v2/core/account_links", account_link_body(account_id, refresh_url, return_url))
+
+
+def retrieve_account(secret: str, account_id: str) -> dict:
+    account_id = (account_id or "").strip()
+    if not account_id.startswith("acct_") or not account_id.replace("_", "").isalnum():
+        raise StripeError("bad_account")
+    headers = {"Stripe-Version": ACCOUNT_API_VERSION}
+    try:
+        res = httpx.get(
+            "https://api.stripe.com/v2/core/accounts/" + account_id,
+            params=[("include", "configuration.recipient")],
+            auth=(secret, ""),
+            headers=headers,
+            timeout=20,
+        )
+    except httpx.HTTPError as e:
+        log.warning("stripe unreachable error=%s", type(e).__name__)
+        raise StripeError("stripe_unavailable") from e
+    if res.status_code >= 400:
+        _reject(res)
+    return res.json()
 
 
 def create_customer(secret: str, email: str, astrologer_id: str) -> dict:

@@ -975,7 +975,7 @@
         <p>${tr('Drishti fee', 'दृष्टि शुल्क')} ${esc(money.fee_label || '$0.00')}</p>
         <p><b>${tr('Net', 'शुद्ध')} ${esc(money.net_label || '$0.00')}</b></p>
         <button type="button" class="btn" id="managePlan">${tr('Manage plan', 'योजना प्रबंधित करें')}</button>
-        <button type="button" class="btn quiet" id="astroStripe">${tr('Set up payouts', 'भुगतान सेट करें')}</button></div>`;
+        <button type="button" class="btn quiet" id="astroStripe">${money.payouts_ready ? tr('Payouts ready', 'भुगतान तैयार') : (money.has_payout_account ? tr('Finish payout setup', 'भुगतान सेटअप पूरा करें') : tr('Set up payouts', 'भुगतान सेट करें'))}</button></div>`;
     const trial = $('#planTrial');
     if (trial) trial.onclick = () => api('/api/connect/astro/trial', {}, token).then(() => render()).catch(showErr);
     bindPaidButtons(token);
