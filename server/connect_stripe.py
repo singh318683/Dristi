@@ -155,7 +155,7 @@ def account_link_body(account_id: str, refresh_url: str, return_url: str) -> dic
         "use_case": {
             "type": "account_onboarding",
             "account_onboarding": {
-                "collection_options": {"fields": "eventually_due"},
+                "collection_options": {"fields": "currently_due"},
                 "refresh_url": refresh_url,
                 "return_url": return_url,
             },
@@ -169,6 +169,33 @@ def transfers_active(account: dict) -> bool:
     except (KeyError, TypeError):
         return False
     return isinstance(cap, dict) and cap.get("status") == "active"
+
+
+def _deadline_status(node) -> str:
+    if not isinstance(node, dict):
+        return ""
+    deadline = node.get("minimum_deadline")
+    if not isinstance(deadline, dict):
+        return ""
+    return str(deadline.get("status") or "")
+
+
+def more_info_due(account: dict) -> bool:
+    """True when Stripe is asking for something now, or a deadline was missed."""
+    reqs = account.get("requirements") if isinstance(account, dict) else None
+    if not isinstance(reqs, dict):
+        return False
+    summary = reqs.get("summary") if isinstance(reqs.get("summary"), dict) else {}
+    if _deadline_status(summary) in ("currently_due", "past_due"):
+        return True
+    entries = reqs.get("entries")
+    if not isinstance(entries, list):
+        return False
+    return any(_deadline_status(entry) in ("currently_due", "past_due") for entry in entries)
+
+
+def payouts_ready(account: dict) -> bool:
+    return transfers_active(account) and not more_info_due(account)
 
 
 def _json(secret: str, path: str, payload: dict, idempotency_key: str | None = None) -> dict:
@@ -207,7 +234,7 @@ def retrieve_account(secret: str, account_id: str) -> dict:
     try:
         res = httpx.get(
             "https://api.stripe.com/v2/core/accounts/" + account_id,
-            params=[("include", "configuration.recipient")],
+            params=[("include", "configuration.recipient"), ("include", "requirements")],
             auth=(secret, ""),
             headers=headers,
             timeout=20,

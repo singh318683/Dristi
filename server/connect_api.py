@@ -264,7 +264,7 @@ def _payouts_ready(secret: str, account_id: str) -> bool:
         account = connect_stripe.retrieve_account(secret, account_id)
     except connect_stripe.StripeError:
         return False
-    return connect_stripe.transfers_active(account)
+    return connect_stripe.payouts_ready(account)
 
 
 @router.get("/api/connect/astro/earnings")

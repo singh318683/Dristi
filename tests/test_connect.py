@@ -746,6 +746,8 @@ def test_stripe_failures_are_502_and_do_not_save_a_missing_account(client, monke
     assert "connect_not_enabled" in connect and "payout_setup_failed" in connect
     assert "Payouts are not switched on yet. Please try again later." in connect
     assert "भुगतान अभी चालू नहीं हैं। बाद में फिर कोशिश करें।" in connect
+    assert "Your bank and ID details go straight to Stripe. Drishti never sees or stores them." in connect
+    assert "Finish payout setup" in connect and "भुगतान सेटअप पूरा करें" in connect
 
 
 def test_connected_account_is_v2_with_stripe_losses(monkeypatch):
@@ -795,7 +797,7 @@ def test_connected_account_is_v2_with_stripe_losses(monkeypatch):
     assert calls[1]["url"] == "https://api.stripe.com/v2/core/account_links"
     assert onboarding["type"] == "account_onboarding"
     assert "configurations" not in onboarding["account_onboarding"]
-    assert onboarding["account_onboarding"]["collection_options"] == {"fields": "eventually_due"}
+    assert onboarding["account_onboarding"]["collection_options"] == {"fields": "currently_due"}
     assert onboarding["account_onboarding"]["refresh_url"] == "https://app.example/#astro"
     assert onboarding["account_onboarding"]["return_url"] == "https://app.example/#astro"
     assert calls[1]["data"] is None
@@ -826,11 +828,27 @@ def test_saved_account_is_not_ready_until_transfers_are_active(client, monkeypat
 
     def retrieve(secret, account_id):
         assert secret == "sk_test" and account_id == "acct_saved"
-        return {"configuration": {"recipient": {"capabilities": {"stripe_balance": {"stripe_transfers": {"status": state["status"]}}}}}}
+        account = {"configuration": {"recipient": {"capabilities": {"stripe_balance": {"stripe_transfers": {"status": state["status"]}}}}}}
+        if state.get("due"):
+            account["requirements"] = {"summary": {"minimum_deadline": {"status": state["due"]}}}
+        return account
 
     monkeypatch.setattr(connect_stripe, "retrieve_account", retrieve)
     waiting = client.get("/api/connect/astro/earnings", headers=auth(token)).json()
     assert waiting["has_payout_account"] is True and waiting["payouts_ready"] is False
+    state["status"] = "active"
+    state["due"] = "past_due"
+    blocked = client.get("/api/connect/astro/earnings", headers=auth(token)).json()
+    assert blocked["payouts_ready"] is False
+    monkeypatch.setenv("APP_PUBLIC_URL", "https://drishti-ios.vercel.app")
+    created = []
+    monkeypatch.setattr(connect_stripe, "create_express_account", lambda *a, **k: created.append("account"))
+    monkeypatch.setattr(connect_stripe, "create_account_link", lambda *a, **k: {"url": "https://connect.stripe.com/setup/fresh"})
+    state["due"] = "currently_due"
+    state["status"] = "pending"
+    fresh = client.post("/api/connect/astro/stripe", headers=auth(token))
+    assert fresh.status_code == 200 and fresh.json()["url"] == "https://connect.stripe.com/setup/fresh" and created == []
+    state["due"] = ""
     state["status"] = "active"
     ready = client.get("/api/connect/astro/earnings", headers=auth(token)).json()
     assert ready["payouts_ready"] is True
