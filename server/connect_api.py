@@ -276,7 +276,7 @@ def api_stripe_onboard(request: Request):
     account = info["stripe_account"]
     if not account:
         try:
-            created = connect_stripe.create_express_account(secret, info["email"], "acct-" + astro_id)
+            created = connect_stripe.create_express_account(secret, info["email"], "acct-astro-v2-" + astro_id)
         except connect_stripe.StripeError as e:
             raise _stripe_error(e, payout=True) from e
         account = str((created or {}).get("id") or "")

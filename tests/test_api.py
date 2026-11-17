@@ -549,6 +549,26 @@ SUDHANSHU = {"name": "sudhanshu singh", "gender": "male", "date": "1981-05-10", 
              "place": {"name": "Along, Arunachal Pradesh, India", "lat": 28.16951, "lon": 94.8006, "tz": "Asia/Kolkata"}}
 
 
+def test_payout_account_request_drops_the_legacy_type_field():
+    source = open(os.path.join(os.path.dirname(__file__), "..", "server", "connect_stripe.py"), encoding="utf-8").read()
+    api = open(os.path.join(os.path.dirname(__file__), "..", "server", "connect_api.py"), encoding="utf-8").read()
+    body = source.split("def connected_account_body", 1)[1].split("def account_link_body", 1)[0]
+    assert '"type": "express"' not in body
+    assert '"losses_collector": "stripe"' in body
+    assert '"fees_collector": "application"' in body
+    assert '"dashboard": "express"' in body
+    assert '"country": "US"' in body
+    assert "stripe_transfers" in body and '"requested": True' in body
+    assert "v2/core/accounts" in source and "v2/core/account_links" in source
+    assert "account_onboarding" in source
+    assert 'ACCOUNT_API_VERSION = "2026-10-28.preview"' in source
+    onboard = api.split("def api_stripe_onboard", 1)[1].split("def api_quote", 1)[0]
+    assert '"acct-astro-v2-" + astro_id' in onboard
+    assert '"acct-" + astro_id' not in onboard
+    transfer = source.split("def create_transfer", 1)[1]
+    assert '"destination": destination' in transfer and '"currency": "usd"' in transfer
+
+
 def test_chart_endpoint_stays_lahiri_even_if_the_caller_thread_is_fagan(client):
     import swisseph as swe
     swe.set_sid_mode(swe.SIDM_FAGAN_BRADLEY, 0, 0)

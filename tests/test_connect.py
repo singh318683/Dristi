@@ -653,7 +653,7 @@ def test_stripe_failures_are_502_and_do_not_save_a_missing_account(client, monke
                 "message": "You can only create new accounts if you've signed up for Connect sk_test_SECRETKEY",
             }}
 
-    def post(url, data=None, auth=None, headers=None, timeout=None):
+    def post(url, data=None, auth=None, headers=None, timeout=None, **kwargs):
         assert auth == ("sk_test_SECRETKEY", "")
         return Res()
 
@@ -687,6 +687,7 @@ def test_stripe_failures_are_502_and_do_not_save_a_missing_account(client, monke
     assert store.astrologer_private(astro_id)["stripe_account"] == ""
 
     def created(secret, email, key):
+        assert key == "acct-astro-v2-" + astro_id
         return {"id": "acct_ok"}
 
     def link_fails(secret, account, refresh, back):
@@ -742,6 +743,64 @@ def test_stripe_failures_are_502_and_do_not_save_a_missing_account(client, monke
     assert "connect_not_enabled" in connect and "payout_setup_failed" in connect
     assert "Payouts are not switched on yet. Please try again later." in connect
     assert "भुगतान अभी चालू नहीं हैं। बाद में फिर कोशिश करें।" in connect
+
+
+def test_connected_account_is_v2_with_stripe_losses(monkeypatch):
+    calls = []
+
+    class Res:
+        def __init__(self, payload):
+            self.status_code = 200
+            self.payload = payload
+
+        def json(self):
+            return self.payload
+
+    def post(url, data=None, json=None, auth=None, headers=None, timeout=None):
+        calls.append({"url": url, "data": data, "json": json, "headers": dict(headers or {})})
+        if url.endswith("/v2/core/accounts"):
+            return Res({"id": "acct_v2", "object": "v2.core.account"})
+        if url.endswith("/v2/core/account_links"):
+            return Res({"url": "https://connect.stripe.com/setup/v2", "object": "v2.core.account_link"})
+        if url.endswith("/v1/transfers"):
+            return Res({"id": "tr_1", "object": "transfer"})
+        raise AssertionError(url)
+
+    monkeypatch.setattr(connect_stripe.httpx, "post", post)
+    created = connect_stripe.create_express_account("sk_test_x", "a@b.c", "acct-astro-v2-astro_1")
+    assert created["id"] == "acct_v2"
+    account = calls[0]
+    assert account["url"] == "https://api.stripe.com/v2/core/accounts"
+    assert account["data"] is None
+    body = account["json"]
+    assert "type" not in body
+    assert body["contact_email"] == "a@b.c"
+    assert body["dashboard"] == "express"
+    assert body["identity"] == {"country": "US"}
+    assert body["defaults"]["responsibilities"] == {
+        "fees_collector": "application",
+        "losses_collector": "stripe",
+    }
+    assert body["configuration"]["recipient"]["capabilities"]["stripe_balance"]["stripe_transfers"]["requested"] is True
+    assert body["configuration"]["merchant"]["capabilities"]["card_payments"]["requested"] is True
+    assert account["headers"]["Idempotency-Key"] == "acct-astro-v2-astro_1"
+    assert account["headers"]["Stripe-Version"] == "2026-10-28.preview"
+
+    link = connect_stripe.create_account_link("sk_test_x", "acct_v2", "https://app.example/#astro", "https://app.example/#astro")
+    assert link["url"] == "https://connect.stripe.com/setup/v2"
+    onboarding = calls[1]["json"]["use_case"]
+    assert calls[1]["url"] == "https://api.stripe.com/v2/core/account_links"
+    assert onboarding["type"] == "account_onboarding"
+    assert onboarding["account_onboarding"]["configurations"] == ["merchant", "recipient"]
+    assert onboarding["account_onboarding"]["return_url"] == "https://app.example/#astro"
+    assert calls[1]["headers"]["Stripe-Version"] == "2026-10-28.preview"
+
+    transfer = connect_stripe.create_transfer("sk_test_x", 2500, "acct_v2", "transfer-astro_1")
+    assert transfer["id"] == "tr_1"
+    assert calls[2]["url"] == "https://api.stripe.com/v1/transfers"
+    assert calls[2]["data"] == {"amount": "2500", "currency": "usd", "destination": "acct_v2"}
+    assert calls[2]["headers"]["Idempotency-Key"] == "transfer-astro_1"
+    assert "Stripe-Version" not in calls[2]["headers"]
 
 
 def test_stripe_signature_helper_rejects_a_stale_event():

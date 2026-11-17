@@ -12,6 +12,8 @@ import httpx
 
 log = logging.getLogger("drishti.stripe")
 _SECRET = re.compile(r"\b(?:sk|rk)_(?:live|test)_[A-Za-z0-9]+|whsec_[A-Za-z0-9]+")
+# Express Dashboard plus Stripe as the losses collector needs this preview version.
+ACCOUNT_API_VERSION = "2026-10-28.preview"
 
 
 class StripeError(Exception):
@@ -117,22 +119,75 @@ def create_payment_intent(secret: str, amount_cents: int, metadata: dict, idempo
     return _form(secret, "payment_intents", flat, idempotency_key)
 
 
+def connected_account_body(email: str) -> dict:
+    """Accounts v2. Stripe collects losses; the platform pays Stripe fees.
+
+    A recipient-only account cannot set losses_collector to stripe, so the
+    merchant card_payments capability is requested as well. Transfers still
+    arrive through stripe_transfers. Country stays US.
+    """
+    return {
+        "contact_email": email,
+        "dashboard": "express",
+        "identity": {"country": "US"},
+        "defaults": {
+            "responsibilities": {
+                "fees_collector": "application",
+                "losses_collector": "stripe",
+            },
+        },
+        "configuration": {
+            "merchant": {"capabilities": {"card_payments": {"requested": True}}},
+            "recipient": {
+                "capabilities": {
+                    "stripe_balance": {"stripe_transfers": {"requested": True}},
+                },
+            },
+        },
+        "include": ["configuration.merchant", "configuration.recipient", "identity", "defaults"],
+    }
+
+
+def account_link_body(account_id: str, refresh_url: str, return_url: str) -> dict:
+    return {
+        "account": account_id,
+        "use_case": {
+            "type": "account_onboarding",
+            "account_onboarding": {
+                "configurations": ["merchant", "recipient"],
+                "refresh_url": refresh_url,
+                "return_url": return_url,
+            },
+        },
+    }
+
+
+def _json(secret: str, path: str, payload: dict, idempotency_key: str | None = None) -> dict:
+    headers = {"Stripe-Version": ACCOUNT_API_VERSION}
+    if idempotency_key:
+        headers["Idempotency-Key"] = idempotency_key
+    try:
+        res = httpx.post(
+            "https://api.stripe.com/" + path.lstrip("/"),
+            json=payload,
+            auth=(secret, ""),
+            headers=headers,
+            timeout=20,
+        )
+    except httpx.HTTPError as e:
+        log.warning("stripe unreachable error=%s", type(e).__name__)
+        raise StripeError("stripe_unavailable") from e
+    if res.status_code >= 400:
+        _reject(res)
+    return res.json()
+
+
 def create_express_account(secret: str, email: str, idempotency_key: str) -> dict:
-    return _form(secret, "accounts", {
-        "type": "express",
-        "country": "US",
-        "email": email,
-        "capabilities[transfers][requested]": "true",
-    }, idempotency_key)
+    return _json(secret, "v2/core/accounts", connected_account_body(email), idempotency_key)
 
 
 def create_account_link(secret: str, account_id: str, refresh_url: str, return_url: str) -> dict:
-    return _form(secret, "account_links", {
-        "account": account_id,
-        "refresh_url": refresh_url,
-        "return_url": return_url,
-        "type": "account_onboarding",
-    })
+    return _json(secret, "v2/core/account_links", account_link_body(account_id, refresh_url, return_url))
 
 
 def create_customer(secret: str, email: str, astrologer_id: str) -> dict:
@@ -164,6 +219,7 @@ def create_portal(secret: str, customer: str, return_url: str) -> dict:
 
 
 def create_transfer(secret: str, amount_cents: int, destination: str, idempotency_key: str) -> dict:
+    # v2 accounts with stripe_transfers still receive these v1 transfers.
     return _form(secret, "transfers", {
         "amount": str(int(amount_cents)),
         "currency": "usd",
