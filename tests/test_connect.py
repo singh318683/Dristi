@@ -976,6 +976,28 @@ def test_paypal_email_is_private_and_the_weekly_payout_is_sent_once(client, monk
     assert "Save PayPal" in connect
 
 
+def test_next_payout_is_the_monday_on_or_after_available():
+    store_src = open(os.path.join(os.path.dirname(__file__), "..", "server", "connect_store.py"), encoding="utf-8").read()
+    assert "timedelta(days=7)" in store_src
+    assert "PAYOUT_HOLD_DAYS" not in store_src
+    connect = open(os.path.join(os.path.dirname(__file__), "..", "web", "connect.js"), encoding="utf-8").read()
+    assert "payoutMonday(money.next_payout_at)" in connect
+    script = r"""
+const fs = require('fs');
+const src = fs.readFileSync(process.argv[1], 'utf8');
+const start = src.indexOf('function payoutMonday');
+const end = src.indexOf('function todayNet');
+eval(src.slice(start, end));
+let S = {lang: 'en'};
+if (payoutMonday('2026-11-25T12:00:00+00:00') !== 'Monday, Nov 30') process.exit(2);
+if (payoutMonday('2026-11-30T00:00:00+00:00') !== 'Monday, Nov 30') process.exit(3);
+S = {lang: 'hi'};
+if (payoutMonday('2026-11-25T12:00:00+00:00') !== 'सोमवार, 30 नवंबर') process.exit(4);
+"""
+    ran = subprocess.run(["node", "-e", script, os.path.join(os.path.dirname(__file__), "..", "web", "connect.js")], capture_output=True, text=True)
+    assert ran.returncode == 0, ran.stderr or ran.stdout
+
+
 def test_stripe_signature_helper_rejects_a_stale_event():
     payload = b"{}"
     stamp = str(int(time.time()) - 1000)

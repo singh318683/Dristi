@@ -917,6 +917,23 @@
     if (location.hash) location.hash = '';
     else if (typeof render === 'function') render();
   }
+  function payoutMonday(iso) {
+    const day = String(iso || '').slice(0, 10);
+    const parts = day.split('-').map(Number);
+    if (parts.length < 3 || parts.some(n => !n)) return '';
+    const date = new Date(Date.UTC(parts[0], parts[1] - 1, parts[2]));
+    if (isNaN(date.getTime())) return '';
+    const weekday = date.getUTCDay();
+    const add = weekday === 1 ? 0 : (8 - weekday) % 7;
+    date.setUTCDate(date.getUTCDate() + add);
+    const months = (typeof S !== 'undefined' && S.lang === 'hi')
+      ? ['जनवरी', 'फ़रवरी', 'मार्च', 'अप्रैल', 'मई', 'जून', 'जुलाई', 'अगस्त', 'सितंबर', 'अक्टूबर', 'नवंबर', 'दिसंबर']
+      : ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const name = (typeof S !== 'undefined' && S.lang === 'hi') ? 'सोमवार' : 'Monday';
+    const month = months[date.getUTCMonth()];
+    const num = date.getUTCDate();
+    return (typeof S !== 'undefined' && S.lang === 'hi') ? (name + ', ' + num + ' ' + month) : (name + ', ' + month + ' ' + num);
+  }
   function todayNet(sessions) {
     const now = new Date();
     const cents = (sessions || []).reduce((sum, s) => {
@@ -964,7 +981,7 @@
     </div>`;
     const main = $('#portalBody');
     const plans = planCards();
-    const nextWhen = money.next_payout_at ? String(money.next_payout_at).slice(0, 10) : tr('Not scheduled', 'अभी निर्धारित नहीं');
+    const nextWhen = money.next_payout_at ? payoutMonday(money.next_payout_at) : tr('Not scheduled', 'अभी निर्धारित नहीं');
     if (tab === 'choose') {
       main.innerHTML = `<h2>${tr('How do you want to get paid?', 'भुगतान कैसे चाहिए?')}</h2>
         <button type="button" class="pay-choice recommended" id="pickPayPal"><span class="tag rec">${tr('Recommended', 'सुझाव')}</span><b>PayPal</b><span>${tr('India & worldwide. Just your PayPal email. No ID needed.', 'भारत और दुनिया भर। केवल PayPal ईमेल। पहचान पत्र नहीं।')}</span></button>
