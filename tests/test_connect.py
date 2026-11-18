@@ -294,8 +294,13 @@ def test_wallet_intent_is_card_only(client, monkeypatch):
     assert res.status_code == 200
     assert res.json()["return_url"] == "https://drishti-ios.vercel.app/#wallet"
     assert captured["path"] == "payment_intents"
-    assert captured["data"]["payment_method_types[]"] == "card"
-    assert "automatic_payment_methods[enabled]" not in captured["data"]
+    assert captured["data"]["automatic_payment_methods[enabled]"] == "true"
+    assert captured["data"]["automatic_payment_methods[allow_redirects]"] == "never"
+    assert "payment_method_types[]" not in captured["data"]
+    assert "payment_method_types" not in captured["data"]
+    client_js = open(os.path.join(os.path.dirname(__file__), "..", "web", "connect.js"), encoding="utf-8").read()
+    assert "clientSecret: intent.client_secret" in client_js
+    assert "applePay: 'never'" in client_js and "googlePay: 'never'" in client_js
 
 
 def test_wallet_confirm_shares_the_webhook_id(client, monkeypatch):

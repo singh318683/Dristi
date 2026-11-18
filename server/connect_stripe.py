@@ -109,10 +109,13 @@ def retrieve_payment_intent(secret: str, intent_id: str) -> dict:
 
 
 def create_payment_intent(secret: str, amount_cents: int, metadata: dict, idempotency_key: str) -> dict:
+    # 2026-09-30.endive and later reject payment_method_types. Dynamic methods
+    # stay on, but redirect-based methods stay off for the in-app Payment Element.
     flat = {
         "amount": str(int(amount_cents)),
         "currency": "usd",
-        "payment_method_types[]": "card",
+        "automatic_payment_methods[enabled]": "true",
+        "automatic_payment_methods[allow_redirects]": "never",
     }
     for key, value in metadata.items():
         flat[f"metadata[{key}]"] = str(value)
