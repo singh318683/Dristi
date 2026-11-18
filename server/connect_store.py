@@ -1025,7 +1025,47 @@ def earnings(astrologer_id: str) -> dict:
         "renews_at": renews or "",
         "has_billing_account": bool(plan and plan[5]),
         "payouts": [{"id": p[0], "amount_cents": p[1], "status": p[2], "created": p[3], "stripe_transfer": p[4]} for p in payouts],
+        **_next_payout(sessions),
     }
+
+
+def _next_payout(sessions: list[dict]) -> dict:
+    unpaid = [s for s in sessions if int(s.get("astro_cents") or 0) > 0 and not s.get("paid") and s.get("available_at")]
+    unpaid.sort(key=lambda s: s["available_at"])
+    when = unpaid[0]["available_at"] if unpaid else ""
+    cents = sum(int(s["astro_cents"] or 0) for s in unpaid if s["available_at"] == when) if when else 0
+    return {"next_payout_at": when, "next_payout_cents": cents, "next_payout_label": money.money_label(cents)}
+
+
+def astro_profile(astrologer_id: str) -> dict:
+    with db.connect() as con:
+        ensure(con)
+        row = con.execute(
+            "select name, status, online, rate_cents, email from ac_astrologer where id=?",
+            (astrologer_id,)).fetchone()
+    if not row:
+        raise ConnectError("not_found", 404)
+    rate = int(row[3] or 0)
+    return {
+        "name": row[0], "status": row[1], "online": bool(row[2]),
+        "rate_cents": rate, "rate_label": money.money_label(rate, True), "email": row[4],
+    }
+
+
+def set_rate(astrologer_id: str, rate_cents: int) -> dict:
+    try:
+        rate = money.check_rate(int(rate_cents))
+    except money.MoneyError as e:
+        raise ConnectError(e.code, 400) from e
+    with db.connect() as con:
+        ensure(con)
+        row = con.execute("select status from ac_astrologer where id=?", (astrologer_id,)).fetchone()
+        if not row:
+            raise ConnectError("not_found", 404)
+        if row[0] != "approved":
+            raise ConnectError("not_approved", 403)
+        con.execute("update ac_astrologer set rate_cents=? where id=?", (rate, astrologer_id))
+    return {"rate_cents": rate, "rate_label": money.money_label(rate, True)}
 
 
 def payout_candidates(moment: datetime | None = None) -> list[dict]:

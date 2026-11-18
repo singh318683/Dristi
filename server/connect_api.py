@@ -236,6 +236,25 @@ def api_password(body: PasswordIn, request: Request):
     return _run(lambda: store.change_astro_password(astro_id, body.password))
 
 
+@router.get("/api/connect/astro/me")
+def api_me(request: Request):
+    _gate()
+    astro_id = _astro_id(request)
+    return _run(lambda: store.astro_profile(astro_id))
+
+
+class RateIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    rate_cents: int
+
+
+@router.post("/api/connect/astro/rate")
+def api_rate(body: RateIn, request: Request):
+    _gate()
+    astro_id = _astro_id(request)
+    return _run(lambda: store.set_rate(astro_id, body.rate_cents))
+
+
 @router.post("/api/connect/astro/online")
 def api_online(body: OnlineIn, request: Request):
     _gate()

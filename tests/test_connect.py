@@ -866,6 +866,26 @@ def test_saved_account_is_not_ready_until_transfers_are_active(client, monkeypat
     assert paid.status_code == 200 and len(paid.json()["payouts"]) == 1 and len(sent) == 1
 
 
+def test_approved_astrologer_can_change_rate_inside_the_bounds(client):
+    astro_id, token = seed(client)
+    headers = auth(token)
+    low = client.post("/api/connect/astro/rate", headers=headers, json={"rate_cents": 29})
+    high = client.post("/api/connect/astro/rate", headers=headers, json={"rate_cents": 501})
+    assert low.status_code == 400 and high.status_code == 400
+    saved = client.post("/api/connect/astro/rate", headers=headers, json={"rate_cents": 150})
+    assert saved.status_code == 200 and saved.json()["rate_cents"] == 150
+    assert client.get("/api/connect/astro/me", headers=headers).json()["status"] == "approved"
+    connect = open(os.path.join(os.path.dirname(__file__), "..", "web", "connect.js"), encoding="utf-8").read()
+    html = open(os.path.join(os.path.dirname(__file__), "..", "web", "index.html"), encoding="utf-8").read()
+    assert "You're an approved astrologer" in connect and "Switch to Astrologer mode" in connect
+    assert "Switch to User mode" in connect and "Astrologer mode" in connect
+    assert "function renderAstroMode" in connect and "function choosePayoutMethod" in connect
+    assert 'data-payout-method="stripe"' in connect
+    assert "Your bank and ID details go straight to Stripe. Drishti never sees or stores them." in connect
+    assert "astro-mode" in html and "#4B4789" in html
+    assert 'id="astroModeSlot"' in html
+
+
 def test_stripe_signature_helper_rejects_a_stale_event():
     payload = b"{}"
     stamp = str(int(time.time()) - 1000)

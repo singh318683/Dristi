@@ -726,7 +726,7 @@
     } else {
       box.disabled = false;
       box.checked = !!(desk && desk.online);
-      if (label) label.textContent = tr('Online', 'ऑनलाइन');
+      if (label) label.textContent = document.body.classList.contains('astro-mode') ? tr('Available', 'उपलब्ध') : tr('Online', 'ऑनलाइन');
     }
   }
   function showAstroSummary(view) {
@@ -889,6 +889,197 @@
       }).catch(() => {});
     }, 5000);
   }
+  function choosePayoutMethod(method, token) {
+    if (method !== 'stripe') {
+      showErr(new Error(tr('That payout method is not available yet.', 'यह भुगतान तरीका अभी उपलब्ध नहीं।')));
+      return Promise.resolve();
+    }
+    sessionStorage.setItem('dr-astro-return', 'earn');
+    return api('/api/connect/astro/stripe', {}, token).then(d => { if (d.url) location.href = d.url; });
+  }
+  function switchToAstro(tab) {
+    stopUserPoll();
+    sessionStorage.setItem('dr-astro-tab', tab || 'dash');
+    store.set('app-mode', 'astro');
+    const ping = document.getElementById('astroPing');
+    if (ping) ping.remove();
+    if (location.hash !== '#astro') location.hash = '#astro';
+    else if (typeof render === 'function') render();
+  }
+  function switchToUser() {
+    store.set('app-mode', 'user');
+    document.body.classList.remove('astro-mode');
+    if (location.hash) location.hash = '';
+    else if (typeof render === 'function') render();
+  }
+  function todayNet(sessions) {
+    const now = new Date();
+    const cents = (sessions || []).reduce((sum, s) => {
+      const d = new Date(s.ended_at || '');
+      if (isNaN(d.getTime())) return sum;
+      if (d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate()) return sum + (Number(s.astro_cents) || 0);
+      return sum;
+    }, 0);
+    return '$' + (cents / 100).toFixed(2);
+  }
+  function payoutSetupHtml(money) {
+    const label = money.payouts_ready
+      ? tr('Payouts ready', 'भुगतान तैयार')
+      : (money.has_payout_account ? tr('Finish payout setup', 'भुगतान सेटअप पूरा करें') : tr('Set up payouts', 'भुगतान सेट करें'));
+    const line = money.payouts_ready ? `<p>${tr('Payouts to Stripe', 'भुगतान Stripe पर')}</p>` : '';
+    return `${line}<button type="button" class="btn${money.payouts_ready ? ' quiet' : ''}" id="astroStripe" data-payout-method="stripe">${label}</button>
+      <p class="sub" id="payoutPrivacy">${tr('Your bank and ID details go straight to Stripe. Drishti never sees or stores them.', 'आपके बैंक और पहचान के विवरण सीधे Stripe को जाते हैं। दृष्टि उन्हें कभी नहीं देखती या सहेजती।')}</p>`;
+  }
+  function renderAstroMode(desk, money, me, token) {
+    if (sessionStorage.getItem('dr-astro-return') === 'earn') {
+      sessionStorage.setItem('dr-astro-tab', 'earn');
+      sessionStorage.removeItem('dr-astro-return');
+    }
+    const tab = sessionStorage.getItem('dr-astro-tab') || 'dash';
+    stopUserPoll();
+    store.set('app-mode', 'astro');
+    document.body.classList.add('astro-mode');
+    document.body.classList.remove('app-fit');
+    const root = document.getElementById('root');
+    const tabs = [
+      ['dash', tr('Dashboard', 'डैशबोर्ड')],
+      ['sessions', tr('Sessions', 'सत्र')],
+      ['earn', tr('Earnings', 'कमाई')],
+      ['settings', tr('Settings', 'सेटिंग')],
+    ];
+    root.innerHTML = `<div class="astro-app" id="astroApp">
+      <header class="top"><span class="tag astro-badge">${tr('Astrologer mode', 'ज्योतिषी मोड')}</span><b>${esc(me.name || '')}</b></header>
+      <div id="portalBody"></div>
+      <button type="button" class="btn quiet astro-switch" id="switchUser">${tr('Switch to User mode', 'उपयोगकर्ता मोड पर जाएँ')}</button>
+      <nav class="bottom astro-nav" aria-label="${tr('Astrologer', 'ज्योतिषी')}"><div class="in">${tabs.map(([k, label]) => `<button type="button" data-tab="${k}" ${k === tab ? 'aria-current="page"' : ''}>${label}</button>`).join('')}</div></nav>
+    </div>`;
+    const main = $('#portalBody');
+    const plans = planCards();
+    const nextWhen = money.next_payout_at ? String(money.next_payout_at).slice(0, 10) : tr('Not scheduled', 'अभी निर्धारित नहीं');
+    if (tab === 'sessions') {
+      const live = desk.session && desk.session.status === 'active' ? `<div class="card"><b>${tr('Active', 'चल रहा')}</b><p>${esc(desk.session.mode || '')} · ${esc(desk.session.seeker_name || tr('Seeker', 'साधक'))}</p><button type="button" class="btn" id="openLive">${tr('Open session', 'सत्र खोलें')}</button></div>` : '';
+      const past = (money.sessions || []).map(s => `<div class="card"><b>${esc(s.mode || '')}</b><p>${esc(String(s.ended_at || '').slice(0, 16).replace('T', ' '))} · ${esc(s.paid ? tr('Paid', 'भुगतान') : tr('Unpaid', 'बाकी'))}</p><p>${tr('Net', 'शुद्ध')} $${((Number(s.astro_cents) || 0) / 100).toFixed(2)}</p></div>`).join('')
+        || `<p class="sub">${tr('No past sessions yet.', 'अभी कोई पुराना सत्र नहीं।')}</p>`;
+      main.innerHTML = `<h2>${tr('Sessions', 'सत्र')}</h2>${live}${past}`;
+      const open = $('#openLive');
+      if (open) open.onclick = () => openAstroSession(desk.session, token);
+    } else if (tab === 'earn') {
+      main.innerHTML = `<h2>${tr('Earnings', 'कमाई')}</h2><div class="card" id="earnings"><h3>${tr('Summary', 'सारांश')}</h3>
+        <p>${tr('Gross', 'कुल')} ${esc(money.gross_label || '$0.00')}</p>
+        <p>${tr('Drishti fee', 'दृष्टि शुल्क')} ${esc(money.fee_label || '$0.00')}</p>
+        <p><b>${tr('Net', 'शुद्ध')} ${esc(money.net_label || '$0.00')}</b></p>
+        <p>${tr('Next payout', 'अगला भुगतान')} ${esc(nextWhen)} · ${esc(money.next_payout_label || '$0.00')}</p>
+        ${payoutSetupHtml(money)}</div>`;
+    } else if (tab === 'settings') {
+      main.innerHTML = `<h2>${tr('Settings', 'सेटिंग')}</h2>
+        <form class="card" id="rateForm"><h3>${tr('Rate per minute', 'प्रति मिनट शुल्क')}</h3>
+          <input class="input" id="rateDollars" inputmode="decimal" value="${esc((Number(me.rate_cents) / 100).toFixed(2))}" aria-label="${tr('Rate per minute', 'प्रति मिनट शुल्क')}">
+          <p class="sub">$${(plans.low / 100).toFixed(2)}–$${(plans.high / 100).toFixed(2)}</p>
+          <button class="btn" type="submit">${tr('Save rate', 'शुल्क सहेजें')}</button></form>
+        <div class="card"><h3>${tr('Payout method', 'भुगतान तरीका')}</h3><p>Stripe</p>
+          <button type="button" class="btn quiet" id="payoutChange" data-payout-method="stripe">${tr('Change', 'बदलें')}</button>
+          <p class="sub">${tr('Another method can be added here later.', 'बाद में यहाँ दूसरा तरीका जोड़ा जा सकता है।')}</p></div>
+        <div class="card"><h3>${tr('Plan', 'योजना')}</h3>
+          <p>${plans.days} ${tr('day free trial, then', 'दिन का निःशुल्क परीक्षण, फिर')} ${esc(plans.month)} ${tr('a month or', 'माह या')} ${esc(plans.year)} ${tr('a year.', 'वर्ष।')}</p>
+          <p class="sub">${tr('You keep 95%. Drishti keeps 5%.', 'आप 95% रखते हैं। दृष्टि 5% रखती है।')}</p>
+          <p class="sub">${esc(trialNote(money))}</p>
+          <button type="button" class="btn" id="managePlan">${tr('Manage plan', 'योजना प्रबंधित करें')}</button>
+          <button type="button" class="btn quiet" id="planMonth">${tr('Monthly', 'मासिक')} ${esc(plans.month)}</button>
+          <button type="button" class="btn quiet" id="planYear">${tr('Yearly', 'वार्षिक')} ${esc(plans.year)}</button></div>
+        <button type="button" class="btn quiet astro-switch" id="switchUserSettings">${tr('Switch to User mode', 'उपयोगकर्ता मोड पर जाएँ')}</button>`;
+      $('#rateForm').onsubmit = e => {
+        e.preventDefault();
+        const dollars = parseFloat(String($('#rateDollars').value).replace(/[^0-9.]/g, ''));
+        if (!isFinite(dollars) || dollars < 0.3 || dollars > 5) {
+          showErr(new Error(tr('Enter a per-minute rate between $0.30 and $5.00, for example 1.50', 'प्रति मिनट दर $0.30 से $5.00 के बीच डालें, जैसे 1.50')));
+          return;
+        }
+        api('/api/connect/astro/rate', {rate_cents: Math.round(dollars * 100)}, token).then(() => {
+          if (window.toast) toast(tr('Rate saved', 'शुल्क सहेजा गया'));
+          render();
+        }).catch(showErr);
+      };
+      const change = $('#payoutChange');
+      if (change) change.onclick = () => choosePayoutMethod(change.dataset.payoutMethod || 'stripe', token).catch(showErr);
+      const settingsSwitch = $('#switchUserSettings');
+      if (settingsSwitch) settingsSwitch.onclick = switchToUser;
+      bindPaidButtons(token);
+      const manage = $('#managePlan');
+      if (manage) manage.onclick = () => {
+        if (!money.has_billing_account) { revealPaidPlans(money, token); return; }
+        api('/api/connect/astro/portal', {}, token).then(d => { if (d.url) location.href = d.url; }).catch(err => {
+          if (err && err.code === 'no_billing_account') { revealPaidPlans(money, token); return; }
+          showErr(err);
+        });
+      };
+    } else {
+      main.innerHTML = `<h2>${tr('Dashboard', 'डैशबोर्ड')}</h2>
+        <div class="card"><label class="spread"><span id="onlineLabel">${tr('Available', 'उपलब्ध')}</span><input type="checkbox" id="astroOnline"></label></div>
+        <div id="incoming"></div>
+        <div class="card"><h3>${tr("Today's earnings", 'आज की कमाई')}</h3><p><b>${esc(todayNet(money.sessions))}</b></p>
+          <p>${tr('Next payout', 'अगला भुगतान')} ${esc(nextWhen)} · ${esc(money.next_payout_label || '$0.00')}</p>
+          ${payoutSetupHtml(money)}</div>`;
+      paintOnline(desk);
+      const box = $('#astroOnline');
+      if (box) box.onchange = e => api('/api/connect/astro/online', {online: !!e.target.checked}, token).then(view => paintOnline({online: view.online, in_session: false})).catch(err => { paintOnline(desk); showErr(err); });
+      paintIncoming(desk.ringing || [], token);
+    }
+    const pay = $('#astroStripe');
+    if (pay) pay.onclick = () => choosePayoutMethod('stripe', token).catch(showErr);
+    const back = $('#switchUser');
+    if (back) back.onclick = switchToUser;
+    $$('#astroApp nav button').forEach(b => b.onclick = () => {
+      sessionStorage.setItem('dr-astro-tab', b.dataset.tab);
+      renderAstroMode(desk, money, me, token);
+    });
+    if (desk.session && desk.session.status === 'active' && tab === 'dash') openAstroSession(desk.session, token);
+    else watchIncoming(token);
+  }
+  let userPoll = 0;
+  function stopUserPoll() {
+    if (userPoll) clearInterval(userPoll);
+    userPoll = 0;
+  }
+  function watchUserIncoming(token) {
+    stopUserPoll();
+    const beat = () => {
+      if (location.hash === '#astro' || store.get('app-mode') === 'astro') return;
+      api('/api/connect/astro/live', null, token).then(desk => {
+        const waiting = (desk.ringing || []).filter(s => s && s.status === 'ringing');
+        let host = document.getElementById('astroPing');
+        if (!waiting.length) { if (host) host.remove(); return; }
+        if (host) return;
+        host = document.createElement('div');
+        host.id = 'astroPing';
+        host.className = 'astro-ping';
+        host.innerHTML = `<b>${tr('New request', 'नया अनुरोध')}</b><p class="sub">${tr('Switch to Astrologer mode to accept it.', 'स्वीकार करने के लिए ज्योतिषी मोड पर जाएँ।')}</p><button type="button" class="btn" id="pingSwitch">${tr('Switch to Astrologer mode', 'ज्योतिषी मोड पर जाएँ')}</button>`;
+        document.body.appendChild(host);
+        const go = host.querySelector('#pingSwitch');
+        if (go) go.onclick = () => switchToAstro('dash');
+      }).catch(() => {});
+    };
+    beat();
+    userPoll = setInterval(beat, 5000);
+  }
+  function bannerHtml() {
+    return `<div class="astro-banner" id="astroModeBanner"><b>${tr("You're an approved astrologer", 'आप स्वीकृत ज्योतिषी हैं')}</b><button type="button" class="btn" id="switchAstro">${tr('Switch to Astrologer mode', 'ज्योतिषी मोड पर जाएँ')}</button></div>`;
+  }
+  async function paintBanner() {
+    const slot = document.getElementById('astroModeSlot');
+    if (!slot || !on()) return;
+    const token = sessionStorage.getItem('dr-astro-token') || '';
+    if (!token) { slot.hidden = true; slot.innerHTML = ''; stopUserPoll(); return; }
+    let me;
+    try { me = await api('/api/connect/astro/me', null, token); }
+    catch (e) { slot.hidden = true; return; }
+    sessionStorage.setItem('dr-astro-status', me.status || '');
+    if (me.status !== 'approved') { slot.hidden = true; slot.innerHTML = ''; stopUserPoll(); return; }
+    slot.hidden = false;
+    slot.innerHTML = bannerHtml();
+    const button = document.getElementById('switchAstro');
+    if (button) button.onclick = () => switchToAstro('dash');
+    watchUserIncoming(token);
+  }
   async function renderPortal() {
     stopPortalPoll();
     const body = portalRoot(tr('Astrologer', 'ज्योतिषी'));
@@ -944,9 +1135,11 @@
     }
     let desk = {online: false, in_session: false, session: null, ringing: []};
     let money = {sessions: [], payouts: [], gross_label: '$0.00', fee_label: '$0.00', net_label: '$0.00', plan_status: 'none', renews_at: ''};
+    let me = {status: ''};
     try {
       desk = await api('/api/connect/astro/live', null, token);
       money = await api('/api/connect/astro/earnings', null, token);
+      me = await api('/api/connect/astro/me', null, token);
     } catch (e) {
       if (e && e.code === 'must_change') {
         sessionStorage.setItem('dr-astro-must-change', '1');
@@ -958,6 +1151,12 @@
       render();
       return;
     }
+    sessionStorage.setItem('dr-astro-status', me.status || '');
+    if (me.status === 'approved') {
+      renderAstroMode(desk, money, me, token);
+      return;
+    }
+    store.set('app-mode', 'user');
     const plans = planCards();
     const needsPlan = !money.plan_status || money.plan_status === 'none' || money.plan_status === 'canceled';
     body.innerHTML = `${needsPlan ? `<div class="card" id="planPicker"><h3>${tr('Choose a plan', 'योजना चुनें')}</h3>
@@ -985,7 +1184,7 @@
     $('#astroOnline').onchange = e => api('/api/connect/astro/online', {online: !!e.target.checked}, token).then(view => paintOnline({online: view.online, in_session: false})).catch(err => { paintOnline(desk); showErr(err); });
     paintIncoming(desk.ringing || [], token);
     watchIncoming(token);
-    $('#astroStripe').onclick = () => api('/api/connect/astro/stripe', {}, token).then(d => { if (d.url) location.href = d.url; }).catch(showErr);
+    $('#astroStripe').onclick = () => choosePayoutMethod('stripe', token).catch(showErr);
     $('#managePlan').onclick = () => {
       if (!money.has_billing_account) { revealPaidPlans(money, token); return; }
       api('/api/connect/astro/portal', {}, token).then(d => { if (d.url) location.href = d.url; }).catch(err => {
@@ -1133,7 +1332,10 @@
     return true;
   }
   window.onAnswerClosed = function () { if (on()) offer(); };
-  window.DrishtiConnect = {takeover: takeover, offer: offer, list: list, stop: stop};
+  window.DrishtiConnect = {takeover: takeover, offer: offer, list: list, stop: stop, paintBanner: paintBanner, switchToAstro: switchToAstro};
+  if (store.get('app-mode') === 'astro' && sessionStorage.getItem('dr-astro-token') && location.hash !== '#astro' && location.hash !== '#admin') {
+    location.hash = '#astro';
+  }
   window.addEventListener('hashchange', () => {
     if (location.hash !== '#astro' && live && live.role === 'astrologer') stop();
     if (typeof render === 'function') render();

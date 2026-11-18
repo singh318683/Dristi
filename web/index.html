@@ -187,6 +187,15 @@ nav.bottom .ico{width:56px;height:30px;border-radius:15px;display:grid;place-ite
 nav.bottom svg{width:24px;height:24px}
 nav.bottom button[aria-current=page]{color:var(--ink);font-weight:700}
 nav.bottom button[aria-current=page] .ico{background:var(--primary-tint);color:var(--primary)}
+body.astro-mode{--primary:#4B4789;--on-primary:#fff;--primary-tint:#EEEAF8;--on-tint:#3C3974;--primary-line:#D9D4F0}
+@media (prefers-color-scheme:dark){body.astro-mode{--primary:#A9A6E8;--on-primary:#1F1B16;--primary-tint:#2A2844;--on-tint:#D9D6F5;--primary-line:#3C3960}}
+.astro-badge{background:#4B4789;color:#fff}
+.astro-banner,.astro-ping{background:#EEEAF8;border:1px solid #D9D4F0;border-radius:16px;padding:12px 14px}
+.astro-banner{margin:0 0 12px;display:flex;flex-direction:column;gap:8px}
+.astro-ping{position:fixed;left:12px;right:12px;bottom:calc(var(--nav-h) + env(safe-area-inset-bottom) + 12px);z-index:40;box-shadow:var(--shadow)}
+.astro-app{max-width:560px;margin:0 auto;padding:12px 16px calc(var(--nav-h) + env(safe-area-inset-bottom) + 28px);min-height:100dvh}
+.astro-app nav.bottom .in{grid-template-columns:repeat(4,1fr)}
+.astro-switch{display:block;width:100%;margin:4px 0 8px}
 .cta{background:var(--surface);border:1px solid var(--line);border-radius:20px;padding:18px;margin-bottom:14px;box-shadow:var(--shadow)}
 .cta p{margin:0 0 14px;color:var(--muted);font-size:15px}
 .cta .btn{margin-bottom:14px}
@@ -934,6 +943,7 @@ const chipsHtml = (cls = 'chip') => CHIPS().map(q => `<button class="${cls}" dat
 // ------------------------------------------------------------------ shell
 function render() {
   document.documentElement.lang = S.lang;
+  document.body.classList.remove('astro-mode');
   if (window.DrishtiConnect && DrishtiConnect.takeover()) return;
   const sh = document.getElementById('sheet');
   const keepLive = sh && !sh.hidden && sh.classList.contains('connect-live');
@@ -2825,15 +2835,16 @@ function pageAsk() {
     <button class="asking" id="whoBtn" aria-haspopup="dialog">${tr('Reading the chart of', 'इनकी कुंडली पढ़ रहे हैं:')} <span class="avatar sm">${initial(p.name)}</span><b style="color:var(--ink)">${esc(p.name)}</b>${I.chev()}</button>`;
   const note = `<p class="ask-note" id="askNote">${tr('Charged only when the answer starts', 'शुल्क तभी, जब उत्तर शुरू हो')}</p>`;
   if (!hist.length) {
-    $('#app').innerHTML = `<div class="chat is-empty">${head}<div class="ask-stage" id="askStage"><div class="welcome ask-hero"><div class="ask-om" aria-hidden="true"><span class="dev">ॐ</span></div><h1>${tr(`Namaste, ${esc(p.name)}. What would you like to know?`, `नमस्ते, ${esc(p.name)}। आप क्या जानना चाहेंगे?`)}</h1></div>${talkLiveHtml()}${askFormHtml(true)}${note}</div></div>`;
+    $('#app').innerHTML = `<div class="chat is-empty">${head}<div class="ask-stage" id="askStage"><div id="astroModeSlot" hidden></div><div class="welcome ask-hero"><div class="ask-om" aria-hidden="true"><span class="dev">ॐ</span></div><h1>${tr(`Namaste, ${esc(p.name)}. What would you like to know?`, `नमस्ते, ${esc(p.name)}। आप क्या जानना चाहेंगे?`)}</h1></div>${talkLiveHtml()}${askFormHtml(true)}${note}</div></div>`;
   } else {
-    $('#app').innerHTML = `<div class="chat">${head}<div class="msgs" id="msgs" aria-live="polite"></div><div class="composer" id="composer">${talkLiveHtml()}${askFormHtml(false)}${note}<p class="ask-remedy" id="askRemedy">${tr('Remedies, if offered, are optional and free.', 'उपाय हों तो वैकल्पिक और मुफ़्त।')}</p></div></div>`;
+    $('#app').innerHTML = `<div class="chat">${head}<div id="astroModeSlot" hidden></div><div class="msgs" id="msgs" aria-live="polite"></div><div class="composer" id="composer">${talkLiveHtml()}${askFormHtml(false)}${note}<p class="ask-remedy" id="askRemedy">${tr('Remedies, if offered, are optional and free.', 'उपाय हों तो वैकल्पिक और मुफ़्त।')}</p></div></div>`;
     const box = $('#msgs');
     box.innerHTML = hist.map(bubble).join('');
     box.scrollTop = box.scrollHeight;
     bindAskThread(box);
   }
   bindHeader();
+  if (window.DrishtiConnect && DrishtiConnect.paintBanner) DrishtiConnect.paintBanner();
   bindAskForm();
   bindTalkLive();
   bindGo();
@@ -3204,6 +3215,7 @@ function openPeople() { openDetail(tr('People', 'लोग'), peopleHtml()); bin
 function pageMe() {
   const price = (S.wallet && S.wallet.price_label) || '$0.99', cur = activeProfile();
   $('#app').innerHTML = header() + `<main class="fit" id="me"><div><div class="h1">${tr('Profile', 'प्रोफ़ाइल')}</div><p class="sub">${tr('Acharya is an AI astrologer.', 'आचार्य एक AI ज्योतिषी हैं।')}</p></div>
+    <div id="astroModeSlot" hidden></div>
     <button class="card link" id="personRow"><div class="minirow"><span class="avatar lg">${initial(cur.name)}</span><span class="grow"><b>${esc(cur.name)}</b><span class="small muted" style="display:block">${esc(relName(cur.relation))} · ${fmtDate(cur.date)} · ${esc(cur.place.name.split(',')[0])}</span></span>${I.chev()}</div></button>
     <section class="card"><div class="spread"><div><b id="credN">${esc(price)}</b> <span class="muted">${tr('per Acharya question', 'प्रति आचार्य प्रश्न')}</span></div></div>
       <p class="small muted">${storeLine('Paid on Google Play, one question at a time. There is no free question and no credit pack. The chart, periods, dosha, panchang, matching, horoscope and kundli PDF stay free.', 'Google Play पर भुगतान, एक बार में एक प्रश्न। कोई मुफ़्त प्रश्न नहीं और कोई क्रेडिट पैक नहीं। कुंडली, दशा, दोष, पंचांग, मिलान, राशिफल और कुंडली PDF मुफ़्त हैं।', 'Paid on the App Store, one question at a time. There is no free question and no credit pack. The chart, periods, dosha, panchang, matching, horoscope and kundli PDF stay free.', 'App Store पर भुगतान, एक बार में एक प्रश्न। कोई मुफ़्त प्रश्न नहीं और कोई क्रेडिट पैक नहीं। कुंडली, दशा, दोष, पंचांग, मिलान, राशिफल और कुंडली PDF मुफ़्त हैं।')}</p></section>
@@ -3218,6 +3230,7 @@ function pageMe() {
   $('#clr').onclick = () => { S.profiles.forEach(p => localStorage.removeItem('dr-chat-' + p.id)); scheduleSync(); toast(tr('Chat history cleared', 'चैट इतिहास मिटाया गया')); };
   const join = $('#astroJoin');
   if (join) join.onclick = () => { location.hash = '#astro'; render(); };
+  if (window.DrishtiConnect && DrishtiConnect.paintBanner) DrishtiConnect.paintBanner();
   $('#aboutBtn').onclick = () => openDetail(tr('About', 'जानकारी'), `<p class="small">${tr('Charts use the Swiss Ephemeris, Lahiri ayanamsa, whole-sign houses and Vimshottari dasha. Acharya is an AI astrologer, not a person.', 'कुंडली स्विस एफेमेरिस, लाहिरी, पूर्ण राशि भाव और विंशोत्तरी दशा से बनती है। आचार्य AI ज्योतिषी हैं, व्यक्ति नहीं।')}</p><p class="small muted">${tr('Guidance for reflection, not medical, legal or financial advice. Remedies are optional and free.', 'यह चिंतन हेतु मार्गदर्शन है, चिकित्सा, कानूनी या वित्तीय सलाह नहीं। उपाय वैकल्पिक और मुफ़्त हैं।')}</p>${(S.status && S.status.astrologer_connect) ? `<p><a href="#astro">${tr('Register as a live astrologer', 'लाइव ज्योतिषी बनें')}</a></p>` : ''}<p class="small muted">${tr('Device ID', 'डिवाइस आईडी')}: <code style="font-size:11px;word-break:break-all">${esc(DEVICE)}</code></p><p><a href="privacy.html">${tr('Privacy policy', 'गोपनीयता नीति')}</a></p>`);
   if (S.pendingSheet === 'people') { S.pendingSheet = null; openPeople(); }
 }
