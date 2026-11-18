@@ -382,21 +382,42 @@
     if (mode === 'call') openCall(session);
     else openChat(session);
   }
+  function clockReading(session, nowMs) {
+    const now = typeof nowMs === 'number' ? nowMs : Date.now();
+    if (!session || session.status !== 'active' || !session.started_at) {
+      return {time: '00:00', cost: '$0.00', ticking: false};
+    }
+    const start = Date.parse(session.started_at);
+    if (isNaN(start)) return {time: '00:00', cost: '$0.00', ticking: false};
+    const sec = Math.max(0, Math.floor((now - start) / 1000));
+    const mm = String(Math.floor(sec / 60)).padStart(2, '0');
+    const ss = String(sec % 60).padStart(2, '0');
+    return {time: mm + ':' + ss, cost: session.cost_label || '$0.00', ticking: true};
+  }
   function paintClock() {
     if (!live) return;
-    const sec = live.elapsed + Math.floor((Date.now() - live.at) / 1000);
-    const m = String(Math.floor(sec / 60)).padStart(2, '0');
-    const s = String(sec % 60).padStart(2, '0');
+    const reading = clockReading(live.session);
     const node = $('#connectClock');
     const cost = $('#connectCost');
-    if (node) node.textContent = m + ':' + s;
-    if (cost) cost.textContent = live.cost;
+    if (node) node.textContent = reading.time;
+    if (cost) cost.textContent = reading.cost;
+  }
+  function syncClock() {
+    const ticking = !!(live && clockReading(live.session).ticking);
+    if (!ticking) {
+      if (clock) clearInterval(clock);
+      clock = 0;
+      paintClock();
+      return;
+    }
+    paintClock();
+    if (clock) return;
+    clock = setInterval(paintClock, 1000);
   }
   function watch(session, role, token) {
     stop();
-    live = {id: session.id, elapsed: session.elapsed_seconds || 0, at: Date.now(), cost: session.cost_label || '', room: null, role: role || 'user', token: token || null, session: session, messages: [], gen: generation};
-    clock = setInterval(paintClock, 1000);
-    paintClock();
+    live = {id: session.id, room: null, role: role || 'user', token: token || null, session: session, messages: [], gen: generation};
+    syncClock();
     timer = setInterval(() => beat().catch(() => {}), 3000);
   }
   function paintMeter(view) {
@@ -416,11 +437,8 @@
       const body = astro ? {role: 'astrologer', device: ''} : {role: 'user', device: DEVICE};
       const view = await api('/api/connect/sessions/' + id + '/heartbeat', body, token);
       if (!live || live.gen !== gen) return;
-      live.elapsed = view.elapsed_seconds || 0;
-      live.at = Date.now();
-      live.cost = view.cost_label || live.cost;
       live.session = view;
-      paintClock();
+      syncClock();
       paintMeter(view);
       if (view.status === 'ended') {
         stop();
@@ -526,6 +544,7 @@
   function openChat(session) {
     if (live && live.id === session.id && live.role !== 'astrologer' && $('#connectLog')) {
       live.session = session;
+      syncClock();
       showMessages([]);
       return;
     }
@@ -862,7 +881,7 @@
     if (live && live.role === 'astrologer' && live.id === session.id && $('#connectLog')) {
       live.session = session;
       live.token = token;
-      paintClock();
+      syncClock();
       paintMeter(session);
       showMessages([]);
       return;

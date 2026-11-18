@@ -673,6 +673,7 @@ def session_view(session_id: str, con=None) -> dict:
             "rate_label": money.money_label(item["rate_cents"], True),
             "hold_cents": item["hold_stripe"] + item["hold_apple"],
             "elapsed_seconds": elapsed,
+            "started_at": item.get("started_at") or None,
             "cost_cents": preview,
             "cost_label": money.money_label(preview),
             "fee_cents": fee_cents,

@@ -333,6 +333,51 @@ if (walletActivityText({kind: 'refund'}) !== 'होल्ड लौटी') pro
     assert ran.returncode == 0, ran.stderr or ran.stdout
 
 
+def test_pending_session_clock_stays_still_until_started_at(client, monkeypatch):
+    from datetime import datetime, timedelta, timezone
+    base = datetime(2026, 11, 18, 12, 0, tzinfo=timezone.utc)
+    monkeypatch.setattr(store, "now", lambda: base)
+    astro_id, token = seed(client, rate=100)
+    fund("phone", "wallet_5", "pi_clock")
+    started = client.post("/api/connect/sessions", json={
+        "device": "phone", "astrologer_id": astro_id, "mode": "chat", "idempotency_key": "clock",
+    }).json()
+    assert started["status"] == "ringing" and started["started_at"] is None and started["elapsed_seconds"] == 0
+    monkeypatch.setattr(store, "now", lambda: base + timedelta(seconds=40))
+    waiting = client.post("/api/connect/sessions/" + started["id"] + "/heartbeat", json={"role": "user", "device": "phone"}).json()
+    assert waiting["status"] == "ringing" and waiting["elapsed_seconds"] == 0 and waiting["started_at"] is None
+    monkeypatch.setattr(store, "now", lambda: base + timedelta(seconds=50))
+    accepted = client.post("/api/connect/sessions/" + started["id"] + "/accept", headers=auth(token)).json()
+    assert accepted["started_at"]
+    monkeypatch.setattr(store, "now", lambda: base + timedelta(seconds=95))
+    beat = client.post("/api/connect/sessions/" + started["id"] + "/heartbeat", json={"role": "user", "device": "phone"}).json()
+    assert beat["status"] == "active" and beat["elapsed_seconds"] == 45 and beat["started_at"] == accepted["started_at"]
+    connect = open(os.path.join(os.path.dirname(__file__), "..", "web", "connect.js"), encoding="utf-8").read()
+    beat_fn = connect.split("async function beat()", 1)[1].split("function mergeById", 1)[0]
+    assert "live.at = Date.now()" not in beat_fn and "live.elapsed" not in beat_fn
+    assert "function syncClock" in connect and "if (clock) return" in connect
+    assert "clearInterval(clock)" in connect
+    script = r"""
+const fs = require('fs');
+const src = fs.readFileSync(process.argv[1], 'utf8');
+const start = src.indexOf('function clockReading');
+const end = src.indexOf('function paintClock');
+eval(src.slice(start, end));
+const startAt = '2026-11-18T12:00:50+00:00';
+const startMs = Date.parse(startAt);
+const pending = clockReading({status: 'ringing', started_at: null, cost_label: '$0.00'}, startMs + 40000);
+if (pending.ticking || pending.time !== '00:00' || pending.cost !== '$0.00') process.exit(2);
+const later = clockReading({status: 'ringing', started_at: null, cost_label: '$0.00'}, startMs + 42000);
+if (later.time !== '00:00') process.exit(3);
+const active = clockReading({status: 'active', started_at: startAt, cost_label: '$0.75'}, startMs + 90000);
+if (!active.ticking || active.time !== '01:30' || active.cost !== '$0.75') process.exit(4);
+const polled = clockReading({status: 'active', started_at: startAt, cost_label: '$0.80'}, startMs + 92000);
+if (polled.time !== '01:32') process.exit(5);
+"""
+    ran = subprocess.run(["node", "-e", script, os.path.join(os.path.dirname(__file__), "..", "web", "connect.js")], capture_output=True, text=True)
+    assert ran.returncode == 0, ran.stderr or ran.stdout
+
+
 def test_accept_opens_the_session_and_restores_online(client):
     astro_id, token = seed(client, rate=100)
     fund("phone", "wallet_5", "pi_desk")
