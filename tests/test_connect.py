@@ -14,6 +14,7 @@ import app  # noqa: E402
 import db  # noqa: E402
 import connect_livekit  # noqa: E402
 import connect_money as money  # noqa: E402
+import connect_paypal  # noqa: E402
 import connect_store as store  # noqa: E402
 import connect_storekit  # noqa: E402
 import connect_stripe  # noqa: E402
@@ -884,6 +885,90 @@ def test_approved_astrologer_can_change_rate_inside_the_bounds(client):
     assert "Your bank and ID details go straight to Stripe. Drishti never sees or stores them." in connect
     assert "astro-mode" in html and "#4B4789" in html
     assert 'id="astroModeSlot"' in html
+
+
+def test_paypal_email_is_private_and_the_weekly_payout_is_sent_once(client, monkeypatch):
+    astro_id, token = seed(client)
+    headers = auth(token)
+    assert client.post("/api/connect/astro/payout", json={
+        "method": "paypal", "paypal_email": "n@gmail.com", "confirm_email": "n@gmail.com",
+    }).status_code == 401
+    mismatch = client.post("/api/connect/astro/payout", headers=headers, json={
+        "method": "paypal", "paypal_email": "n@gmail.com", "confirm_email": "other@gmail.com",
+    })
+    assert mismatch.status_code == 400 and mismatch.json()["detail"] == "email_mismatch"
+    bad = client.post("/api/connect/astro/payout", headers=headers, json={
+        "method": "paypal", "paypal_email": "not-an-email", "confirm_email": "not-an-email",
+    })
+    assert bad.status_code == 400 and bad.json()["detail"] == "bad_email"
+    saved = client.post("/api/connect/astro/payout", headers=headers, json={
+        "method": "paypal", "paypal_email": "N@gmail.com", "confirm_email": "n@gmail.com",
+    })
+    assert saved.status_code == 200 and saved.json()["payout_mask"] == "n•••@gmail.com"
+    earned = client.get("/api/connect/astro/earnings", headers=headers).json()
+    assert earned["payouts_ready"] is True and earned["payout_method"] == "paypal"
+    assert earned["payout_mask"] == "n•••@gmail.com" and "n@gmail.com" not in str(earned)
+    with db.connect() as con:
+        store.ensure(con)
+        con.execute(
+            """insert into ac_earning(session_id, astrologer_id, amount_cents, platform_cents, fee_cents, available_at)
+               values(?,?,?,?,?,?)""",
+            ("ses_pay", astro_id, 500, 26, 0, "2020-01-01T00:00:00+00:00"))
+    monkeypatch.setenv("CRON_SECRET", "cron-secret")
+    monkeypatch.setenv("PAYPAL_ENV", "sandbox")
+    monkeypatch.setenv("PAYPAL_CLIENT_ID", "client-id")
+    monkeypatch.setenv("PAYPAL_CLIENT_SECRET", "super-secret")
+    calls = []
+
+    class Res:
+        def __init__(self, payload, status=200):
+            self.status_code = status
+            self.payload = payload
+
+        def json(self):
+            return self.payload
+
+    def post(url, data=None, json=None, auth=None, headers=None, timeout=None):
+        calls.append(url)
+        if url.endswith("/v1/oauth2/token"):
+            assert auth == ("client-id", "super-secret")
+            return Res({"access_token": "tok"})
+        assert headers["Authorization"] == "Bearer tok"
+        assert "super-secret" not in str(json)
+        item = json["items"][0]
+        assert item["recipient_type"] == "EMAIL"
+        assert item["receiver"] == "n@gmail.com"
+        assert item["amount"] == {"value": "5.00", "currency": "USD"}
+        assert item["note"] == "Drishti weekly earnings"
+        assert json["sender_batch_header"]["sender_batch_id"] == store.payout_batch_id(astro_id)
+        return Res({"batch_header": {"payout_batch_id": "BATCH1", "batch_status": "PENDING"}})
+
+    monkeypatch.setattr(connect_paypal.httpx, "post", post)
+    first = client.get("/api/cron/connect-payouts", headers={"Authorization": "Bearer cron-secret"})
+    assert first.status_code == 200 and len(first.json()["payouts"]) == 1
+    assert "super-secret" not in str(first.json())
+    again = client.get("/api/cron/connect-payouts", headers={"Authorization": "Bearer cron-secret"})
+    assert again.json()["payouts"] == []
+    assert sum(1 for url in calls if url.endswith("/v1/payments/payouts")) == 1
+    with db.connect() as con:
+        store.ensure(con)
+        con.execute("update ac_earning set payout_id=null where session_id=?", ("ses_pay",))
+        con.execute("delete from ac_payout where astrologer_id=?", (astro_id,))
+
+    def duplicate(url, data=None, json=None, auth=None, headers=None, timeout=None):
+        if url.endswith("/v1/oauth2/token"):
+            return Res({"access_token": "tok"})
+        return Res({"details": [{"field": "SENDER_BATCH_ID", "issue": "Batch with given sender_batch_id already exists"}]}, 400)
+
+    monkeypatch.setattr(connect_paypal.httpx, "post", duplicate)
+    replay = client.get("/api/cron/connect-payouts", headers={"Authorization": "Bearer cron-secret"})
+    assert replay.status_code == 200 and replay.json()["payouts"][0]["provider"] == "paypal"
+    third = client.get("/api/cron/connect-payouts", headers={"Authorization": "Bearer cron-secret"})
+    assert third.json()["payouts"] == []
+    connect = open(os.path.join(os.path.dirname(__file__), "..", "web", "connect.js"), encoding="utf-8").read()
+    assert "How do you want to get paid?" in connect and "Coming soon" in connect
+    assert "id=\"pickRazorpay\" disabled" in connect
+    assert "Save PayPal" in connect
 
 
 def test_stripe_signature_helper_rejects_a_stale_event():

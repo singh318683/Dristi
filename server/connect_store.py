@@ -155,6 +155,9 @@ def ensure(con) -> None:
     for stmt in statements:
         con.execute(stmt)
     _add_column(con, "ac_astrologer", "must_change", "must_change int not null default 0")
+    _add_column(con, "ac_astrologer", "payout_method", "payout_method text not null default ''")
+    _add_column(con, "ac_astrologer", "paypal_email", "paypal_email text not null default ''")
+    _add_column(con, "ac_payout", "paypal_batch", "paypal_batch text not null default ''")
     _add_column(con, "ac_session", "resume_online", "resume_online int not null default 0")
     con.execute("create unique index if not exists ac_session_idem on ac_session(device, idem_key)")
     con.execute("create index if not exists ac_message_session on ac_message(session_id, id)")
@@ -914,7 +917,8 @@ def astrologer_private(astrologer_id: str) -> dict:
     with db.connect() as con:
         ensure(con)
         row = con.execute(
-            """select email, stripe_account, status, online, name, stripe_customer, trial_used, plan_status
+            """select email, stripe_account, status, online, name, stripe_customer, trial_used, plan_status,
+                      payout_method, paypal_email
                from ac_astrologer where id=?""",
             (astrologer_id,)).fetchone()
     if not row:
@@ -922,6 +926,7 @@ def astrologer_private(astrologer_id: str) -> dict:
     return {
         "email": row[0], "stripe_account": row[1] or "", "status": row[2], "online": bool(row[3]),
         "name": row[4], "stripe_customer": row[5] or "", "trial_used": int(row[6] or 0), "plan_status": row[7],
+        "payout_method": row[8] or "", "paypal_email": row[9] or "",
     }
 
 
@@ -1068,31 +1073,98 @@ def set_rate(astrologer_id: str, rate_cents: int) -> dict:
     return {"rate_cents": rate, "rate_label": money.money_label(rate, True)}
 
 
+def mask_email(email: str) -> str:
+    local, _, domain = (email or "").partition("@")
+    if not local or not domain:
+        return ""
+    return local[:1] + "•••@" + domain
+
+
+def _valid_email(email: str) -> bool:
+    if len(email) > 120 or email.count("@") != 1:
+        return False
+    local, domain = email.split("@", 1)
+    return bool(local and "." in domain and " " not in email)
+
+
+def set_payout_method(astrologer_id: str, method: str, paypal_email: str = "", confirm_email: str = "") -> dict:
+    method = (method or "").strip().lower()
+    if method == "razorpay":
+        raise ConnectError("payout_unavailable", 400)
+    if method not in ("paypal", "stripe"):
+        raise ConnectError("bad_payout", 400)
+    email = (paypal_email or "").strip().lower()
+    confirm = (confirm_email or "").strip().lower()
+    with db.connect() as con:
+        ensure(con)
+        row = con.execute("select id from ac_astrologer where id=?", (astrologer_id,)).fetchone()
+        if not row:
+            raise ConnectError("not_found", 404)
+        if method == "paypal":
+            if not _valid_email(email):
+                raise ConnectError("bad_email", 400)
+            if email != confirm:
+                raise ConnectError("email_mismatch", 400)
+            con.execute(
+                "update ac_astrologer set payout_method='paypal', paypal_email=? where id=?",
+                (email, astrologer_id))
+        else:
+            con.execute("update ac_astrologer set payout_method='stripe' where id=?", (astrologer_id,))
+    return {"payout_method": method, "payout_mask": mask_email(email) if method == "paypal" else ""}
+
+
+def payout_batch_id(astrologer_id: str, moment: datetime | None = None) -> str:
+    moment = moment or now()
+    return "drishti-" + astrologer_id + "-" + moment.strftime("%G-W%V")
+
+
 def payout_candidates(moment: datetime | None = None) -> list[dict]:
     moment = moment or now()
     with db.connect() as con:
         ensure(con)
         rows = con.execute(
-            """select e.astrologer_id, a.stripe_account, coalesce(sum(e.amount_cents), 0)
+            """select e.astrologer_id, a.stripe_account, coalesce(a.payout_method, ''), coalesce(a.paypal_email, ''),
+                      coalesce(sum(e.amount_cents), 0)
                from ac_earning e join ac_astrologer a on a.id=e.astrologer_id
-               where e.payout_id is null and e.available_at<=? and e.amount_cents>0 and a.stripe_account is not null and a.stripe_account!=''
-               group by e.astrologer_id, a.stripe_account""",
+               where e.payout_id is null and e.available_at<=? and e.amount_cents>0
+               group by e.astrologer_id, a.stripe_account, a.payout_method, a.paypal_email""",
             (_iso(moment),)).fetchall()
-    return [{"astrologer_id": r[0], "stripe_account": r[1], "amount_cents": int(r[2])} for r in rows if int(r[2]) >= 100]
+    out = []
+    for astro_id, stripe_account, method, paypal_email, cents in rows:
+        cents = int(cents)
+        if cents < 100:
+            continue
+        method = method or ("stripe" if stripe_account else "")
+        if method == "paypal" and paypal_email:
+            out.append({"astrologer_id": astro_id, "method": "paypal", "stripe_account": stripe_account or "",
+                        "paypal_email": paypal_email, "amount_cents": cents})
+        elif method == "stripe" and stripe_account:
+            out.append({"astrologer_id": astro_id, "method": "stripe", "stripe_account": stripe_account,
+                        "paypal_email": "", "amount_cents": cents})
+    return out
 
 
-def mark_payout(astrologer_id: str, amount_cents: int, transfer_id: str, moment: datetime | None = None) -> dict:
+def mark_payout(astrologer_id: str, amount_cents: int, transfer_id: str, moment: datetime | None = None, provider: str = "stripe") -> dict:
     moment = moment or now()
     payout_id = "pay_" + astrologer_id + "_" + moment.strftime("%G-W%V")
+    paypal = provider == "paypal"
     with db.connect() as con:
         ensure(con)
-        prior = con.execute("select status, stripe_transfer, amount_cents from ac_payout where id=?", (payout_id,)).fetchone()
-        if prior and prior[1]:
-            return {"id": payout_id, "status": prior[0], "amount_cents": prior[2], "created": False}
+        prior = con.execute(
+            "select status, stripe_transfer, amount_cents, paypal_batch from ac_payout where id=?",
+            (payout_id,)).fetchone()
+        already = (prior[3] if paypal else prior[1]) if prior else ""
+        if prior and already:
+            return {"id": payout_id, "status": prior[0], "amount_cents": prior[2], "created": False, "provider": provider}
         if not prior:
             con.execute(
-                "insert into ac_payout(id, astrologer_id, amount_cents, stripe_transfer, status, created) values(?,?,?,?, 'paid', ?)",
-                (payout_id, astrologer_id, amount_cents, transfer_id, _iso(moment)))
+                """insert into ac_payout(id, astrologer_id, amount_cents, stripe_transfer, paypal_batch, status, created)
+                   values(?,?,?,?,?, 'paid', ?)""",
+                (payout_id, astrologer_id, amount_cents, "" if paypal else transfer_id, transfer_id if paypal else "", _iso(moment)))
+        elif paypal:
+            con.execute(
+                "update ac_payout set paypal_batch=?, status='paid', amount_cents=? where id=?",
+                (transfer_id, amount_cents, payout_id))
         else:
             con.execute(
                 "update ac_payout set stripe_transfer=?, status='paid', amount_cents=? where id=?",
@@ -1102,9 +1174,9 @@ def mark_payout(astrologer_id: str, amount_cents: int, transfer_id: str, moment:
             (payout_id, astrologer_id, _iso(moment)))
         _post(con, "payout-" + payout_id, [
             (f"payable:{astrologer_id}", amount_cents, 0),
-            ("cash:stripe", 0, amount_cents),
+            ("cash:paypal" if paypal else "cash:stripe", 0, amount_cents),
         ], "payout", payout_id)
-    return {"id": payout_id, "status": "paid", "amount_cents": amount_cents, "created": prior is None}
+    return {"id": payout_id, "status": "paid", "amount_cents": amount_cents, "created": prior is None, "provider": provider}
 
 
 def incoming(astrologer_id: str) -> list[dict]:

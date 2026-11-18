@@ -196,6 +196,10 @@ body.astro-mode{--primary:#4B4789;--on-primary:#fff;--primary-tint:#EEEAF8;--on-
 .astro-app{max-width:560px;margin:0 auto;padding:12px 16px calc(var(--nav-h) + env(safe-area-inset-bottom) + 28px);min-height:100dvh}
 .astro-app nav.bottom .in{grid-template-columns:repeat(4,1fr)}
 .astro-switch{display:block;width:100%;margin:4px 0 8px}
+.pay-choice{display:flex;flex-direction:column;align-items:flex-start;gap:4px;width:100%;text-align:left;margin:0 0 10px;padding:14px;border-radius:16px;border:1px solid var(--line);background:var(--surface);color:var(--ink)}
+.pay-choice.recommended{border-color:var(--primary)}
+.pay-choice:disabled{opacity:.45}
+.tag.rec{background:var(--primary-tint);color:var(--on-tint)}
 .cta{background:var(--surface);border:1px solid var(--line);border-radius:20px;padding:18px;margin-bottom:14px;box-shadow:var(--shadow)}
 .cta p{margin:0 0 14px;color:var(--muted);font-size:15px}
 .cta .btn{margin-bottom:14px}

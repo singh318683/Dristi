@@ -10,6 +10,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
 
 import connect_livekit
+import connect_paypal
 import connect_store as store
 import connect_stripe
 import db
@@ -293,10 +294,34 @@ def api_earnings(request: Request):
     view = _run(lambda: store.earnings(astro_id))
     info = _run(lambda: store.astrologer_private(astro_id))
     account = info.get("stripe_account") or ""
+    method = info.get("payout_method") or ""
+    paypal_email = info.get("paypal_email") or ""
     secret = (os.environ.get("STRIPE_SECRET_KEY") or "").strip()
-    view["has_payout_account"] = bool(account)
-    view["payouts_ready"] = _payouts_ready(secret, account)
+    view["payout_method"] = method
+    view["payout_mask"] = store.mask_email(paypal_email) if method == "paypal" else ""
+    if method == "paypal" and paypal_email:
+        view["has_payout_account"] = True
+        view["payouts_ready"] = True
+    else:
+        view["has_payout_account"] = bool(account)
+        view["payouts_ready"] = _payouts_ready(secret, account) if account else False
+        if account and not method:
+            view["payout_method"] = "stripe"
     return view
+
+
+class PayoutIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    method: Literal["paypal", "stripe"]
+    paypal_email: str = ""
+    confirm_email: str = ""
+
+
+@router.post("/api/connect/astro/payout")
+def api_payout_method(body: PayoutIn, request: Request):
+    _gate()
+    astro_id = _astro_id(request)
+    return _run(lambda: store.set_payout_method(astro_id, body.method, body.paypal_email, body.confirm_email))
 
 
 @router.post("/api/connect/astro/stripe")
@@ -662,16 +687,34 @@ def api_cron(request: Request):
     if not store_ready():
         return {"ok": True, "skipped": "disabled"}
     stripe_key = (os.environ.get("STRIPE_SECRET_KEY") or "").strip()
-    if not stripe_key:
-        return {"ok": True, "skipped": "stripe_not_configured"}
+    paypal_on = connect_paypal.configured()
+    if not stripe_key and not paypal_on:
+        return {"ok": True, "skipped": "payouts_not_configured"}
     sent = []
     for row in store.payout_candidates():
-        if not _payouts_ready(stripe_key, row["stripe_account"]):
-            continue
-        try:
-            transfer = connect_stripe.create_transfer(stripe_key, row["amount_cents"], row["stripe_account"], "transfer-" + row["astrologer_id"])
-        except connect_stripe.StripeError:
-            continue
-        marked = store.mark_payout(row["astrologer_id"], row["amount_cents"], transfer.get("id") or "")
+        if row.get("method") == "paypal":
+            if not paypal_on:
+                continue
+            batch_key = store.payout_batch_id(row["astrologer_id"])
+            try:
+                paid = connect_paypal.send_payout(row["paypal_email"], row["amount_cents"], batch_key)
+                external = paid.get("batch_id") or ""
+            except connect_paypal.PayPalError as err:
+                if not err.duplicate:
+                    continue
+                external = batch_key
+            if not external:
+                continue
+            marked = store.mark_payout(row["astrologer_id"], row["amount_cents"], external, provider="paypal")
+        else:
+            if not stripe_key or not row.get("stripe_account"):
+                continue
+            if not _payouts_ready(stripe_key, row["stripe_account"]):
+                continue
+            try:
+                transfer = connect_stripe.create_transfer(stripe_key, row["amount_cents"], row["stripe_account"], "transfer-" + row["astrologer_id"])
+            except connect_stripe.StripeError:
+                continue
+            marked = store.mark_payout(row["astrologer_id"], row["amount_cents"], transfer.get("id") or "")
         sent.append(marked)
     return {"ok": True, "payouts": sent}

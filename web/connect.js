@@ -890,12 +890,17 @@
     }, 5000);
   }
   function choosePayoutMethod(method, token) {
+    if (method === 'razorpay') return Promise.resolve();
     if (method !== 'stripe') {
       showErr(new Error(tr('That payout method is not available yet.', 'यह भुगतान तरीका अभी उपलब्ध नहीं।')));
       return Promise.resolve();
     }
     sessionStorage.setItem('dr-astro-return', 'earn');
     return api('/api/connect/astro/stripe', {}, token).then(d => { if (d.url) location.href = d.url; });
+  }
+  function openPayoutChooser() {
+    sessionStorage.setItem('dr-astro-tab', 'choose');
+    if (typeof render === 'function') render();
   }
   function switchToAstro(tab) {
     stopUserPoll();
@@ -923,12 +928,16 @@
     return '$' + (cents / 100).toFixed(2);
   }
   function payoutSetupHtml(money) {
+    const privacy = `<p class="sub" id="payoutPrivacy">${tr('Bank and ID details go to Stripe. For PayPal, Drishti only keeps your PayPal email.', 'बैंक और पहचान के विवरण Stripe को जाते हैं। PayPal के लिए दृष्टि केवल आपका PayPal ईमेल रखती है।')}</p>`;
+    if (money.payout_method === 'paypal' && money.payouts_ready) {
+      return `<p>${tr('Payouts to: PayPal', 'भुगतान: PayPal')} · ${esc(money.payout_mask || '')}</p>
+        <button type="button" class="btn quiet" id="payoutChange">${tr('Change', 'बदलें')}</button>${privacy}`;
+    }
     const label = money.payouts_ready
-      ? tr('Payouts ready', 'भुगतान तैयार')
-      : (money.has_payout_account ? tr('Finish payout setup', 'भुगतान सेटअप पूरा करें') : tr('Set up payouts', 'भुगतान सेट करें'));
-    const line = money.payouts_ready ? `<p>${tr('Payouts to Stripe', 'भुगतान Stripe पर')}</p>` : '';
-    return `${line}<button type="button" class="btn${money.payouts_ready ? ' quiet' : ''}" id="astroStripe" data-payout-method="stripe">${label}</button>
-      <p class="sub" id="payoutPrivacy">${tr('Your bank and ID details go straight to Stripe. Drishti never sees or stores them.', 'आपके बैंक और पहचान के विवरण सीधे Stripe को जाते हैं। दृष्टि उन्हें कभी नहीं देखती या सहेजती।')}</p>`;
+      ? tr('Payouts to Stripe', 'भुगतान Stripe पर')
+      : (money.payout_method === 'stripe' && money.has_payout_account ? tr('Finish payout setup', 'भुगतान सेटअप पूरा करें') : tr('Set up payouts', 'भुगतान सेट करें'));
+    const quiet = money.payouts_ready ? ' quiet' : '';
+    return `<button type="button" class="btn${quiet}" id="astroStripe" data-payout-method="stripe">${label}</button>${privacy}`;
   }
   function renderAstroMode(desk, money, me, token) {
     if (sessionStorage.getItem('dr-astro-return') === 'earn') {
@@ -956,7 +965,39 @@
     const main = $('#portalBody');
     const plans = planCards();
     const nextWhen = money.next_payout_at ? String(money.next_payout_at).slice(0, 10) : tr('Not scheduled', 'अभी निर्धारित नहीं');
-    if (tab === 'sessions') {
+    if (tab === 'choose') {
+      main.innerHTML = `<h2>${tr('How do you want to get paid?', 'भुगतान कैसे चाहिए?')}</h2>
+        <button type="button" class="pay-choice recommended" id="pickPayPal"><span class="tag rec">${tr('Recommended', 'सुझाव')}</span><b>PayPal</b><span>${tr('India & worldwide. Just your PayPal email. No ID needed.', 'भारत और दुनिया भर। केवल PayPal ईमेल। पहचान पत्र नहीं।')}</span></button>
+        <button type="button" class="pay-choice" id="pickStripe" data-payout-method="stripe"><b>${tr('Bank deposit', 'बैंक जमा')}</b><span>${tr('US bank accounts only. Set up securely with Stripe.', 'केवल अमेरिकी बैंक खाते। Stripe से सुरक्षित सेटअप।')}</span></button>
+        <button type="button" class="pay-choice" id="pickRazorpay" disabled><span class="tag">${tr('Coming soon', 'जल्द आ रहा है')}</span><b>Razorpay</b><span>${tr('India bank & UPI', 'भारत बैंक और UPI')}</span></button>
+        <p class="sub">${tr('Payouts every Monday. Bank and ID details go to Stripe; for PayPal we only keep your PayPal email.', 'भुगतान हर सोमवार। बैंक और पहचान के विवरण Stripe को जाते हैं; PayPal के लिए हम केवल आपका PayPal ईमेल रखते हैं।')}</p>
+        <button type="button" class="btn quiet" id="payoutBack">${tr('Back', 'वापस')}</button>`;
+      $('#pickPayPal').onclick = () => { sessionStorage.setItem('dr-astro-tab', 'paypal'); renderAstroMode(desk, money, me, token); };
+      $('#pickStripe').onclick = () => choosePayoutMethod('stripe', token).catch(showErr);
+      $('#payoutBack').onclick = () => { sessionStorage.setItem('dr-astro-tab', 'earn'); renderAstroMode(desk, money, me, token); };
+    } else if (tab === 'paypal') {
+      main.innerHTML = `<h2>PayPal</h2><form class="card" id="paypalForm">
+        <input class="input" id="paypalEmail" type="email" autocomplete="email" aria-label="${tr('PayPal email', 'PayPal ईमेल')}" placeholder="${tr('PayPal email', 'PayPal ईमेल')}">
+        <input class="input" id="paypalConfirm" type="email" autocomplete="email" aria-label="${tr('Confirm PayPal email', 'PayPal ईमेल की पुष्टि')}" placeholder="${tr('Confirm PayPal email', 'PayPal ईमेल की पुष्टि')}">
+        <p class="sub">${tr('Payouts are sent in USD. PayPal may charge a conversion fee.', 'भुगतान USD में भेजे जाते हैं। PayPal रूपांतरण शुल्क ले सकता है।')}</p>
+        <button class="btn block" type="submit">${tr('Save PayPal', 'PayPal सहेजें')}</button></form>
+        <button type="button" class="btn quiet" id="payoutBack">${tr('Back', 'वापस')}</button>`;
+      $('#paypalForm').onsubmit = e => {
+        e.preventDefault();
+        const email = ($('#paypalEmail').value || '').trim();
+        const confirm = ($('#paypalConfirm').value || '').trim();
+        if (!email || email !== confirm) {
+          showErr(new Error(tr('Enter the same PayPal email twice.', 'वही PayPal ईमेल दो बार लिखें।')));
+          return;
+        }
+        api('/api/connect/astro/payout', {method: 'paypal', paypal_email: email, confirm_email: confirm}, token).then(() => {
+          if (window.toast) toast(tr('PayPal saved', 'PayPal सहेजा गया'));
+          sessionStorage.setItem('dr-astro-tab', 'earn');
+          render();
+        }).catch(showErr);
+      };
+      $('#payoutBack').onclick = () => { sessionStorage.setItem('dr-astro-tab', 'choose'); renderAstroMode(desk, money, me, token); };
+    } else if (tab === 'sessions') {
       const live = desk.session && desk.session.status === 'active' ? `<div class="card"><b>${tr('Active', 'चल रहा')}</b><p>${esc(desk.session.mode || '')} · ${esc(desk.session.seeker_name || tr('Seeker', 'साधक'))}</p><button type="button" class="btn" id="openLive">${tr('Open session', 'सत्र खोलें')}</button></div>` : '';
       const past = (money.sessions || []).map(s => `<div class="card"><b>${esc(s.mode || '')}</b><p>${esc(String(s.ended_at || '').slice(0, 16).replace('T', ' '))} · ${esc(s.paid ? tr('Paid', 'भुगतान') : tr('Unpaid', 'बाकी'))}</p><p>${tr('Net', 'शुद्ध')} $${((Number(s.astro_cents) || 0) / 100).toFixed(2)}</p></div>`).join('')
         || `<p class="sub">${tr('No past sessions yet.', 'अभी कोई पुराना सत्र नहीं।')}</p>`;
@@ -976,8 +1017,8 @@
           <input class="input" id="rateDollars" inputmode="decimal" value="${esc((Number(me.rate_cents) / 100).toFixed(2))}" aria-label="${tr('Rate per minute', 'प्रति मिनट शुल्क')}">
           <p class="sub">$${(plans.low / 100).toFixed(2)}–$${(plans.high / 100).toFixed(2)}</p>
           <button class="btn" type="submit">${tr('Save rate', 'शुल्क सहेजें')}</button></form>
-        <div class="card"><h3>${tr('Payout method', 'भुगतान तरीका')}</h3><p>Stripe</p>
-          <button type="button" class="btn quiet" id="payoutChange" data-payout-method="stripe">${tr('Change', 'बदलें')}</button>
+        <div class="card"><h3>${tr('Payout method', 'भुगतान तरीका')}</h3><p>${money.payout_method === 'paypal' ? 'PayPal' : 'Stripe'}</p>
+          <button type="button" class="btn quiet" id="payoutChange">${tr('Change', 'बदलें')}</button>
           <p class="sub">${tr('Another method can be added here later.', 'बाद में यहाँ दूसरा तरीका जोड़ा जा सकता है।')}</p></div>
         <div class="card"><h3>${tr('Plan', 'योजना')}</h3>
           <p>${plans.days} ${tr('day free trial, then', 'दिन का निःशुल्क परीक्षण, फिर')} ${esc(plans.month)} ${tr('a month or', 'माह या')} ${esc(plans.year)} ${tr('a year.', 'वर्ष।')}</p>
@@ -1000,7 +1041,7 @@
         }).catch(showErr);
       };
       const change = $('#payoutChange');
-      if (change) change.onclick = () => choosePayoutMethod(change.dataset.payoutMethod || 'stripe', token).catch(showErr);
+      if (change) change.onclick = openPayoutChooser;
       const settingsSwitch = $('#switchUserSettings');
       if (settingsSwitch) settingsSwitch.onclick = switchToUser;
       bindPaidButtons(token);
@@ -1025,7 +1066,12 @@
       paintIncoming(desk.ringing || [], token);
     }
     const pay = $('#astroStripe');
-    if (pay) pay.onclick = () => choosePayoutMethod('stripe', token).catch(showErr);
+    if (pay) pay.onclick = () => {
+      if (money.payout_method === 'stripe' && money.has_payout_account && !money.payouts_ready) choosePayoutMethod('stripe', token).catch(showErr);
+      else openPayoutChooser();
+    };
+    const changePay = $('#payoutChange');
+    if (changePay && !$('#rateForm')) changePay.onclick = openPayoutChooser;
     const back = $('#switchUser');
     if (back) back.onclick = switchToUser;
     $$('#astroApp nav button').forEach(b => b.onclick = () => {
