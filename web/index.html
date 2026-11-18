@@ -577,6 +577,8 @@ body.app-fit .sheet-bg.connect-live{bottom:calc(56px + env(safe-area-inset-botto
 .call-screen .connect-av{width:96px;height:96px;font-size:36px}
 .call-controls{display:flex;gap:8px;width:100%;margin-top:12px}
 .call-controls .btn{flex:1}
+.call-controls .btn.quiet{border:1.5px solid var(--line-strong);background:var(--surface);color:var(--ink)}
+.call-controls .btn.quiet[aria-pressed="true"]{background:var(--primary-tint);color:var(--on-tint);border-color:var(--primary)}
 .portal{max-width:560px;margin:0 auto;padding:16px 16px 32px;min-height:100dvh}
 #planPicker .btn,#paidPlans .btn{margin-bottom:8px}
 .portal .card{margin-bottom:12px}
@@ -840,7 +842,7 @@ window.GITA_VERSES = window.__GITA_INJECTED__ || null;
 <div id="root"></div>
 <div id="sheet" class="sheet-bg" hidden></div>
 <div id="toast" class="toast" role="status" hidden></div>
-<script src="birthpicker.js"></script>
+<script src="birthpicker.js?v=drishti-v44"></script>
 <script>
 'use strict';
 // ------------------------------------------------------------------ config
@@ -3381,6 +3383,6 @@ window.shareGitaCard = () => shareCard('gita');
   maybeShowRate();
 })();
 </script>
-<script src="connect.js"></script>
+<script src="connect.js?v=drishti-v44"></script>
 </body>
 </html>

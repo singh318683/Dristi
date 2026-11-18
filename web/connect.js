@@ -600,6 +600,30 @@
   async function send() {
     await postChat('user', null, DEVICE);
   }
+  function requireVoiceRoom() {
+    const person = live && live.room && live.room.localParticipant;
+    if (person) return person;
+    setVoiceNote(tr('The voice room is not connected yet.', 'वॉइस रूम अभी जुड़ा नहीं है।'));
+    return null;
+  }
+  function bindMute(button) {
+    if (!button) return;
+    button.onclick = ev => {
+      const person = requireVoiceRoom();
+      if (!person) return;
+      const pressed = ev.currentTarget.getAttribute('aria-pressed') === 'true';
+      ev.currentTarget.setAttribute('aria-pressed', pressed ? 'false' : 'true');
+      person.setMicrophoneEnabled(pressed).catch(err => setVoiceNote(voiceErrorText(err)));
+    };
+  }
+  function bindSpeaker(button) {
+    if (!button) return;
+    button.onclick = ev => {
+      if (!requireVoiceRoom()) return;
+      const pressed = ev.currentTarget.getAttribute('aria-pressed') !== 'true';
+      ev.currentTarget.setAttribute('aria-pressed', pressed ? 'true' : 'false');
+    };
+  }
   function setVoiceNote(text) {
     const note = $('#connectVoice');
     if (note) note.textContent = text || '';
@@ -735,16 +759,8 @@
       </div>
     </div>`, {live: true});
     $('#connectEnd').onclick = () => finish().catch(showErr);
-    $('#connectMute').onclick = ev => {
-      const pressed = ev.currentTarget.getAttribute('aria-pressed') === 'true';
-      ev.currentTarget.setAttribute('aria-pressed', pressed ? 'false' : 'true');
-      const room = live && live.room;
-      if (room && room.localParticipant) room.localParticipant.setMicrophoneEnabled(pressed).catch(err => setVoiceNote(voiceErrorText(err)));
-    };
-    $('#connectSpeaker').onclick = ev => {
-      const pressed = ev.currentTarget.getAttribute('aria-pressed') !== 'true';
-      ev.currentTarget.setAttribute('aria-pressed', pressed ? 'true' : 'false');
-    };
+    bindMute($('#connectMute'));
+    bindSpeaker($('#connectSpeaker'));
     paintClock();
     if (session.status === 'active') joinVoice();
   }
@@ -911,13 +927,7 @@
     if (call) {
       setVoiceNote(tr('Waiting for the call to start.', 'कॉल शुरू होने की प्रतीक्षा।'));
       if (session.status === 'active') joinVoice();
-      const mute = $('#connectMute');
-      if (mute) mute.onclick = ev => {
-        const pressed = ev.currentTarget.getAttribute('aria-pressed') === 'true';
-        ev.currentTarget.setAttribute('aria-pressed', pressed ? 'false' : 'true');
-        const room = live && live.room;
-        if (room && room.localParticipant) room.localParticipant.setMicrophoneEnabled(pressed).catch(err => setVoiceNote(voiceErrorText(err)));
-      };
+      bindMute($('#connectMute'));
     }
     const end = $('#connectEnd');
     if (end) end.onclick = () => finishAstro(token).catch(showErr);

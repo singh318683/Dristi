@@ -141,7 +141,7 @@ def test_background_music_is_one_synthesized_drone():
     assert "drishtiUnlockAudio" in html
     assert ".mp3" not in html and ".ogg" not in html and ".m4a" not in html
     assert "Web Audio" in credits and "no third-party music license" in credits
-    assert "drishti-v43" in open(os.path.join(root, "web", "sw.js"), encoding="utf-8").read()
+    assert "drishti-v44" in open(os.path.join(root, "web", "sw.js"), encoding="utf-8").read()
 
 
 def test_home_asks_for_the_device_date():
@@ -168,7 +168,7 @@ def test_home_periods_card_and_local_clock():
     assert "Good evening" in greet and "clock.getHours() < 5" in greet
     assert "function glanceTitle" in html and "function horoGlanceSentence" in html
     assert "glanceHoroLine" not in html
-    assert "drishti-v43" in open(os.path.join(os.path.dirname(__file__), "..", "web", "sw.js"), encoding="utf-8").read()
+    assert "drishti-v44" in open(os.path.join(os.path.dirname(__file__), "..", "web", "sw.js"), encoding="utf-8").read()
 
 
 def test_profile_screen_drops_invite_and_sign_in():
@@ -229,7 +229,7 @@ def test_owned_play_question_is_sent_again_instead_of_bought():
     assert "buyPlayQuestion" in ask and "buyFreshPlayQuestion" in ask
     assert "payment_invalid" in ask and "keepPlayToken(purchaseToken)" in ask
     assert "response.complete('success')" in html
-    assert "drishti-v43" in open(os.path.join(root, "web", "sw.js"), encoding="utf-8").read()
+    assert "drishti-v44" in open(os.path.join(root, "web", "sw.js"), encoding="utf-8").read()
 
 
 def test_answer_opens_in_a_reading_sheet():
@@ -243,7 +243,7 @@ def test_answer_opens_in_a_reading_sheet():
     assert "openAnswerSheet(aiEl, true)" in ask
     assert "openAnswerSheet(painted, true)" in ask
     assert "id=\"askSend\"" in html and "priceLabel()" in html
-    assert "drishti-v43" in open(os.path.join(os.path.dirname(__file__), "..", "web", "sw.js"), encoding="utf-8").read()
+    assert "drishti-v44" in open(os.path.join(os.path.dirname(__file__), "..", "web", "sw.js"), encoding="utf-8").read()
 
 
 def test_rate_prompt_is_quiet_and_remembers_a_dismissal():
@@ -263,7 +263,7 @@ def test_rate_prompt_is_quiet_and_remembers_a_dismissal():
     assert "closeSheet({skipRate: true})" in ask
     closed = html.split("function closeSheet", 1)[1].split("function bindSheetSwipe", 1)[0]
     assert "answer-read" in closed and "v.read = true" in closed
-    assert "drishti-v43" in open(os.path.join(os.path.dirname(__file__), "..", "web", "sw.js"), encoding="utf-8").read()
+    assert "drishti-v44" in open(os.path.join(os.path.dirname(__file__), "..", "web", "sw.js"), encoding="utf-8").read()
     assert "Rate on the App Store" in rate and "App Store पर रेट करें" in rate
     assert "apps.apple.com" in rate and "if (inIosApp())" in rate
 
@@ -471,7 +471,7 @@ def test_planet_detail_opens_in_a_sheet():
     assert "max-height:58px" not in html
     assert "body.app-fit .info .m{display:-webkit-box" not in html
     assert "if (o) openReading(o, src)" in html
-    assert "drishti-v43" in open(os.path.join(root, "web", "sw.js"), encoding="utf-8").read()
+    assert "drishti-v44" in open(os.path.join(root, "web", "sw.js"), encoding="utf-8").read()
 
 
 def test_panchang_and_pdf_endpoints(client):
@@ -588,3 +588,29 @@ def test_chart_endpoint_stays_lahiri_even_if_the_caller_thread_is_fagan(client):
     assert body["lagna"]["sign"] == "Scorpio" and body["lagna"]["degree"] > 18
     assert body["dasha"]["current"]["mahadasha"]["start"] == "2024-06-29"
     assert body["dasha"]["current"]["antardasha"]["lord"] == "Rahu"
+
+
+def test_script_urls_match_the_service_worker_and_are_not_cached(client):
+    root = os.path.join(os.path.dirname(__file__), "..")
+    sw = open(os.path.join(root, "web", "sw.js"), encoding="utf-8").read()
+    html = open(os.path.join(root, "web", "index.html"), encoding="utf-8").read()
+    connect = open(os.path.join(root, "web", "connect.js"), encoding="utf-8").read()
+    cache = sw.split("const CACHE = '", 1)[1].split("'", 1)[0]
+    assert cache == "drishti-v44"
+    assert 'src="birthpicker.js?v=' + cache + '"' in html
+    assert 'src="connect.js?v=' + cache + '"' in html
+    assert "cache: 'no-store'" in sw
+    for path in ("/", "/index.html", "/connect.js", "/birthpicker.js", "/sw.js"):
+        assert "'" + path + "'" in sw.split("const FRESH", 1)[1].split("]", 1)[0]
+    vercel = json.load(open(os.path.join(root, "vercel.json"), encoding="utf-8"))
+    headers = {item["source"]: {h["key"]: h["value"] for h in item["headers"]} for item in vercel["headers"]}
+    for path in ("/", "/index.html", "/connect.js", "/birthpicker.js", "/sw.js"):
+        assert headers[path]["Cache-Control"] == "no-cache"
+        assert client.get(path).headers["cache-control"] == "no-cache"
+    assert "function requireVoiceRoom" in connect
+    assert "The voice room is not connected yet." in connect and "वॉइस रूम अभी जुड़ा नहीं है।" in connect
+    mute = connect.split("function bindMute", 1)[1].split("function bindSpeaker", 1)[0]
+    assert mute.find("requireVoiceRoom") < mute.find("setAttribute")
+    speaker = connect.split("function bindSpeaker", 1)[1].split("function setVoiceNote", 1)[0]
+    assert speaker.find("requireVoiceRoom") < speaker.find("setAttribute")
+    assert '.call-controls .btn.quiet[aria-pressed="true"]' in html

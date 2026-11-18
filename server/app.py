@@ -79,12 +79,17 @@ app = FastAPI(title=APP_NAME)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 
+_FRESH_PAGES = {"/", "/index.html", "/connect.js", "/birthpicker.js", "/sw.js"}
+
+
 @app.middleware("http")
 async def connect_responses_are_private(request, call_next):
     response = await call_next(request)
     if request.url.path.startswith("/api/connect/"):
         response.headers["Cache-Control"] = "private, no-store"
         response.headers["Pragma"] = "no-cache"
+    elif request.url.path in _FRESH_PAGES:
+        response.headers["Cache-Control"] = "no-cache"
     return response
 
 

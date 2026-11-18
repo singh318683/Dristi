@@ -1,4 +1,11 @@
 {
+  "headers": [
+    {"source": "/", "headers": [{"key": "Cache-Control", "value": "no-cache"}]},
+    {"source": "/index.html", "headers": [{"key": "Cache-Control", "value": "no-cache"}]},
+    {"source": "/connect.js", "headers": [{"key": "Cache-Control", "value": "no-cache"}]},
+    {"source": "/birthpicker.js", "headers": [{"key": "Cache-Control", "value": "no-cache"}]},
+    {"source": "/sw.js", "headers": [{"key": "Cache-Control", "value": "no-cache"}]}
+  ],
   "crons": [
     {
       "path": "/api/cron/connect-payouts",
