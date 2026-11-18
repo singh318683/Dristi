@@ -193,7 +193,10 @@ def test_auth_and_call_token_gating(client, monkeypatch):
     issued = client.post("/api/connect/sessions/" + call["id"] + "/call-token", json={"device": "phone"})
     assert issued.status_code == 200
     claims = connect_livekit.read_jwt(issued.json()["token"], "secret")
-    assert claims["video"]["room"] == issued.json()["room"]
+    video = claims["video"]
+    assert video["room"] == issued.json()["room"]
+    assert video["roomJoin"] is True and video["canPublish"] is True and video["canSubscribe"] is True
+    assert claims["sub"].startswith("user-")
     assert claims["exp"] - claims["nbf"] <= 610
     body = json.dumps({"event": "room_finished", "room": {"name": issued.json()["room"]}}).encode()
     header = connect_livekit.webhook_token("secret", body)
@@ -974,6 +977,39 @@ def test_paypal_email_is_private_and_the_weekly_payout_is_sent_once(client, monk
     assert "How do you want to get paid?" in connect and "Coming soon" in connect
     assert "id=\"pickRazorpay\" disabled" in connect
     assert "Save PayPal" in connect
+
+
+def test_voice_joins_only_after_the_call_is_active():
+    connect = open(os.path.join(os.path.dirname(__file__), "..", "web", "connect.js"), encoding="utf-8").read()
+    opened = connect.split("async function openCall", 1)[1].split("async function finish", 1)[0]
+    assert "call-token" not in opened and "joinVoice()" in opened
+    assert "view.mode === 'call') joinVoice()" in connect
+    assert "function joinVoice" in connect and "call_not_ready" in connect
+    assert "livekit-client@2.9.0" in connect and "room.connect(info.url, info.token)" in connect
+    assert "setMicrophoneEnabled(true)" in connect and "startAudio" in connect
+    assert "Tap to enable audio" in connect and "आवाज़ चालू करने के लिए टैप करें" in connect
+    assert "playsinline" in connect and "connectRemoteAudio" in connect
+    assert "The microphone is blocked." in connect
+    assert "The voice room could not be reached." in connect
+    assert "Voice is not set up on the server yet." in connect
+    plist = open(os.path.join(os.path.dirname(__file__), "..", "ios", "Info.plist.additions.xml"), encoding="utf-8").read()
+    assert "NSMicrophoneUsageDescription" in plist
+    script = r"""
+const fs = require('fs');
+const src = fs.readFileSync(process.argv[1], 'utf8');
+const start = src.indexOf('function voiceErrorText');
+const end = src.indexOf('function attachRemoteAudio');
+let S = {lang: 'en'};
+const tr = (en) => en;
+eval(src.slice(start, end));
+if (voiceErrorText({code: 'call_unavailable'}).indexOf('not set up') < 0) process.exit(2);
+if (voiceErrorText({name: 'NotAllowedError'}).indexOf('microphone is blocked') < 0) process.exit(3);
+if (voiceErrorText({code: 'call_not_ready'}).indexOf('Waiting') < 0) process.exit(4);
+if (voiceErrorText(new Error('failed')).indexOf('could not be reached') < 0) process.exit(5);
+if (voiceErrorText(new Error('setMutedState failed due to error')).indexOf('microphone is blocked') < 0) process.exit(6);
+"""
+    ran = subprocess.run(["node", "-e", script, os.path.join(os.path.dirname(__file__), "..", "web", "connect.js")], capture_output=True, text=True)
+    assert ran.returncode == 0, ran.stderr or ran.stdout
 
 
 def test_next_payout_is_the_monday_on_or_after_available():

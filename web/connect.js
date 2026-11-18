@@ -64,6 +64,10 @@
     clock = 0;
     generation += 1;
     if (live && live.room && live.room.disconnect) live.room.disconnect();
+    const audio = document.getElementById('connectRemoteAudio');
+    if (audio) audio.remove();
+    const enable = document.getElementById('connectEnableAudio');
+    if (enable) enable.remove();
     live = null;
     beating = false;
   }
@@ -430,6 +434,7 @@
         }
         return;
       }
+      if (view.status === 'active' && view.mode === 'call') joinVoice();
       if ($('#connectLog')) {
         const q = (astro ? 'after=0' : ('device=' + encodeURIComponent(DEVICE) + '&after=0')) + '&t=' + Date.now();
         const msgs = await api('/api/connect/sessions/' + id + '/messages?' + q, null, token);
@@ -576,23 +581,133 @@
   async function send() {
     await postChat('user', null, DEVICE);
   }
+  function setVoiceNote(text) {
+    const note = $('#connectVoice');
+    if (note) note.textContent = text || '';
+  }
+  function voiceErrorText(err) {
+    const code = (err && (err.code || err.name)) || '';
+    const msg = (err && err.message) || '';
+    if (code === 'call_unavailable') return tr('Voice is not set up on the server yet. Ending still stops the bill.', 'वॉइस सर्वर पर अभी सेट नहीं है। समाप्त करने पर शुल्क रुक जाता है।');
+    if (code === 'call_not_ready') return tr('Waiting for the call to start.', 'कॉल शुरू होने की प्रतीक्षा।');
+    if (code === 'NotAllowedError' || code === 'PermissionDeniedError' || code === 'SecurityError' || /not allowed|permission|microphone|setMutedState|getUserMedia/i.test(msg)) {
+      return tr('The microphone is blocked. Allow the microphone for Drishti, then try again.', 'माइक्रोफ़ोन ब्लॉक है। दृष्टि के लिए माइक्रोफ़ोन अनुमति दें, फिर कोशिश करें।');
+    }
+    return tr('The voice room could not be reached. Check your connection.', 'वॉइस रूम तक नहीं पहुँच सके। कनेक्शन जाँचें।');
+  }
+  function attachRemoteAudio(track) {
+    if (!track || track.kind !== 'audio' || !track.attach) return;
+    let audio = document.getElementById('connectRemoteAudio');
+    if (!audio) {
+      audio = document.createElement('audio');
+      audio.id = 'connectRemoteAudio';
+      audio.autoplay = true;
+      audio.playsInline = true;
+      audio.setAttribute('playsinline', '');
+      audio.setAttribute('webkit-playsinline', '');
+      document.body.appendChild(audio);
+    }
+    track.attach(audio);
+  }
+  function showTapAudio(room) {
+    if (document.getElementById('connectEnableAudio')) return;
+    const host = document.getElementById('connectVoice');
+    const btn = document.createElement('button');
+    btn.id = 'connectEnableAudio';
+    btn.type = 'button';
+    btn.className = 'btn';
+    btn.textContent = tr('Tap to enable audio', 'आवाज़ चालू करने के लिए टैप करें');
+    if (host && host.parentNode) host.parentNode.insertBefore(btn, host.nextSibling);
+    else document.body.appendChild(btn);
+    btn.onclick = async () => {
+      try {
+        if (room.startAudio) await room.startAudio();
+        const audio = document.getElementById('connectRemoteAudio');
+        if (audio && audio.play) audio.play().catch(() => {});
+        if (room.localParticipant) await room.localParticipant.setMicrophoneEnabled(true);
+        btn.remove();
+        setVoiceNote('');
+      } catch (err) {
+        setVoiceNote(voiceErrorText(err));
+      }
+    };
+  }
+  async function publishMic(room) {
+    if (!room || !room.localParticipant) return;
+    await room.localParticipant.setMicrophoneEnabled(true);
+  }
+  async function attachVoice(info) {
+    const mod = await import('https://cdn.jsdelivr.net/npm/livekit-client@2.9.0/+esm');
+    const room = new mod.Room();
+    const onTrack = track => attachRemoteAudio(track);
+    if (mod.RoomEvent && mod.RoomEvent.TrackSubscribed) room.on(mod.RoomEvent.TrackSubscribed, onTrack);
+    else room.on('trackSubscribed', onTrack);
+    await room.connect(info.url, info.token);
+    if (live) live.room = room;
+    if (room.remoteParticipants && room.remoteParticipants.forEach) {
+      room.remoteParticipants.forEach(person => {
+        if (!person.trackPublications) return;
+        person.trackPublications.forEach(pub => { if (pub && pub.track) attachRemoteAudio(pub.track); });
+      });
+    }
+    try {
+      await publishMic(room);
+    } catch (err) {
+      setVoiceNote('');
+      showTapAudio(room);
+      return;
+    }
+    if (room.canPlaybackAudio === false) {
+      showTapAudio(room);
+      return;
+    }
+    if (room.startAudio) {
+      try { await room.startAudio(); } catch (err) { showTapAudio(room); return; }
+    }
+    setVoiceNote('');
+  }
+  async function joinVoice() {
+    if (!live || live.voiceJoined || live.joining) return;
+    if (!live.session || live.session.mode !== 'call' || live.session.status !== 'active') return;
+    live.joining = true;
+    setVoiceNote(tr('Connecting to the call.', 'कॉल से जुड़ रहे हैं।'));
+    const gen = live.gen;
+    const id = live.id;
+    const astro = live.role === 'astrologer';
+    const auth = astro ? live.token : null;
+    let delay = 1000;
+    try {
+      for (let attempt = 0; attempt < 6; attempt++) {
+        if (!live || live.gen !== gen) return;
+        try {
+          const info = await api('/api/connect/sessions/' + id + '/call-token', astro ? {device: ''} : {device: DEVICE}, auth);
+          if (!live || live.gen !== gen) return;
+          live.voiceJoined = true;
+          await attachVoice(info);
+          return;
+        } catch (err) {
+          if (err && err.code === 'call_not_ready' && attempt < 5) {
+            setVoiceNote(voiceErrorText(err));
+            await sleep(delay);
+            delay = Math.min(delay * 2, 8000);
+            continue;
+          }
+          setVoiceNote(voiceErrorText(err));
+          return;
+        }
+      }
+    } finally {
+      if (live && live.gen === gen) live.joining = false;
+    }
+  }
   async function openCall(session) {
     watch(session);
-    let note = '';
-    try {
-      const token = await api('/api/connect/sessions/' + session.id + '/call-token', {device: DEVICE});
-      live.token = token;
-      note = '';
-      attachVoice(token);
-    } catch (e) {
-      note = tr('Voice is not ready yet. Ending still stops the bill.', 'वॉइस अभी तैयार नहीं। समाप्त करने पर शुल्क रुक जाता है।');
-    }
     sheet(`<div class="sheet connect-live" role="dialog" aria-modal="true" aria-label="${esc(session.astrologer_name)}">
       <div class="call-screen">
         <div class="connect-av" aria-hidden="true">${esc((session.astrologer_name || '?').slice(0, 1))}</div>
         <b>${esc(session.astrologer_name)}</b>
         <span class="connect-meter"><span id="connectClock">00:00</span> · <span id="connectCost">${esc(session.cost_label)}</span></span>
-        <p class="sub" id="connectVoice">${esc(note)}</p>
+        <p class="sub" id="connectVoice">${tr('Waiting for the call to start.', 'कॉल शुरू होने की प्रतीक्षा।')}</p>
         <div class="call-controls">
           <button type="button" class="btn quiet" id="connectMute" aria-pressed="false">${tr('Mute', 'म्यूट')}</button>
           <button type="button" class="btn quiet" id="connectSpeaker" aria-pressed="false">${tr('Speaker', 'स्पीकर')}</button>
@@ -605,25 +720,14 @@
       const pressed = ev.currentTarget.getAttribute('aria-pressed') === 'true';
       ev.currentTarget.setAttribute('aria-pressed', pressed ? 'false' : 'true');
       const room = live && live.room;
-      if (room && room.localParticipant) room.localParticipant.setMicrophoneEnabled(pressed);
+      if (room && room.localParticipant) room.localParticipant.setMicrophoneEnabled(pressed).catch(err => setVoiceNote(voiceErrorText(err)));
     };
     $('#connectSpeaker').onclick = ev => {
       const pressed = ev.currentTarget.getAttribute('aria-pressed') !== 'true';
       ev.currentTarget.setAttribute('aria-pressed', pressed ? 'true' : 'false');
     };
     paintClock();
-  }
-  async function attachVoice(info) {
-    try {
-      const mod = await import('https://cdn.jsdelivr.net/npm/livekit-client@2.9.0/+esm');
-      const room = new mod.Room();
-      await room.connect(info.url, info.token);
-      await room.localParticipant.setMicrophoneEnabled(true);
-      if (live) live.room = room;
-    } catch (e) {
-      const note = $('#connectVoice');
-      if (note && !note.textContent) note.textContent = tr('Waiting for the voice room.', 'वॉइस रूम की प्रतीक्षा।');
-    }
+    if (session.status === 'active') joinVoice();
   }
   async function finish() {
     if (!live) return;
@@ -786,16 +890,14 @@
     </div>`;
     watch(session, 'astrologer', token);
     if (call) {
-      api('/api/connect/sessions/' + session.id + '/call-token', {device: ''}, token).then(info => attachVoice(info)).catch(() => {
-        const note = $('#connectVoice');
-        if (note) note.textContent = tr('Voice is not ready yet. Ending still stops the bill.', 'वॉइस अभी तैयार नहीं। समाप्त करने पर शुल्क रुक जाता है।');
-      });
+      setVoiceNote(tr('Waiting for the call to start.', 'कॉल शुरू होने की प्रतीक्षा।'));
+      if (session.status === 'active') joinVoice();
       const mute = $('#connectMute');
       if (mute) mute.onclick = ev => {
         const pressed = ev.currentTarget.getAttribute('aria-pressed') === 'true';
         ev.currentTarget.setAttribute('aria-pressed', pressed ? 'false' : 'true');
         const room = live && live.room;
-        if (room && room.localParticipant) room.localParticipant.setMicrophoneEnabled(pressed);
+        if (room && room.localParticipant) room.localParticipant.setMicrophoneEnabled(pressed).catch(err => setVoiceNote(voiceErrorText(err)));
       };
     }
     const end = $('#connectEnd');
