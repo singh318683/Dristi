@@ -121,27 +121,16 @@ def test_horoscope_date_follows_the_device_within_one_day(client):
     assert bad.status_code == 400
 
 
-def test_background_music_is_one_synthesized_drone():
+def test_background_music_never_starts():
     root = os.path.join(os.path.dirname(__file__), "..")
     html = open(os.path.join(root, "web", "index.html"), encoding="utf-8").read()
+    connect = open(os.path.join(root, "web", "connect.js"), encoding="utf-8").read()
     credits = open(os.path.join(root, "CREDITS.md"), encoding="utf-8").read()
-    assert 'id="musicBtn"' in html
-    assert html.count("function musicBuild") == 1
-    assert "if (musicCtx) return" in html
-    assert "webkitAudioContext" in html
-    assert "return musicPhone() ? 0.55 : 0.25" in html
-    assert "musicRamp(musicLevel(), fresh ? 3 : 0.8)" in html
-    assert "visibilitychange" in html and "pageshow" in html
-    assert "createPeriodicWave" in html and "const sa = 196" in html
-    assert "createMediaStreamDestination" in html and "playsinline" in html
-    assert "audioSession" in html and "interrupted" in html
-    assert "createBuffer(1, 1" in html
-    assert "touchstart" in html and "touchend" in html
-    assert "audiodebug=1" in html and "audioDebug" in html
-    assert "drishtiUnlockAudio" in html
-    assert ".mp3" not in html and ".ogg" not in html and ".m4a" not in html
-    assert "Web Audio" in credits and "no third-party music license" in credits
-    assert "drishti-v45" in open(os.path.join(root, "web", "sw.js"), encoding="utf-8").read()
+    for gone in ("musicBtn", "musicBuild", "musicUnlock", "webkitAudioContext", "AudioContext", "musicOut", "drishtiUnlockAudio", "drishtiMusicHold", "createMediaStreamDestination"):
+        assert gone not in html
+    assert "drishtiMusicHold" not in connect and "drishtiMusicRelease" not in connect
+    assert "does not play background music" in credits and "no third-party music license" in credits
+    assert "drishti-v46" in open(os.path.join(root, "web", "sw.js"), encoding="utf-8").read()
 
 
 def test_home_asks_for_the_device_date():
@@ -168,7 +157,7 @@ def test_home_periods_card_and_local_clock():
     assert "Good evening" in greet and "clock.getHours() < 5" in greet
     assert "function glanceTitle" in html and "function horoGlanceSentence" in html
     assert "glanceHoroLine" not in html
-    assert "drishti-v45" in open(os.path.join(os.path.dirname(__file__), "..", "web", "sw.js"), encoding="utf-8").read()
+    assert "drishti-v46" in open(os.path.join(os.path.dirname(__file__), "..", "web", "sw.js"), encoding="utf-8").read()
 
 
 def test_profile_screen_drops_invite_and_sign_in():
@@ -182,7 +171,7 @@ def test_profile_screen_drops_invite_and_sign_in():
     assert 'id="personRow"' in me and 'id="credN"' in me and 'id="aboutBtn"' in me and 'id="clr"' in me
     assert "per Acharya question" in me and "Paid on Google Play" in me
     assert "pullSync" in html and "/api/auth/verify" in html and "/api/referral/attach" in html and "scheduleSync" in html
-    assert 'id="musicBtn"' in html and "function musicUnlock" in html
+    assert 'id="musicBtn"' not in html and "function musicUnlock" not in html
 
 
 def test_owned_purchase_lookup_uses_the_purchase_json_and_the_listener():
@@ -229,7 +218,7 @@ def test_owned_play_question_is_sent_again_instead_of_bought():
     assert "buyPlayQuestion" in ask and "buyFreshPlayQuestion" in ask
     assert "payment_invalid" in ask and "keepPlayToken(purchaseToken)" in ask
     assert "response.complete('success')" in html
-    assert "drishti-v45" in open(os.path.join(root, "web", "sw.js"), encoding="utf-8").read()
+    assert "drishti-v46" in open(os.path.join(root, "web", "sw.js"), encoding="utf-8").read()
 
 
 def test_answer_opens_in_a_reading_sheet():
@@ -243,7 +232,7 @@ def test_answer_opens_in_a_reading_sheet():
     assert "openAnswerSheet(aiEl, true)" in ask
     assert "openAnswerSheet(painted, true)" in ask
     assert "id=\"askSend\"" in html and "priceLabel()" in html
-    assert "drishti-v45" in open(os.path.join(os.path.dirname(__file__), "..", "web", "sw.js"), encoding="utf-8").read()
+    assert "drishti-v46" in open(os.path.join(os.path.dirname(__file__), "..", "web", "sw.js"), encoding="utf-8").read()
 
 
 def test_rate_prompt_is_quiet_and_remembers_a_dismissal():
@@ -263,7 +252,7 @@ def test_rate_prompt_is_quiet_and_remembers_a_dismissal():
     assert "closeSheet({skipRate: true})" in ask
     closed = html.split("function closeSheet", 1)[1].split("function bindSheetSwipe", 1)[0]
     assert "answer-read" in closed and "v.read = true" in closed
-    assert "drishti-v45" in open(os.path.join(os.path.dirname(__file__), "..", "web", "sw.js"), encoding="utf-8").read()
+    assert "drishti-v46" in open(os.path.join(os.path.dirname(__file__), "..", "web", "sw.js"), encoding="utf-8").read()
     assert "Rate on the App Store" in rate and "App Store पर रेट करें" in rate
     assert "apps.apple.com" in rate and "if (inIosApp())" in rate
 
@@ -471,7 +460,7 @@ def test_planet_detail_opens_in_a_sheet():
     assert "max-height:58px" not in html
     assert "body.app-fit .info .m{display:-webkit-box" not in html
     assert "if (o) openReading(o, src)" in html
-    assert "drishti-v45" in open(os.path.join(root, "web", "sw.js"), encoding="utf-8").read()
+    assert "drishti-v46" in open(os.path.join(root, "web", "sw.js"), encoding="utf-8").read()
 
 
 def test_panchang_and_pdf_endpoints(client):
@@ -596,7 +585,7 @@ def test_script_urls_match_the_service_worker_and_are_not_cached(client):
     html = open(os.path.join(root, "web", "index.html"), encoding="utf-8").read()
     connect = open(os.path.join(root, "web", "connect.js"), encoding="utf-8").read()
     cache = sw.split("const CACHE = '", 1)[1].split("'", 1)[0]
-    assert cache == "drishti-v45"
+    assert cache == "drishti-v46"
     assert 'src="birthpicker.js?v=' + cache + '"' in html
     assert 'src="connect.js?v=' + cache + '"' in html
     assert "cache: 'no-store'" in sw
@@ -614,10 +603,6 @@ def test_script_urls_match_the_service_worker_and_are_not_cached(client):
     speaker = connect.split("function bindSpeaker", 1)[1].split("function setVoiceNote", 1)[0]
     assert speaker.find("requireVoiceRoom") < speaker.find("setAttribute")
     assert '.call-controls .btn.quiet[aria-pressed="true"]' in html
-    assert "function musicHold" in html and "function musicRelease" in html
-    assert "window.drishtiMusicHold = musicHold" in html and "musicHeldByApp()" in html
-    assert "drishtiMusicHold('call')" in connect and "drishtiMusicHold('astro')" in connect
-    assert "drishtiMusicRelease('call')" in connect
     assert "function primeCallAudio" in connect and "AudioPlaybackStatusChanged" in connect
     assert "function paintVoiceDebug" in connect and "canPlaybackAudio" in connect
     assert "room ' + ((room && room.state) || 'none')" in connect

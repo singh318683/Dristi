@@ -75,7 +75,6 @@
       if (enable) enable.remove();
       const voiceDebug = document.getElementById('voiceDebug');
       if (voiceDebug) voiceDebug.remove();
-      if (window.drishtiMusicRelease) window.drishtiMusicRelease('call');
     }
     live = null;
     beating = false;
@@ -220,13 +219,9 @@
       else {
         if (mode === 'call') {
           preloadLiveKit();
-          if (window.drishtiMusicHold) window.drishtiMusicHold('call');
           primeCallAudio();
         }
-        begin(id, mode).catch(err => {
-          if (mode === 'call' && window.drishtiMusicRelease) window.drishtiMusicRelease('call');
-          showErr(err);
-        });
+        begin(id, mode).catch(showErr);
       }
     };
   }
@@ -439,7 +434,6 @@
     keepCallMusic = !!(session && session.mode === 'call');
     stop();
     keepCallMusic = false;
-    if (session && session.mode === 'call' && window.drishtiMusicHold) window.drishtiMusicHold('call');
     live = {id: session.id, room: null, role: role || 'user', token: token || null, session: session, messages: [], gen: generation};
     syncClock();
     timer = setInterval(() => beat().catch(() => {}), 3000);
@@ -1107,14 +1101,8 @@
     if (waiting.some(s => s.mode === 'call')) preloadLiveKit();
     host.querySelectorAll('[data-accept]').forEach(b => b.onclick = () => {
       const item = waiting.find(s => s.id === b.dataset.accept);
-      if (item && item.mode === 'call') {
-        if (window.drishtiMusicHold) window.drishtiMusicHold('call');
-        primeCallAudio();
-      }
-      api('/api/connect/sessions/' + b.dataset.accept + '/accept', {}, token).then(view => openAstroSession(view, token)).catch(err => {
-        if (item && item.mode === 'call' && window.drishtiMusicRelease) window.drishtiMusicRelease('call');
-        showErr(err);
-      });
+      if (item && item.mode === 'call') primeCallAudio();
+      api('/api/connect/sessions/' + b.dataset.accept + '/accept', {}, token).then(view => openAstroSession(view, token)).catch(showErr);
     });
   }
   function watchIncoming(token) {
@@ -1151,7 +1139,6 @@
     else if (typeof render === 'function') render();
   }
   function switchToUser() {
-    if (window.drishtiMusicRelease) window.drishtiMusicRelease('astro');
     store.set('app-mode', 'user');
     document.body.classList.remove('astro-mode');
     if (location.hash) location.hash = '';
@@ -1630,12 +1617,7 @@
     };
   }
   function takeover() {
-    if (location.hash === '#astro') {
-      if (window.drishtiMusicHold) window.drishtiMusicHold('astro');
-      renderPortal();
-      return true;
-    }
-    if (window.drishtiMusicRelease) window.drishtiMusicRelease('astro');
+    if (location.hash === '#astro') { renderPortal(); return true; }
     if (location.hash === '#admin') { renderAdmin(); return true; }
     return false;
   }
