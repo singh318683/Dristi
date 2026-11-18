@@ -198,6 +198,13 @@ def test_auth_and_call_token_gating(client, monkeypatch):
     assert video["roomJoin"] is True and video["canPublish"] is True and video["canSubscribe"] is True
     assert claims["sub"].startswith("user-")
     assert claims["exp"] - claims["nbf"] <= 610
+    astro_tok = client.post("/api/connect/sessions/" + call["id"] + "/call-token", json={"device": ""}, headers=auth(token))
+    assert astro_tok.status_code == 200
+    astro_claims = connect_livekit.read_jwt(astro_tok.json()["token"], "secret")
+    astro_video = astro_claims["video"]
+    assert astro_video["room"] == issued.json()["room"]
+    assert astro_video["roomJoin"] is True and astro_video["canPublish"] is True and astro_video["canSubscribe"] is True
+    assert astro_claims["sub"].startswith("astro-")
     body = json.dumps({"event": "room_finished", "room": {"name": issued.json()["room"]}}).encode()
     header = connect_livekit.webhook_token("secret", body)
     closed = client.post("/api/connect/livekit/webhook", content=body, headers={"Authorization": header})
@@ -1115,6 +1122,11 @@ def test_voice_joins_only_after_the_call_is_active():
     assert "function joinVoice" in connect and "call_not_ready" in connect
     assert "livekit-client@2.9.0" in connect and "room.connect(info.url, info.token)" in connect
     assert "setMicrophoneEnabled(true)" in connect and "startAudio" in connect
+    assert "getUserMedia({audio: true})" in connect and "publishTrack(media, {source: 'microphone'})" in connect
+    assert "for (let attempt = 0; attempt < 3; attempt++)" in connect
+    assert "setVoiceNote(voiceErrorText(err))" in connect.split("await publishMic(room);", 1)[1].split("if (room.canPlaybackAudio", 1)[0]
+    assert "live.role === 'astrologer'" in connect and "function localMicLabel" in connect
+    assert "const enableMic = wasMuted" in connect
     assert "Tap to enable audio" in connect and "आवाज़ चालू करने के लिए टैप करें" in connect
     assert "playsinline" in connect and "connectRemoteAudio" in connect
     assert "The microphone is blocked." in connect
@@ -1135,6 +1147,14 @@ if (voiceErrorText({name: 'NotAllowedError'}).indexOf('microphone is blocked') <
 if (voiceErrorText({code: 'call_not_ready'}).indexOf('Waiting') < 0) process.exit(4);
 if (voiceErrorText(new Error('failed')).indexOf('could not be reached') < 0) process.exit(5);
 if (voiceErrorText(new Error('setMutedState failed due to error')).indexOf('microphone is blocked') < 0) process.exit(6);
+const micStart = src.indexOf('function localMicLabel');
+const micEnd = src.indexOf('function micDenied');
+eval(src.slice(micStart, micEnd));
+const pubs = {forEach(fn) { fn({source: 'microphone', isMuted: false, track: {isMuted: false, mediaStreamTrack: {readyState: 'live', enabled: true}}}); }};
+if (localMicLabel({localParticipant: {trackPublications: pubs}}) !== 'published · track yes') process.exit(7);
+const mutedPubs = {forEach(fn) { fn({source: 'microphone', isMuted: true, track: {mediaStreamTrack: {readyState: 'live', enabled: false}}}); }};
+if (localMicLabel({localParticipant: {trackPublications: mutedPubs}}) !== 'muted · track yes') process.exit(8);
+if (localMicLabel({localParticipant: {trackPublications: {forEach() {}}}}) !== 'unpublished · track no') process.exit(9);
 """
     ran = subprocess.run(["node", "-e", script, os.path.join(os.path.dirname(__file__), "..", "web", "connect.js")], capture_output=True, text=True)
     assert ran.returncode == 0, ran.stderr or ran.stdout

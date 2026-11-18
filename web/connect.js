@@ -75,6 +75,7 @@
       if (enable) enable.remove();
       const voiceDebug = document.getElementById('voiceDebug');
       if (voiceDebug) voiceDebug.remove();
+      releasePrimedMic();
     }
     live = null;
     beating = false;
@@ -629,9 +630,10 @@
     button.onclick = ev => {
       const person = requireVoiceRoom();
       if (!person) return;
-      const pressed = ev.currentTarget.getAttribute('aria-pressed') === 'true';
-      ev.currentTarget.setAttribute('aria-pressed', pressed ? 'false' : 'true');
-      person.setMicrophoneEnabled(pressed).catch(err => setVoiceNote(voiceErrorText(err)));
+      const wasMuted = ev.currentTarget.getAttribute('aria-pressed') === 'true';
+      const enableMic = wasMuted;
+      ev.currentTarget.setAttribute('aria-pressed', enableMic ? 'false' : 'true');
+      person.setMicrophoneEnabled(enableMic).catch(err => setVoiceNote(voiceErrorText(err)));
     };
   }
   function bindSpeaker(button) {
@@ -658,6 +660,26 @@
   }
   let LiveKit = null;
   let primedRoom = null;
+  let primedMic = null;
+  let primedMicPromise = null;
+  let primedMicError = null;
+  function releasePrimedMic() {
+    if (primedMic) {
+      try { primedMic.getTracks().forEach(track => { try { track.stop(); } catch (e) { /* already stopped */ } }); } catch (e) { /* no tracks */ }
+    }
+    primedMic = null;
+    primedMicPromise = null;
+    primedMicError = null;
+  }
+  function primeMic() {
+    if (primedMic || primedMicPromise || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return;
+    primedMicError = null;
+    primedMicPromise = navigator.mediaDevices.getUserMedia({audio: true}).then(stream => {
+      primedMic = stream;
+    }, err => {
+      primedMicError = err;
+    });
+  }
   function preloadLiveKit() {
     if (LiveKit) return;
     import('https://cdn.jsdelivr.net/npm/livekit-client@2.9.0/+esm').then(mod => { LiveKit = mod; }).catch(() => {});
@@ -680,12 +702,35 @@
   function primeCallAudio() {
     const audio = ensureRemoteAudio();
     try { const played = audio.play(); if (played && played.catch) played.catch(() => {}); } catch (e) { /* the Accept tap retries */ }
+    primeMic();
     if (!LiveKit || !LiveKit.Room) return;
     if (!primedRoom) primedRoom = new LiveKit.Room();
     try {
       const started = primedRoom.startAudio && primedRoom.startAudio();
       if (started && started.catch) started.catch(() => {});
     } catch (e) { /* startAudio is tried again after the room connects */ }
+  }
+  function localMicLabel(room) {
+    const person = room && room.localParticipant;
+    if (!person || !person.trackPublications || !person.trackPublications.forEach) return 'unpublished · track no';
+    let found = null;
+    person.trackPublications.forEach(pub => {
+      if (!pub) return;
+      const source = pub.source || (pub.track && pub.track.source) || '';
+      const kind = pub.kind || (pub.track && pub.track.kind) || '';
+      if (source === 'microphone' || (kind === 'audio' && source !== 'screen_share_audio')) found = pub;
+    });
+    if (!found) return 'unpublished · track no';
+    const track = found.track;
+    const media = track && track.mediaStreamTrack;
+    const present = !!(track && (!media || media.readyState === 'live'));
+    const muted = found.isMuted === true || (track && track.isMuted === true) || (media && media.enabled === false);
+    return (muted ? 'muted' : 'published') + ' · track ' + (present ? 'yes' : 'no');
+  }
+  function micDenied(err) {
+    const code = (err && (err.name || err.code)) || '';
+    const msg = (err && err.message) || '';
+    return code === 'NotAllowedError' || code === 'PermissionDeniedError' || code === 'SecurityError' || /not allowed|permission|notreadable|getUserMedia/i.test(msg);
   }
   function countRemoteAudio(room) {
     let people = 0, tracks = 0;
@@ -701,7 +746,7 @@
     return {people: people, tracks: tracks};
   }
   function paintVoiceDebug(room) {
-    if (!voiceDebugOn) return;
+    if (!voiceDebugOn && !(live && live.role === 'astrologer')) return;
     let el = document.getElementById('voiceDebug');
     if (!el) {
       el = document.createElement('p');
@@ -715,7 +760,8 @@
     el.textContent = 'room ' + ((room && room.state) || 'none')
       + ' · remotes ' + counts.people
       + ' · audio ' + counts.tracks
-      + ' · playback ' + playback;
+      + ' · playback ' + playback
+      + ' · mic ' + localMicLabel(room);
   }
   function attachRemoteAudio(track) {
     if (!track || track.kind !== 'audio' || !track.attach) return;
@@ -739,17 +785,45 @@
         if (room.startAudio) await room.startAudio();
         const audio = document.getElementById('connectRemoteAudio');
         if (audio && audio.play) audio.play().catch(() => {});
-        if (room.localParticipant) await room.localParticipant.setMicrophoneEnabled(true);
+        await publishMic(room);
         btn.remove();
         setVoiceNote('');
+        paintVoiceDebug(room);
       } catch (err) {
         setVoiceNote(voiceErrorText(err));
       }
     };
   }
   async function publishMic(room) {
-    if (!room || !room.localParticipant) return;
-    await room.localParticipant.setMicrophoneEnabled(true);
+    if (!room || !room.localParticipant) throw new Error('microphone not published');
+    if (primedMicPromise) {
+      try { await primedMicPromise; } catch (err) { primedMicError = err; }
+    }
+    if (primedMicError && !primedMic) throw primedMicError;
+    let last = null;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        if (primedMic) {
+          const media = primedMic.getAudioTracks()[0];
+          if (media && media.readyState !== 'ended') {
+            const pub = await room.localParticipant.publishTrack(media, {source: 'microphone'});
+            if (pub && pub.isMuted && pub.unmute) await pub.unmute();
+            primedMic = null;
+            return;
+          }
+          primedMic = null;
+        }
+        const pub = await room.localParticipant.setMicrophoneEnabled(true);
+        if (pub && pub.isMuted && pub.unmute) await pub.unmute();
+        if (localMicLabel(room).indexOf('published') === 0 || (pub && pub.track)) return;
+        last = new Error('microphone not published');
+      } catch (err) {
+        last = err;
+        if (micDenied(err)) throw err;
+      }
+      if (attempt < 2) await sleep(400);
+    }
+    throw last || new Error('microphone not published');
   }
   function watchPlayback(room, mod) {
     const onPlayback = playing => {
@@ -787,7 +861,7 @@
       await publishMic(room);
     } catch (err) {
       micReady = false;
-      setVoiceNote('');
+      setVoiceNote(voiceErrorText(err));
       showTapAudio(room);
     }
     if (room.canPlaybackAudio === false) {
