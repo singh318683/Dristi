@@ -7,6 +7,10 @@
   let timer = 0;
   let clock = 0;
   let live = null;
+  let keepCallMusic = false;
+  const voiceDebugOn = /(?:\?|&)audiodebug=1(?:&|$)/.test(location.search) || (function () {
+    try { return localStorage.getItem('dr-audiodebug') === '1'; } catch (e) { return false; }
+  })();
   let portalPoll = 0;
   let titleFlash = 0;
   let beating = false;
@@ -64,10 +68,15 @@
     clock = 0;
     generation += 1;
     if (live && live.room && live.room.disconnect) live.room.disconnect();
-    const audio = document.getElementById('connectRemoteAudio');
-    if (audio) audio.remove();
-    const enable = document.getElementById('connectEnableAudio');
-    if (enable) enable.remove();
+    if (!keepCallMusic) {
+      const audio = document.getElementById('connectRemoteAudio');
+      if (audio) audio.remove();
+      const enable = document.getElementById('connectEnableAudio');
+      if (enable) enable.remove();
+      const voiceDebug = document.getElementById('voiceDebug');
+      if (voiceDebug) voiceDebug.remove();
+      if (window.drishtiMusicRelease) window.drishtiMusicRelease('call');
+    }
     live = null;
     beating = false;
   }
@@ -183,6 +192,7 @@
     return '$' + (Math.max(0, Number(cents) || 0) / 100).toFixed(2);
   }
   async function checkout(id, mode) {
+    if (mode === 'call') preloadLiveKit();
     const q = await api('/api/connect/quote', {device: DEVICE, astrologer_id: id});
     const title = mode === 'call' ? tr('Voice call', 'वॉइस कॉल') : tr('Chat', 'चैट');
     const short = q.balance_cents < q.hold_cents;
@@ -207,7 +217,17 @@
     const start = $('#connectStart');
     if (start) start.onclick = () => {
       if (short) topup(suggested).then(() => checkout(id, mode)).catch(showErr);
-      else begin(id, mode).catch(showErr);
+      else {
+        if (mode === 'call') {
+          preloadLiveKit();
+          if (window.drishtiMusicHold) window.drishtiMusicHold('call');
+          primeCallAudio();
+        }
+        begin(id, mode).catch(err => {
+          if (mode === 'call' && window.drishtiMusicRelease) window.drishtiMusicRelease('call');
+          showErr(err);
+        });
+      }
     };
   }
   function clearPayForm() {
@@ -401,6 +421,7 @@
     const cost = $('#connectCost');
     if (node) node.textContent = reading.time;
     if (cost) cost.textContent = reading.cost;
+    paintVoiceDebug(live.room);
   }
   function syncClock() {
     const ticking = !!(live && clockReading(live.session).ticking);
@@ -415,7 +436,10 @@
     clock = setInterval(paintClock, 1000);
   }
   function watch(session, role, token) {
+    keepCallMusic = !!(session && session.mode === 'call');
     stop();
+    keepCallMusic = false;
+    if (session && session.mode === 'call' && window.drishtiMusicHold) window.drishtiMusicHold('call');
     live = {id: session.id, room: null, role: role || 'user', token: token || null, session: session, messages: [], gen: generation};
     syncClock();
     timer = setInterval(() => beat().catch(() => {}), 3000);
@@ -638,8 +662,13 @@
     }
     return tr('The voice room could not be reached. Check your connection.', 'वॉइस रूम तक नहीं पहुँच सके। कनेक्शन जाँचें।');
   }
-  function attachRemoteAudio(track) {
-    if (!track || track.kind !== 'audio' || !track.attach) return;
+  let LiveKit = null;
+  let primedRoom = null;
+  function preloadLiveKit() {
+    if (LiveKit) return;
+    import('https://cdn.jsdelivr.net/npm/livekit-client@2.9.0/+esm').then(mod => { LiveKit = mod; }).catch(() => {});
+  }
+  function ensureRemoteAudio() {
     let audio = document.getElementById('connectRemoteAudio');
     if (!audio) {
       audio = document.createElement('audio');
@@ -648,9 +677,58 @@
       audio.playsInline = true;
       audio.setAttribute('playsinline', '');
       audio.setAttribute('webkit-playsinline', '');
-      document.body.appendChild(audio);
+      audio.setAttribute('autoplay', '');
     }
+    const host = document.querySelector('.call-screen') || document.getElementById('astroSession') || document.body;
+    if (audio.parentNode !== host) host.appendChild(audio);
+    return audio;
+  }
+  function primeCallAudio() {
+    const audio = ensureRemoteAudio();
+    try { const played = audio.play(); if (played && played.catch) played.catch(() => {}); } catch (e) { /* the Accept tap retries */ }
+    if (!LiveKit || !LiveKit.Room) return;
+    if (!primedRoom) primedRoom = new LiveKit.Room();
+    try {
+      const started = primedRoom.startAudio && primedRoom.startAudio();
+      if (started && started.catch) started.catch(() => {});
+    } catch (e) { /* startAudio is tried again after the room connects */ }
+  }
+  function countRemoteAudio(room) {
+    let people = 0, tracks = 0;
+    if (!room || !room.remoteParticipants || !room.remoteParticipants.forEach) return {people: 0, tracks: 0};
+    room.remoteParticipants.forEach(person => {
+      people += 1;
+      if (!person.trackPublications || !person.trackPublications.forEach) return;
+      person.trackPublications.forEach(pub => {
+        const kind = pub && (pub.kind || (pub.track && pub.track.kind));
+        if (kind === 'audio' && pub.isSubscribed !== false) tracks += 1;
+      });
+    });
+    return {people: people, tracks: tracks};
+  }
+  function paintVoiceDebug(room) {
+    if (!voiceDebugOn) return;
+    let el = document.getElementById('voiceDebug');
+    if (!el) {
+      el = document.createElement('p');
+      el.id = 'voiceDebug';
+      el.className = 'sub';
+    }
+    const host = document.querySelector('.call-screen') || document.getElementById('astroSession') || document.body;
+    if (el.parentNode !== host) host.appendChild(el);
+    const counts = countRemoteAudio(room);
+    const playback = room && typeof room.canPlaybackAudio !== 'undefined' ? String(room.canPlaybackAudio) : 'n/a';
+    el.textContent = 'room ' + ((room && room.state) || 'none')
+      + ' · remotes ' + counts.people
+      + ' · audio ' + counts.tracks
+      + ' · playback ' + playback;
+  }
+  function attachRemoteAudio(track) {
+    if (!track || track.kind !== 'audio' || !track.attach) return;
+    const audio = ensureRemoteAudio();
     track.attach(audio);
+    try { const played = audio.play(); if (played && played.catch) played.catch(() => {}); } catch (e) { /* Tap to enable audio retries playback */ }
+    paintVoiceDebug(live && live.room);
   }
   function showTapAudio(room) {
     if (document.getElementById('connectEnableAudio')) return;
@@ -679,26 +757,44 @@
     if (!room || !room.localParticipant) return;
     await room.localParticipant.setMicrophoneEnabled(true);
   }
+  function watchPlayback(room, mod) {
+    const onPlayback = playing => {
+      paintVoiceDebug(room);
+      if (playing === false || room.canPlaybackAudio === false) showTapAudio(room);
+      else {
+        const btn = document.getElementById('connectEnableAudio');
+        if (btn) btn.remove();
+      }
+    };
+    const named = mod && mod.RoomEvent && mod.RoomEvent.AudioPlaybackStatusChanged;
+    room.on(named || 'audioPlaybackStatusChanged', onPlayback);
+  }
   async function attachVoice(info) {
-    const mod = await import('https://cdn.jsdelivr.net/npm/livekit-client@2.9.0/+esm');
-    const room = new mod.Room();
+    const mod = LiveKit || await import('https://cdn.jsdelivr.net/npm/livekit-client@2.9.0/+esm');
+    LiveKit = mod;
+    const room = primedRoom || new mod.Room();
+    primedRoom = null;
     const onTrack = track => attachRemoteAudio(track);
     if (mod.RoomEvent && mod.RoomEvent.TrackSubscribed) room.on(mod.RoomEvent.TrackSubscribed, onTrack);
     else room.on('trackSubscribed', onTrack);
-    await room.connect(info.url, info.token);
+    watchPlayback(room, mod);
+    if (room.state !== 'connected') await room.connect(info.url, info.token);
     if (live) live.room = room;
+    ensureRemoteAudio();
     if (room.remoteParticipants && room.remoteParticipants.forEach) {
       room.remoteParticipants.forEach(person => {
         if (!person.trackPublications) return;
         person.trackPublications.forEach(pub => { if (pub && pub.track) attachRemoteAudio(pub.track); });
       });
     }
+    paintVoiceDebug(room);
+    let micReady = true;
     try {
       await publishMic(room);
     } catch (err) {
+      micReady = false;
       setVoiceNote('');
       showTapAudio(room);
-      return;
     }
     if (room.canPlaybackAudio === false) {
       showTapAudio(room);
@@ -707,7 +803,8 @@
     if (room.startAudio) {
       try { await room.startAudio(); } catch (err) { showTapAudio(room); return; }
     }
-    setVoiceNote('');
+    if (micReady && room.canPlaybackAudio !== false) setVoiceNote('');
+    paintVoiceDebug(room);
   }
   async function joinVoice() {
     if (!live || live.voiceJoined || live.joining) return;
@@ -1007,7 +1104,18 @@
       return `<div class="card incoming-banner"><b>${tr('New request', 'नया अनुरोध')}</b><p>${esc(mode)} · ${esc(who)} · ${esc(s.rate_label || '')}</p><p>${esc(question)}</p><button type="button" class="btn" data-accept="${esc(s.id)}">${tr('Accept', 'स्वीकार')}</button></div>`;
     }).join('')
       || `<p class="sub">${tr('No waiting chat or call.', 'कोई प्रतीक्षारत चैट या कॉल नहीं।')}</p>`;
-    host.querySelectorAll('[data-accept]').forEach(b => b.onclick = () => api('/api/connect/sessions/' + b.dataset.accept + '/accept', {}, token).then(view => openAstroSession(view, token)).catch(showErr));
+    if (waiting.some(s => s.mode === 'call')) preloadLiveKit();
+    host.querySelectorAll('[data-accept]').forEach(b => b.onclick = () => {
+      const item = waiting.find(s => s.id === b.dataset.accept);
+      if (item && item.mode === 'call') {
+        if (window.drishtiMusicHold) window.drishtiMusicHold('call');
+        primeCallAudio();
+      }
+      api('/api/connect/sessions/' + b.dataset.accept + '/accept', {}, token).then(view => openAstroSession(view, token)).catch(err => {
+        if (item && item.mode === 'call' && window.drishtiMusicRelease) window.drishtiMusicRelease('call');
+        showErr(err);
+      });
+    });
   }
   function watchIncoming(token) {
     stopPortalPoll();
@@ -1043,6 +1151,7 @@
     else if (typeof render === 'function') render();
   }
   function switchToUser() {
+    if (window.drishtiMusicRelease) window.drishtiMusicRelease('astro');
     store.set('app-mode', 'user');
     document.body.classList.remove('astro-mode');
     if (location.hash) location.hash = '';
@@ -1088,6 +1197,7 @@
     return `<button type="button" class="btn${quiet}" id="astroStripe" data-payout-method="stripe">${label}</button>${privacy}`;
   }
   function renderAstroMode(desk, money, me, token) {
+    preloadLiveKit();
     if (sessionStorage.getItem('dr-astro-return') === 'earn') {
       sessionStorage.setItem('dr-astro-tab', 'earn');
       sessionStorage.removeItem('dr-astro-return');
@@ -1520,10 +1630,14 @@
     };
   }
   function takeover() {
-    if (location.hash !== '#astro' && location.hash !== '#admin') return false;
-    if (location.hash === '#admin') renderAdmin();
-    else renderPortal();
-    return true;
+    if (location.hash === '#astro') {
+      if (window.drishtiMusicHold) window.drishtiMusicHold('astro');
+      renderPortal();
+      return true;
+    }
+    if (window.drishtiMusicRelease) window.drishtiMusicRelease('astro');
+    if (location.hash === '#admin') { renderAdmin(); return true; }
+    return false;
   }
   window.onAnswerClosed = function () { if (on()) offer(); };
   function walletWhen(iso) {

@@ -11,6 +11,9 @@ from pathlib import Path
 FILE_REF_ID = "D51571051FED79650016851F"
 BUILD_ID = "D51571061FED79650016851F"
 SOURCE_NAME = "DrishtiStore.swift"
+BRIDGE_REF_ID = "D51571071FED79650016851F"
+BRIDGE_BUILD_ID = "D51571081FED79650016851F"
+BRIDGE_NAME = "DrishtiBridgeViewController.swift"
 DEPLOYMENT = "15.0"
 
 
@@ -54,16 +57,16 @@ def _insert_after(text, needle, addition):
     raise SystemExit("project.pbxproj has no line containing " + needle)
 
 
-def add_source(project):
-    if SOURCE_NAME + " in Sources" in project:
+def add_named_source(project, source_name, file_ref_id, build_id):
+    if source_name + " in Sources" in project:
         return project
     build_line = (
-        "\t\t" + BUILD_ID + " /* " + SOURCE_NAME + " in Sources */ = {isa = PBXBuildFile; "
-        "fileRef = " + FILE_REF_ID + " /* " + SOURCE_NAME + " */; };\n"
+        "\t\t" + build_id + " /* " + source_name + " in Sources */ = {isa = PBXBuildFile; "
+        "fileRef = " + file_ref_id + " /* " + source_name + " */; };\n"
     )
     ref_line = (
-        "\t\t" + FILE_REF_ID + " /* " + SOURCE_NAME + " */ = {isa = PBXFileReference; "
-        "lastKnownFileType = sourcecode.swift; path = " + SOURCE_NAME + "; sourceTree = \"<group>\"; };\n"
+        "\t\t" + file_ref_id + " /* " + source_name + " */ = {isa = PBXFileReference; "
+        "lastKnownFileType = sourcecode.swift; path = " + source_name + "; sourceTree = \"<group>\"; };\n"
     )
     project = _insert_after(project, "/* AppDelegate.swift in Sources */ = {isa = PBXBuildFile;", build_line)
     project = _insert_after(project, "/* AppDelegate.swift */ = {isa = PBXFileReference;", ref_line)
@@ -77,7 +80,7 @@ def add_source(project):
             close -= 1
         if close < 0 or ");" not in lines[close]:
             raise SystemExit("project.pbxproj App group did not close its children")
-        lines.insert(close, "\t\t\t\t" + FILE_REF_ID + " /* " + SOURCE_NAME + " */,\n")
+        lines.insert(close, "\t\t\t\t" + file_ref_id + " /* " + source_name + " */,\n")
         inserted = True
         break
     if not inserted:
@@ -93,9 +96,35 @@ def add_source(project):
     if at < 0:
         raise SystemExit("project.pbxproj sources phase has no AppDelegate.swift")
     line_end = section.find("\n", at)
-    source_line = "\n\t\t\t\t" + BUILD_ID + " /* " + SOURCE_NAME + " in Sources */,"
+    source_line = "\n\t\t\t\t" + build_id + " /* " + source_name + " in Sources */,"
     section = section[:line_end] + source_line + section[line_end:]
     return project[:start] + section + project[end:]
+
+
+def add_source(project):
+    project = add_named_source(project, SOURCE_NAME, FILE_REF_ID, BUILD_ID)
+    return add_named_source(project, BRIDGE_NAME, BRIDGE_REF_ID, BRIDGE_BUILD_ID)
+
+
+def use_inline_playback(xcode_dir):
+    storyboard = Path(xcode_dir) / "App" / "Base.lproj" / "Main.storyboard"
+    if not storyboard.is_file():
+        return
+    text = storyboard.read_text(encoding="utf-8")
+    if "DrishtiBridgeViewController" in text:
+        return
+    pair = 'customClass="CAPBridgeViewController" customModule="Capacitor"'
+    if pair in text:
+        text = text.replace(pair, 'customClass="DrishtiBridgeViewController" customModule="App"', 1)
+    elif 'customClass="CAPBridgeViewController"' in text:
+        text = text.replace(
+            'customClass="CAPBridgeViewController"',
+            'customClass="DrishtiBridgeViewController" customModule="App"',
+            1,
+        )
+    else:
+        raise SystemExit("Main.storyboard has no CAPBridgeViewController")
+    storyboard.write_text(text, encoding="utf-8")
 
 
 def prepare(xcode_dir, additions_path, swift_path, build_number):
@@ -107,8 +136,13 @@ def prepare(xcode_dir, additions_path, swift_path, build_number):
         raise SystemExit("not a Capacitor App project: " + str(xcode_dir))
     merge_plist(plist_path, additions(additions_path), build_number)
     shutil.copyfile(swift_path, app_dir / SOURCE_NAME)
+    bridge_path = Path(swift_path).with_name(BRIDGE_NAME)
+    if not bridge_path.is_file():
+        raise SystemExit("missing " + str(bridge_path))
+    shutil.copyfile(bridge_path, app_dir / BRIDGE_NAME)
     project = project_path.read_text(encoding="utf-8")
     project = add_source(project)
+    use_inline_playback(xcode_dir)
     project = project.replace(
         "IPHONEOS_DEPLOYMENT_TARGET = 13.0;",
         "IPHONEOS_DEPLOYMENT_TARGET = " + DEPLOYMENT + ";",

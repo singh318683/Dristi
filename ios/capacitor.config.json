@@ -8,6 +8,8 @@
     "androidScheme": "https"
   },
   "ios": {
-    "backgroundColor": "#FAF7F2"
+    "backgroundColor": "#FAF7F2",
+    "allowsInlineMediaPlayback": true,
+    "mediaTypesRequiringUserActionForPlayback": []
   }
 }

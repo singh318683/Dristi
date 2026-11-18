@@ -91,6 +91,12 @@ def _project(tmp_path):
         plistlib.dump(info, handle)
     (app / "App.xcodeproj" / "project.pbxproj").write_text(PBX, encoding="utf-8")
     (app / "Podfile").write_text("platform :ios, '13.0'\n", encoding="utf-8")
+    story = app / "App" / "Base.lproj"
+    story.mkdir()
+    (story / "Main.storyboard").write_text(
+        '<viewController customClass="CAPBridgeViewController" customModule="Capacitor" sceneMemberID="viewController"/>',
+        encoding="utf-8",
+    )
     return app
 
 
@@ -125,6 +131,11 @@ def test_prepare_adds_the_plugin_privacy_keys_and_build_number(tmp_path):
     assert again.returncode == 0, again.stderr
     prepared = (app / "App.xcodeproj" / "project.pbxproj").read_text(encoding="utf-8")
     assert prepared.count("DrishtiStore.swift in Sources") == 2
+    assert prepared.count("DrishtiBridgeViewController.swift in Sources") == 2
+    assert (app / "App" / "DrishtiBridgeViewController.swift").read_text(encoding="utf-8").count("allowsInlineMediaPlayback = true") == 1
+    story = (app / "App" / "Base.lproj" / "Main.storyboard").read_text(encoding="utf-8")
+    assert 'customClass="DrishtiBridgeViewController" customModule="App"' in story
+    assert "CAPBridgeViewController" not in story
 
 
 def test_committed_shell_url_is_not_production():

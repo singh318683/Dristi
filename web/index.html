@@ -842,7 +842,7 @@ window.GITA_VERSES = window.__GITA_INJECTED__ || null;
 <div id="root"></div>
 <div id="sheet" class="sheet-bg" hidden></div>
 <div id="toast" class="toast" role="status" hidden></div>
-<script src="birthpicker.js?v=drishti-v44"></script>
+<script src="birthpicker.js?v=drishti-v45"></script>
 <script>
 'use strict';
 // ------------------------------------------------------------------ config
@@ -987,6 +987,7 @@ function nav() {
 // context is resumed inside the gesture and routed through an <audio> element.
 var musicCtx = null, musicGain = null, musicEl = null, musicAnalyser = null;
 var musicBuilt = 0, musicPlaying = false, musicHeld = false, musicTimer = 0;
+var musicHolds = {}, musicRestore = false;
 var musicRampFrom = 0, musicRampTo = 0, musicRampAt = 0, musicRampDur = 0;
 const musicDebugOn = /(?:\?|&)audiodebug=1(?:&|$)/.test(location.search);
 function musicOn() {
@@ -1152,7 +1153,7 @@ function musicBuild() {
     osc.start();
   });
   musicCtx.onstatechange = () => {
-    if (musicCtx && musicCtx.state === 'interrupted' && musicPlaying && musicOn() && !musicHeld) {
+    if (musicCtx && musicCtx.state === 'interrupted' && musicPlaying && musicOn() && !musicHeld && !musicHeldByApp()) {
       musicPing();
       try { musicCtx.resume(); } catch (e) { /* the next tap resumes an interrupted context */ }
       musicElPlay();
@@ -1160,6 +1161,32 @@ function musicBuild() {
     musicDebugPaint();
   };
 }
+function musicHeldByApp() {
+  for (const key in musicHolds) if (musicHolds[key]) return true;
+  return false;
+}
+function musicHold(reason) {
+  const already = musicHeldByApp();
+  musicHolds[reason] = true;
+  if (!already) musicRestore = !!(musicOn() && musicPlaying);
+  musicHeld = true;
+  if (musicEl) { try { musicEl.pause(); } catch (e) { /* the element may already be paused */ } }
+  if (reason === 'call') {
+    try { if (navigator.audioSession) navigator.audioSession.type = 'play-and-record'; } catch (e) { /* older browsers have no audioSession */ }
+  }
+  if (musicCtx) musicSilence(0.08, true);
+}
+function musicRelease(reason) {
+  delete musicHolds[reason];
+  if (musicHeldByApp()) return;
+  if (!musicRestore || !musicOn()) { musicHeld = false; return; }
+  try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch (e) { /* older browsers have no audioSession */ }
+  musicHeld = false;
+  musicResume();
+  if (musicCtx) musicRamp(musicLevel(), 0.8);
+}
+window.drishtiMusicHold = musicHold;
+window.drishtiMusicRelease = musicRelease;
 function musicSilence(seconds, andSuspend) {
   if (!musicCtx) return;
   musicHeld = true;
@@ -1172,7 +1199,7 @@ function musicSilence(seconds, andSuspend) {
   });
 }
 function musicUnlock() {
-  if (!musicOn()) return;
+  if (!musicOn() || musicHeldByApp()) return;
   musicBuild();
   musicResume();
   if (!musicCtx) return;
@@ -1205,7 +1232,7 @@ function musicOnVisible() {
     musicDebugPaint();
     return;
   }
-  if (!musicPlaying || !musicOn() || !musicCtx) return;
+  if (musicHeldByApp() || !musicPlaying || !musicOn() || !musicCtx) return;
   musicHeld = false;
   musicResume();
   musicRamp(musicLevel(), 1.5);
@@ -1226,7 +1253,7 @@ window.addEventListener('pagehide', e => {
   musicSilence(0.4, true);
 });
 window.addEventListener('pageshow', () => {
-  if (document.hidden || !musicPlaying || !musicOn() || !musicCtx) return;
+  if (document.hidden || musicHeldByApp() || !musicPlaying || !musicOn() || !musicCtx) return;
   musicHeld = false;
   musicResume();
   musicRamp(musicLevel(), 1.5);
@@ -3383,6 +3410,6 @@ window.shareGitaCard = () => shareCard('gita');
   maybeShowRate();
 })();
 </script>
-<script src="connect.js?v=drishti-v44"></script>
+<script src="connect.js?v=drishti-v45"></script>
 </body>
 </html>
