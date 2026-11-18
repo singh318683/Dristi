@@ -162,6 +162,7 @@ def ensure(con) -> None:
     con.execute("create unique index if not exists ac_session_idem on ac_session(device, idem_key)")
     con.execute("create index if not exists ac_message_session on ac_message(session_id, id)")
     con.execute("create index if not exists ac_ledger_tx on ac_ledger(tx_id)")
+    con.execute("create index if not exists ac_ledger_account on ac_ledger(account, id)")
 
 
 def _add_column(con, table: str, column: str, ddl: str) -> None:
@@ -206,16 +207,74 @@ def _post(con, tx_id: str, entries: list[tuple[str, int, int]], reason: str, ref
             (tx_id, account, int(d), int(c), reason, ref, created))
 
 
+def _signed_label(cents: int) -> str:
+    cents = int(cents)
+    label = money.money_label(abs(cents))
+    if cents > 0:
+        return "+" + label
+    if cents < 0:
+        return "-" + label
+    return label
+
+
+def _wallet_activity(con, device: str, limit: int = 10) -> list[dict]:
+    """Wallet lines for this device. Other accounts in the same transaction stay out."""
+    account = "wallet:" + (device or "")
+    rows = con.execute(
+        """select id, debit_cents, credit_cents, reason, ref, created
+           from ac_ledger where account=? order by id desc limit ?""",
+        (account, int(limit))).fetchall()
+    refs = [row[4] for row in rows if row[4]]
+    sessions = {}
+    if refs:
+        marks = ",".join("?" for _ in refs)
+        found = con.execute(
+            f"select id, mode, end_reason, billed_cents from ac_session where id in ({marks})",
+            tuple(refs)).fetchall()
+        sessions = {row[0]: {"mode": row[1] or "", "end_reason": row[2] or "", "billed_cents": int(row[3] or 0)} for row in found}
+    items = []
+    for rid, debit, credit, reason, ref, created in rows:
+        debit, credit = int(debit), int(credit)
+        session = sessions.get(ref) or {}
+        if reason == "wallet_topup" and credit:
+            kind, cents = "topup", credit
+        elif reason == "session_hold" and debit:
+            kind, cents = "hold", -debit
+        elif reason == "session_extend" and debit:
+            kind, cents = "charge", -debit
+        elif reason == "session_settle" and credit:
+            kind, cents = "refund", credit
+        elif credit:
+            kind, cents = "credit", credit
+        elif debit:
+            kind, cents = "debit", -debit
+        else:
+            continue
+        items.append({
+            "id": int(rid),
+            "at": created,
+            "kind": kind,
+            "cents": cents,
+            "amount_label": _signed_label(cents),
+            "mode": session.get("mode") or "",
+            "end_reason": (session.get("end_reason") or "") if kind == "refund" else "",
+            "billed_cents": int(session.get("billed_cents") or 0) if kind == "refund" else 0,
+        })
+    return items
+
+
 def wallet_view(device: str) -> dict:
     with db.connect() as con:
         ensure(con)
         stripe_cents, apple_cents = _lock_wallet(con, device)
+        activity = _wallet_activity(con, device)
     total = stripe_cents + apple_cents
     return {
         "stripe_cents": stripe_cents,
         "apple_cents": apple_cents,
         "balance_cents": total,
         "balance_label": money.money_label(total),
+        "activity": activity,
     }
 
 

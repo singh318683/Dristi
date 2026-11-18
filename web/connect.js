@@ -1497,7 +1497,67 @@
     return true;
   }
   window.onAnswerClosed = function () { if (on()) offer(); };
-  window.DrishtiConnect = {takeover: takeover, offer: offer, list: list, stop: stop, paintBanner: paintBanner, switchToAstro: switchToAstro};
+  function walletWhen(iso) {
+    const date = new Date(iso || '');
+    if (isNaN(date.getTime())) return '';
+    const hi = typeof S !== 'undefined' && S.lang === 'hi';
+    const months = hi
+      ? ['जनवरी', 'फ़रवरी', 'मार्च', 'अप्रैल', 'मई', 'जून', 'जुलाई', 'अगस्त', 'सितंबर', 'अक्टूबर', 'नवंबर', 'दिसंबर']
+      : ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const month = months[date.getMonth()];
+    const num = date.getDate();
+    return hi ? (num + ' ' + month) : (month + ' ' + num);
+  }
+  function walletActivityText(item) {
+    const kind = item && item.kind;
+    if (kind === 'topup') return tr('Added money', 'पैसे जोड़े');
+    if (kind === 'hold') return item.mode === 'call' ? tr('Voice call hold', 'वॉइस कॉल की होल्ड') : tr('Session hold', 'सत्र की होल्ड');
+    if (kind === 'charge') return tr('Per-minute charge', 'प्रति मिनट शुल्क');
+    if (kind === 'refund' && item.end_reason === 'unanswered') return tr('Hold returned · no one accepted', 'होल्ड लौटी · कोई स्वीकार नहीं किया');
+    if (kind === 'refund') return tr('Hold returned', 'होल्ड लौटी');
+    return tr('Wallet', 'वॉलेट');
+  }
+  function walletCardHtml(view) {
+    const items = Array.isArray(view && view.activity) ? view.activity : [];
+    const rows = items.map(item => {
+      const cents = Number(item.cents) || 0;
+      return `<li><span class="grow"><b>${esc(walletActivityText(item))}</b><span class="small muted">${esc(walletWhen(item.at))}</span></span><span class="wallet-amt ${cents < 0 ? 'out' : 'in'}">${esc(item.amount_label || '')}</span></li>`;
+    }).join('');
+    const list = items.length
+      ? `<ul class="wallet-activity">${rows}</ul>`
+      : `<p class="small muted wallet-empty">${tr('No wallet activity yet.', 'अभी कोई वॉलेट गतिविधि नहीं।')}</p>`;
+    return `<div class="spread wallet-head"><div><span class="small muted">${tr('Wallet', 'वॉलेट')}</span><b class="wallet-bal">${esc((view && view.balance_label) || '$0.00')}</b></div><button type="button" class="btn" id="walletAdd">${tr('Add money', 'पैसे जोड़ें')}</button></div>${list}`;
+  }
+  function openWalletTopup() {
+    sheet(`<div class="sheet connect" role="dialog" aria-modal="true" aria-labelledby="walletTitle">
+      <button type="button" class="sheet-handle" aria-label="${tr('Drag down to close', 'बंद करने के लिए नीचे खींचें')}"><i></i></button>
+      <h3 id="walletTitle">${tr('Add money', 'पैसे जोड़ें')}</h3>
+      <p class="sub">${tr('Choose an amount. It is added to your wallet.', 'राशि चुनें। यह आपके वॉलेट में जुड़ जाएगी।')}</p>
+      <div class="connect-packs"><button type="button" class="btn pack" data-pack="wallet_5">$5</button><button type="button" class="btn pack" data-pack="wallet_10">$10</button><button type="button" class="btn pack" data-pack="wallet_20">$20</button></div>
+    </div>`);
+    document.querySelectorAll('#sheet [data-pack]').forEach(b => b.onclick = () => {
+      topup(b.dataset.pack).then(() => {
+        if (window.closeSheet) closeSheet();
+        paintWallet();
+      }).catch(showErr);
+    });
+  }
+  async function paintWallet() {
+    const card = document.getElementById('walletCard');
+    if (!card || !on() || document.body.classList.contains('astro-mode')) return;
+    const gen = (paintWallet.gen = (paintWallet.gen || 0) + 1);
+    try {
+      const view = await api('/api/connect/wallet?device=' + encodeURIComponent(DEVICE));
+      if (gen !== paintWallet.gen || !card.isConnected) return;
+      card.innerHTML = walletCardHtml(view);
+      const add = document.getElementById('walletAdd');
+      if (add) add.onclick = () => openWalletTopup();
+    } catch (err) {
+      if (gen !== paintWallet.gen || !card.isConnected) return;
+      card.innerHTML = `<p class="small muted">${tr('Wallet is unavailable right now.', 'वॉलेट अभी उपलब्ध नहीं है।')}</p>`;
+    }
+  }
+  window.DrishtiConnect = {takeover: takeover, offer: offer, list: list, stop: stop, paintBanner: paintBanner, paintWallet: paintWallet, switchToAstro: switchToAstro};
   if (store.get('app-mode') === 'astro' && sessionStorage.getItem('dr-astro-token') && location.hash !== '#astro' && location.hash !== '#admin') {
     location.hash = '#astro';
   }

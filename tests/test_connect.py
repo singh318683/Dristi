@@ -250,6 +250,89 @@ def test_ringing_waits_two_minutes_then_refunds(client, monkeypatch):
     assert accepted_late.status_code == 409
 
 
+def test_wallet_activity_is_the_last_ten_for_this_device(client, monkeypatch):
+    from datetime import datetime, timedelta, timezone
+    base = datetime(2026, 11, 18, tzinfo=timezone.utc)
+    monkeypatch.setattr(store, "now", lambda: base)
+    astro_id, token = seed(client, rate=100)
+    fund("phone", "wallet_5", "pi_act_5")
+    fund("phone", "wallet_10", "pi_act_10")
+    fund("other", "wallet_20", "pi_act_other")
+    started = client.post("/api/connect/sessions", json={
+        "device": "phone", "astrologer_id": astro_id, "mode": "chat", "idempotency_key": "activity",
+    }).json()
+    assert client.post("/api/connect/sessions/" + started["id"] + "/accept", headers=auth(token)).status_code == 200
+    monkeypatch.setattr(store, "now", lambda: base + timedelta(seconds=275))
+    ended = client.post("/api/connect/sessions/" + started["id"] + "/heartbeat", json={"role": "user", "device": "phone"}).json()
+    assert ended["status"] == "ended" and ended["cost_cents"] == 458
+    view = client.get("/api/connect/wallet", params={"device": "phone"}).json()
+    assert view["balance_cents"] == 1042
+    assert [(item["kind"], item["cents"], item["amount_label"]) for item in view["activity"]] == [
+        ("refund", 142, "+$1.42"),
+        ("charge", -100, "-$1.00"),
+        ("hold", -500, "-$5.00"),
+        ("topup", 1000, "+$10.00"),
+        ("topup", 500, "+$5.00"),
+    ]
+    assert view["activity"][0]["end_reason"] == "astro_left" and view["activity"][2]["mode"] == "chat"
+    assert all(item["cents"] != 2000 for item in view["activity"])
+    other = client.get("/api/connect/wallet", params={"device": "other"}).json()
+    assert [(item["kind"], item["cents"]) for item in other["activity"]] == [("topup", 2000)]
+    quiet_base = base + timedelta(hours=1)
+    monkeypatch.setattr(store, "now", lambda: quiet_base)
+    fund("quiet", "wallet_5", "pi_quiet")
+    ringing = client.post("/api/connect/sessions", json={
+        "device": "quiet", "astrologer_id": astro_id, "mode": "call", "idempotency_key": "quiet-ring",
+    }).json()
+    monkeypatch.setattr(store, "now", lambda: quiet_base + timedelta(seconds=120))
+    done = client.post("/api/connect/sessions/" + ringing["id"] + "/heartbeat", json={"role": "user", "device": "quiet"}).json()
+    assert done["end_reason"] == "unanswered" and done["cost_cents"] == 0
+    returned = client.get("/api/connect/wallet", params={"device": "quiet"}).json()
+    assert returned["balance_cents"] == 500
+    assert [(item["kind"], item["cents"], item["end_reason"]) for item in returned["activity"]] == [
+        ("refund", 500, "unanswered"),
+        ("hold", -500, ""),
+        ("topup", 500, ""),
+    ]
+    assert returned["activity"][1]["mode"] == "call"
+    for n in range(12):
+        fund("stack", "wallet_5", "pi_stack_" + str(n))
+    stacked = client.get("/api/connect/wallet", params={"device": "stack"}).json()["activity"]
+    assert len(stacked) == 10
+    assert [item["id"] for item in stacked] == sorted((item["id"] for item in stacked), reverse=True)
+    assert client.get("/api/connect/wallet", params={"device": "fresh"}).json()["activity"] == []
+    connect = open(os.path.join(os.path.dirname(__file__), "..", "web", "connect.js"), encoding="utf-8").read()
+    html = open(os.path.join(os.path.dirname(__file__), "..", "web", "index.html"), encoding="utf-8").read()
+    assert 'id="walletCard"' in html and "paintWallet" in html
+    assert "astrologer_connect" in html.split('id="walletCard"', 1)[0].rsplit("pageMe", 1)[-1]
+    assert "function paintWallet" in connect and "function openWalletTopup" in connect
+    assert 'data-pack="wallet_5"' in connect and 'data-pack="wallet_10"' in connect and 'data-pack="wallet_20"' in connect
+    assert "Add money" in connect and "पैसे जोड़ें" in connect
+    assert "Added money" in connect and "पैसे जोड़े" in connect
+    assert "Per-minute charge" in connect and "प्रति मिनट शुल्क" in connect
+    assert "Hold returned · no one accepted" in connect and "होल्ड लौटी · कोई स्वीकार नहीं किया" in connect
+    assert "Voice call hold" in connect and "वॉइस कॉल की होल्ड" in connect
+    assert "No wallet activity yet." in connect and "अभी कोई वॉलेट गतिविधि नहीं।" in connect
+    script = r"""
+const fs = require('fs');
+const src = fs.readFileSync(process.argv[1], 'utf8');
+const start = src.indexOf('function walletWhen');
+const end = src.indexOf('function walletCardHtml');
+let S = {lang: 'en'};
+const tr = (en, hi) => (S.lang === 'hi' ? hi : en);
+eval(src.slice(start, end));
+if (walletWhen('2026-11-18T20:00:00+00:00').indexOf('Nov') < 0) process.exit(2);
+if (walletActivityText({kind: 'topup'}) !== 'Added money') process.exit(3);
+if (walletActivityText({kind: 'charge'}) !== 'Per-minute charge') process.exit(4);
+if (walletActivityText({kind: 'refund', end_reason: 'unanswered'}).indexOf('no one accepted') < 0) process.exit(5);
+if (walletActivityText({kind: 'hold', mode: 'call'}) !== 'Voice call hold') process.exit(6);
+S.lang = 'hi';
+if (walletActivityText({kind: 'refund'}) !== 'होल्ड लौटी') process.exit(7);
+"""
+    ran = subprocess.run(["node", "-e", script, os.path.join(os.path.dirname(__file__), "..", "web", "connect.js")], capture_output=True, text=True)
+    assert ran.returncode == 0, ran.stderr or ran.stdout
+
+
 def test_accept_opens_the_session_and_restores_online(client):
     astro_id, token = seed(client, rate=100)
     fund("phone", "wallet_5", "pi_desk")
