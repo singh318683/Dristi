@@ -39,23 +39,25 @@ def _bearer() -> str:
     return token if isinstance(token, str) else token.decode()
 
 
-def fetch_transaction(transaction_id: str) -> dict:
-    """Return Apple's transaction fields. Override this in tests."""
-    if not configured():
-        raise StoreKitError("billing_not_configured", "App Store verification is not set up on the server.")
-    host = "https://api.storekit-sandbox.itunes.apple.com" if (os.environ.get("APPLE_IAP_ENV") or "").strip() == "sandbox" else "https://api.storekit.itunes.apple.com"
-    try:
-        res = httpx.get(
-            f"{host}/inApps/v1/transactions/{transaction_id}",
-            headers={"Authorization": "Bearer " + _bearer()},
-            timeout=20,
-        )
-    except httpx.HTTPError as e:
-        raise StoreKitError("billing_unavailable", "The App Store could not be reached.") from e
-    if res.status_code == 404:
-        raise StoreKitError("payment_invalid", "The App Store did not accept that purchase.")
-    if res.status_code >= 400:
-        raise StoreKitError("billing_unavailable", "The App Store could not be reached.")
+PRODUCTION_HOST = "https://api.storekit.itunes.apple.com"
+SANDBOX_HOST = "https://api.storekit-sandbox.itunes.apple.com"
+
+
+def _hosts() -> list[str]:
+    """Production, sandbox, or production then sandbox when Apple says the transaction is missing.
+
+    TestFlight and App Review purchases live in the sandbox API. A production 404 is that case
+    unless APPLE_IAP_ENV pins one host.
+    """
+    env = (os.environ.get("APPLE_IAP_ENV") or "").strip().lower()
+    if env == "sandbox":
+        return [SANDBOX_HOST]
+    if env == "production":
+        return [PRODUCTION_HOST]
+    return [PRODUCTION_HOST, SANDBOX_HOST]
+
+
+def _read_transaction(res, transaction_id: str) -> dict:
     signed = (res.json() or {}).get("signedTransactionInfo") or ""
     payload = _jws_payload(signed)
     if (payload.get("bundleId") or "") != os.environ["APPLE_BUNDLE_ID"].strip():
@@ -67,6 +69,31 @@ def fetch_transaction(transaction_id: str) -> dict:
         "product_id": str(payload.get("productId") or ""),
         "bundle_id": str(payload.get("bundleId") or ""),
     }
+
+
+def fetch_transaction(transaction_id: str) -> dict:
+    """Return Apple's transaction fields. Override this in tests."""
+    if not configured():
+        raise StoreKitError("billing_not_configured", "App Store verification is not set up on the server.")
+    bearer = _bearer()
+    hosts = _hosts()
+    for index, host in enumerate(hosts):
+        try:
+            res = httpx.get(
+                f"{host}/inApps/v1/transactions/{transaction_id}",
+                headers={"Authorization": "Bearer " + bearer},
+                timeout=20,
+            )
+        except httpx.HTTPError as e:
+            raise StoreKitError("billing_unavailable", "The App Store could not be reached.") from e
+        if res.status_code == 404 and index < len(hosts) - 1:
+            continue
+        if res.status_code == 404:
+            raise StoreKitError("payment_invalid", "The App Store did not accept that purchase.")
+        if res.status_code >= 400:
+            raise StoreKitError("billing_unavailable", "The App Store could not be reached.")
+        return _read_transaction(res, transaction_id)
+    raise StoreKitError("payment_invalid", "The App Store did not accept that purchase.")
 
 
 def _jws_payload(token: str) -> dict:

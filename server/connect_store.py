@@ -1719,7 +1719,11 @@ def astro_live(astrologer_id: str) -> dict:
 
 def redeem_apple_question(device: str, transaction_id: str, signed_transaction: str | None):
     import connect_storekit
-    info = connect_storekit.verify_transaction(transaction_id, signed_transaction)
+    try:
+        info = connect_storekit.verify_transaction(transaction_id, signed_transaction)
+    except connect_storekit.StoreKitError as e:
+        status = 400 if e.code == "payment_invalid" else 503
+        raise ConnectError(e.code, status, e.message) from e
     if info.get("product_id") != money.ACHARYA_PRODUCT:
         raise ConnectError("payment_invalid", 400, "The App Store did not accept that purchase.")
     txn = info["transaction_id"]

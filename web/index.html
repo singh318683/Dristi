@@ -844,7 +844,7 @@ window.GITA_VERSES = window.__GITA_INJECTED__ || null;
 <div id="root"></div>
 <div id="sheet" class="sheet-bg" hidden></div>
 <div id="toast" class="toast" role="status" hidden></div>
-<script src="birthpicker.js?v=drishti-v50"></script>
+<script src="birthpicker.js?v=drishti-v51"></script>
 <script>
 'use strict';
 // ------------------------------------------------------------------ config
@@ -2792,11 +2792,22 @@ async function buyFreshPlayQuestion(sku) {
 }
 async function buyPlayQuestion() {
   if (window.DrishtiStore && typeof window.DrishtiStore.purchase === 'function') {
-    const bought = await window.DrishtiStore.purchase(playProductId());
-    const txn = bought && (bought.transactionId || bought.transaction_id);
-    if (!txn) throw cancelledPlayError();
-    S.applePurchase = bought;
-    return txn;
+    try {
+      const bought = await window.DrishtiStore.purchase(playProductId());
+      const txn = bought && (bought.transactionId || bought.transaction_id);
+      if (!txn) throw cancelledPlayError();
+      S.applePurchase = bought;
+      return txn;
+    } catch (e) {
+      const code = String((e && e.code) || '');
+      const message = String((e && e.message) || '');
+      if (code === 'cancelled' || /cancel/i.test(code) || /cancel/i.test(message)) throw cancelledPlayError();
+      const err = new Error(message || code || 'store');
+      if (code === 'pending') err.code = 'payment_pending';
+      else if (code === 'unverified') err.code = 'payment_invalid';
+      else err.code = 'billing_unavailable';
+      throw err;
+    }
   }
   const kept = playTokenKept();
   if (kept) return kept;
@@ -2819,7 +2830,10 @@ async function ask(q) {
   maybeShowRate();
   let purchaseToken = '';
   const takeToken = async fresh => {
-    try { return fresh ? await buyFreshPlayQuestion(playProductId()) : await buyPlayQuestion(); }
+    try {
+      if (window.DrishtiStore && typeof window.DrishtiStore.purchase === 'function') return await buyPlayQuestion();
+      return fresh ? await buyFreshPlayQuestion(playProductId()) : await buyPlayQuestion();
+    }
     catch (e) {
       if (e && (e.name === 'AbortError' || e.code === 'payment_cancelled')) return '';
       const err = new Error((e && e.message) || 'play');
@@ -3135,6 +3149,6 @@ window.shareGitaCard = () => shareCard('gita');
   maybeShowRate();
 })();
 </script>
-<script src="connect.js?v=drishti-v50"></script>
+<script src="connect.js?v=drishti-v51"></script>
 </body>
 </html>

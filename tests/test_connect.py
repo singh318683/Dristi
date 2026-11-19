@@ -1438,3 +1438,117 @@ def test_ios_shell_cannot_start_a_listing_plan(client, monkeypatch):
     assert "inIosApp()" in me and "Sign in" in me and "Register as a live astrologer" in me
     assert "sign-in only" in notes.lower() or "Sign-in only" in notes or "sign-in only" in notes
     assert "listing fee" in notes
+
+
+def _store_jws(payload):
+    import base64
+    body = base64.urlsafe_b64encode(json.dumps(payload).encode()).decode().rstrip("=")
+    return "h." + body + ".s"
+
+
+class _StoreRes:
+    def __init__(self, status, body=None):
+        self.status_code = status
+        self._body = body or {}
+
+    def json(self):
+        return self._body
+
+
+def _apple_chat(client, txn):
+    return client.post("/api/chat", json={
+        "device": "phone", "store": "apple", "transaction_id": txn, "signed_transaction": "",
+        "profile": {"name": "Asha", "gender": "female", "date": "1990-05-15", "time": "10:30",
+                    "place": {"name": "Delhi", "lat": 28.6, "lon": 77.2, "tz": "Asia/Kolkata"}},
+        "messages": [{"role": "user", "content": "When?"}],
+    })
+
+
+def test_storekit_errors_reach_chat_as_sse(client, monkeypatch):
+    monkeypatch.setattr("llm.configured", lambda: True)
+
+    def invalid(_transaction_id):
+        raise connect_storekit.StoreKitError("payment_invalid", "The App Store did not accept that purchase.")
+
+    monkeypatch.setattr(connect_storekit, "fetch_transaction", invalid)
+    bad = _apple_chat(client, "txn-invalid")
+    assert bad.status_code == 200 and b"payment_invalid" in bad.content
+    try:
+        store.redeem_apple_question("phone", "txn-invalid", "")
+    except store.ConnectError as err:
+        assert err.code == "payment_invalid" and err.status == 400
+    else:
+        raise AssertionError("payment_invalid should be a ConnectError")
+
+    def down(_transaction_id):
+        raise connect_storekit.StoreKitError("billing_not_configured", "App Store verification is not set up on the server.")
+
+    monkeypatch.setattr(connect_storekit, "fetch_transaction", down)
+    offline = _apple_chat(client, "txn-down")
+    assert offline.status_code == 200 and b"billing_not_configured" in offline.content
+    assert offline.status_code != 500
+    try:
+        store.redeem_apple_question("phone", "txn-down", "")
+    except store.ConnectError as err:
+        assert err.code == "billing_not_configured" and err.status == 503
+    else:
+        raise AssertionError("billing_not_configured should be a ConnectError")
+
+
+def test_storekit_404_on_production_retries_sandbox(monkeypatch):
+    for name, value in (
+        ("APPLE_ISSUER_ID", "iss"),
+        ("APPLE_KEY_ID", "kid"),
+        ("APPLE_IAP_PRIVATE_KEY", "key"),
+        ("APPLE_BUNDLE_ID", "com.ikshana.drishti"),
+    ):
+        monkeypatch.setenv(name, value)
+    monkeypatch.delenv("APPLE_IAP_ENV", raising=False)
+    monkeypatch.setattr(connect_storekit, "_bearer", lambda: "token")
+    calls = []
+    signed = _store_jws({
+        "transactionId": "2000001", "productId": "acharya_question", "bundleId": "com.ikshana.drishti",
+    })
+
+    def get(url, headers=None, timeout=None):
+        calls.append(url)
+        if connect_storekit.SANDBOX_HOST in url:
+            return _StoreRes(200, {"signedTransactionInfo": signed})
+        return _StoreRes(404)
+
+    monkeypatch.setattr(connect_storekit.httpx, "get", get)
+    info = connect_storekit.fetch_transaction("2000001")
+    assert info["transaction_id"] == "2000001" and info["product_id"] == "acharya_question"
+    assert calls[0].startswith(connect_storekit.PRODUCTION_HOST)
+    assert calls[1].startswith(connect_storekit.SANDBOX_HOST)
+
+    monkeypatch.setenv("APPLE_IAP_ENV", "production")
+    calls.clear()
+    with pytest.raises(connect_storekit.StoreKitError) as pinned:
+        connect_storekit.fetch_transaction("2000001")
+    assert pinned.value.code == "payment_invalid" and len(calls) == 1
+    assert calls[0].startswith(connect_storekit.PRODUCTION_HOST)
+
+    monkeypatch.setenv("APPLE_IAP_ENV", "sandbox")
+    calls.clear()
+    sand = connect_storekit.fetch_transaction("2000001")
+    assert sand["product_id"] == "acharya_question" and len(calls) == 1
+    assert calls[0].startswith(connect_storekit.SANDBOX_HOST)
+
+
+def test_ios_store_bridge_maps_storekit_errors():
+    root = os.path.join(os.path.dirname(__file__), "..")
+    bridge = open(os.path.join(root, "ios", "plugins", "DrishtiNative", "DrishtiBridgeViewController.swift"), encoding="utf-8").read()
+    assert "drishtiStore" in bridge and "window.DrishtiStore" in bridge
+    assert "__drishtiStoreResolve" in bridge and "__drishtiStoreReject" in bridge
+    assert "atDocumentStart" in bridge and "weak var controller" in bridge
+    assert "allowsInlineMediaPlayback = true" in bridge
+    assert "mediaTypesRequiringUserActionForPlayback = []" in bridge
+    html = open(os.path.join(root, "web", "index.html"), encoding="utf-8").read()
+    buy = html.split("async function buyPlayQuestion", 1)[1].split("function noteAskError", 1)[0]
+    assert "billing_unavailable" in buy and "payment_pending" in buy and "payment_invalid" in buy
+    assert "cancelledPlayError()" in buy
+    ask = html.split("async function ask", 1)[1].split("const KOOTA", 1)[0]
+    fresh = ask.split("const takeToken", 1)[1].split("try { purchaseToken", 1)[0]
+    assert "window.DrishtiStore" in fresh and "buyPlayQuestion()" in fresh
+    assert fresh.find("buyPlayQuestion()") < fresh.find("buyFreshPlayQuestion")
