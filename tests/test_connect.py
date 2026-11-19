@@ -1272,3 +1272,125 @@ def test_delete_astrologer_unlist_forfeit_and_cancel(client, monkeypatch):
     assert "Harassment" in connect and "Or describe what happened" in connect
     assert "Ikshana Solutions LLC" in terms and "273 Lewis Fisher Dr" in terms and "New Jersey" in terms
     assert "independent providers" in terms and "5%" in terms
+
+
+def _arm_demo(monkeypatch):
+    import secrets
+    email = "review-" + secrets.token_hex(4) + "@example.com"
+    password = secrets.token_hex(16)
+    code = secrets.token_hex(8)
+    monkeypatch.setenv("DEMO_ASTRO_EMAIL", email)
+    monkeypatch.setenv("DEMO_ASTRO_PASSWORD", password)
+    monkeypatch.setenv("DEMO_REVIEW_CODE", code)
+    monkeypatch.delenv("DEMO_REVIEW", raising=False)
+    return email, password, code
+
+
+def test_demo_is_hidden_until_a_device_opts_in(client, monkeypatch):
+    from datetime import datetime, timedelta, timezone
+    import wave
+    astro_id, _token = seed(client)
+    fund("phone-real", "wallet_5", "pi_real_user")
+    email, password, code = _arm_demo(monkeypatch)
+    hidden = client.get("/api/connect/astrologers", params={"device": "phone-a"}).json()
+    assert hidden["demo_code"] is True
+    assert all(item["id"] != "demo-review" for item in hidden["astrologers"])
+    assert client.post("/api/connect/demo/unlock", json={"device": "phone-a", "code": "wrong"}).status_code == 401
+    assert client.post("/api/connect/sessions", json={
+        "device": "phone-b", "astrologer_id": "demo-review", "mode": "chat", "question": "hi",
+    }).status_code == 404
+    assert client.post("/api/connect/demo/unlock", json={"device": "phone-a", "code": code}).status_code == 200
+    shown = client.get("/api/connect/astrologers", params={"device": "phone-a"}).json()["astrologers"]
+    demo = next(item for item in shown if item["id"] == "demo-review")
+    assert demo["name"] == "Demo Astrologer (App Review)" and demo["demo"] is True and demo["rate_cents"] == 30
+    assert all(item["id"] != "demo-review" for item in client.get("/api/connect/astrologers", params={"device": "phone-b"}).json()["astrologers"])
+    with db.connect() as con:
+        store.ensure(con)
+        assert con.execute("select online from ac_astrologer where id='demo-review'").fetchone()[0] == 0
+    assert client.post("/api/connect/sessions", json={
+        "device": "phone-a", "astrologer_id": "demo-review", "mode": "chat", "question": "hello",
+    }).status_code == 402
+    added = client.post("/api/connect/demo/credit", json={"device": "phone-a"})
+    assert added.status_code == 200 and added.json()["added_cents"] == 500
+    real = client.post("/api/connect/sessions", json={
+        "device": "phone-a", "astrologer_id": astro_id, "mode": "chat", "question": "real",
+    })
+    assert real.status_code == 402
+    assert client.get("/api/connect/wallet", params={"device": "phone-real"}).json()["balance_cents"] == 500
+    base = datetime(2026, 11, 19, tzinfo=timezone.utc)
+    monkeypatch.setattr(store, "now", lambda: base)
+    started = client.post("/api/connect/sessions", json={
+        "device": "phone-a", "astrologer_id": "demo-review", "mode": "chat", "question": "hello",
+        "idempotency_key": "demo-chat",
+    })
+    assert started.status_code == 200
+    chat = started.json()
+    assert chat["status"] == "active" and chat["demo"] is True and chat["started_at"]
+    first = client.get("/api/connect/sessions/" + chat["id"] + "/messages", params={"device": "phone-a"}).json()["messages"]
+    assert len(first) == 1 and "App Review" in first[0]["body"] and first[0]["sender"] == "astrologer"
+    monkeypatch.setattr(store, "now", lambda: base + timedelta(seconds=60))
+    beat = client.post("/api/connect/sessions/" + chat["id"] + "/heartbeat", json={"role": "user", "device": "phone-a"})
+    assert beat.status_code == 200 and beat.json()["status"] == "active"
+    lines = client.get("/api/connect/sessions/" + chat["id"] + "/messages", params={"device": "phone-a"}).json()["messages"]
+    assert len(lines) == 4
+    ended = client.post("/api/connect/sessions/" + chat["id"] + "/end", json={"device": "phone-a"})
+    assert ended.status_code == 200 and ended.json()["status"] == "ended"
+    with db.connect() as con:
+        store.ensure(con)
+        assert con.execute("select count(*) from ac_earning where astrologer_id='demo-review'").fetchone()[0] == 0
+        assert con.execute("select online from ac_astrologer where id='demo-review'").fetchone()[0] == 0
+        assert con.execute("select stripe_cents from ac_wallet where device='phone-a'").fetchone()[0] == 0
+    assert all(item["astrologer_id"] != "demo-review" for item in store.payout_candidates())
+    monkeypatch.setenv("LIVEKIT_API_KEY", "key")
+    monkeypatch.setenv("LIVEKIT_API_SECRET", "secret")
+    monkeypatch.setenv("LIVEKIT_URL", "wss://live.example")
+    monkeypatch.setattr(store, "now", lambda: base)
+    call = client.post("/api/connect/sessions", json={
+        "device": "phone-a", "astrologer_id": "demo-review", "mode": "call", "question": "call",
+        "idempotency_key": "demo-call",
+    })
+    assert call.status_code == 200 and call.json()["status"] == "active"
+    voice = client.post("/api/connect/sessions/" + call.json()["id"] + "/demo-voice", json={"device": "phone-a"})
+    assert voice.status_code == 200 and voice.json()["identity"] == "demo-voice"
+    claims = connect_livekit.read_jwt(voice.json()["token"], "secret")
+    assert claims["sub"] == "demo-voice"
+    assert claims["video"]["canPublish"] is True and claims["video"]["canSubscribe"] is False
+    assert claims["video"]["room"] == voice.json()["room"]
+    assert client.post("/api/connect/sessions/" + call.json()["id"] + "/demo-voice", json={"device": "phone-b"}).status_code == 401
+    user_tok = client.post("/api/connect/sessions/" + call.json()["id"] + "/call-token", json={"device": "phone-a"})
+    assert user_tok.status_code == 200 and user_tok.json()["identity"].startswith("user-")
+    client.post("/api/connect/sessions/" + call.json()["id"] + "/end", json={"device": "phone-a"})
+    login = client.post("/api/connect/astro/login", json={"email": email, "password": password})
+    assert login.status_code == 200 and login.json()["status"] == "approved" and login.json()["must_change"] is False
+    demo_auth = auth(login.json()["token"])
+    assert client.post("/api/connect/astro/delete", headers=demo_auth).status_code == 403
+    assert client.post("/api/connect/astro/payout", headers=demo_auth, json={"method": "paypal", "paypal_email": "a@b.co", "confirm_email": "a@b.co"}).status_code == 403
+    assert client.post("/api/connect/astro/online", headers=demo_auth, json={"online": True}).json()["online"] is True
+    with db.connect() as con:
+        store.ensure(con)
+        assert con.execute("select online, stripe_account from ac_astrologer where id='demo-review'").fetchone() == (0, "")
+    assert client.post("/api/connect/block", json={"device": "phone-a", "astrologer_id": "demo-review"}).status_code == 200
+    assert all(item["id"] != "demo-review" for item in client.get("/api/connect/astrologers", params={"device": "phone-a"}).json()["astrologers"])
+    assert client.post("/api/connect/demo/unlock", json={"device": "phone-a", "code": code}).status_code == 200
+    assert any(item["id"] == "demo-review" for item in client.get("/api/connect/astrologers", params={"device": "phone-a"}).json()["astrologers"])
+    while True:
+        more = client.post("/api/connect/demo/credit", json={"device": "phone-a"}).json()
+        if more["added_cents"] == 0:
+            assert more["granted_cents"] == 2000
+            break
+    monkeypatch.setenv("DEMO_REVIEW", "1")
+    assert any(item["id"] == "demo-review" for item in client.get("/api/connect/astrologers", params={"device": "phone-b"}).json()["astrologers"])
+    monkeypatch.delenv("DEMO_ASTRO_EMAIL", raising=False)
+    monkeypatch.delenv("DEMO_ASTRO_PASSWORD", raising=False)
+    assert all(item["id"] != "demo-review" for item in client.get("/api/connect/astrologers", params={"device": "phone-b"}).json()["astrologers"])
+    root = os.path.join(os.path.dirname(__file__), "..")
+    connect = open(os.path.join(root, "web", "connect.js"), encoding="utf-8").read()
+    notes = open(os.path.join(root, "ios", "APP_REVIEW_NOTES.md"), encoding="utf-8").read()
+    assert "Add review credit" in connect and "App Review code" in connect
+    assert "demo-greeting.wav" in connect and "/demo-voice" in connect
+    assert "DEMO_ASTRO_EMAIL" in notes and "DEMO_ASTRO_PASSWORD" in notes and "DEMO_REVIEW_CODE" in notes
+    assert "3.1.3(d)" in notes and "In-App Purchase" in notes and "listing fee" in notes
+    assert password not in notes and password not in connect and code not in notes
+    with wave.open(os.path.join(root, "web", "demo-greeting.wav")) as greeting:
+        assert greeting.getnchannels() == 1
+        assert greeting.getnframes() / greeting.getframerate() > 1

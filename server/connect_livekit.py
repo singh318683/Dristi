@@ -35,7 +35,8 @@ def read_jwt(token: str, secret: str) -> dict:
     return json.loads(_unb64(body))
 
 
-def join_token(api_key: str, api_secret: str, room: str, identity: str, ttl: int = 600, now: int | None = None) -> str:
+def join_token(api_key: str, api_secret: str, room: str, identity: str, ttl: int = 600, now: int | None = None,
+               publish: bool = True, subscribe: bool = True) -> str:
     now = int(time.time() if now is None else now)
     ttl = max(60, min(int(ttl), 3600))
     return sign_jwt({
@@ -43,7 +44,7 @@ def join_token(api_key: str, api_secret: str, room: str, identity: str, ttl: int
         "sub": identity,
         "nbf": now - 5,
         "exp": now + ttl,
-        "video": {"roomJoin": True, "room": room, "canPublish": True, "canSubscribe": True},
+        "video": {"roomJoin": True, "room": room, "canPublish": bool(publish), "canSubscribe": bool(subscribe)},
     }, api_secret)
 
 

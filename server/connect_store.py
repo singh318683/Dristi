@@ -13,6 +13,7 @@ import secrets
 from datetime import datetime, timedelta, timezone
 
 import db
+import connect_demo
 import connect_money as money
 
 log = logging.getLogger("drishti.connect")
@@ -154,6 +155,10 @@ def ensure(con) -> None:
             state text not null,
             ts text not null,
             consumed_at text)""",
+        """create table if not exists ac_demo_device(
+            device text primary key,
+            created text not null,
+            granted_cents int not null default 0)""",
     ]
     for stmt in statements:
         con.execute(stmt)
@@ -163,6 +168,8 @@ def ensure(con) -> None:
     _add_column(con, "ac_payout", "paypal_batch", "paypal_batch text not null default ''")
     _add_column(con, "ac_session", "resume_online", "resume_online int not null default 0")
     _add_column(con, "ac_payment", "refunded_cents", "refunded_cents int not null default 0")
+    _add_column(con, "ac_wallet", "demo_cents", "demo_cents int not null default 0")
+    _add_column(con, "ac_astrologer", "demo", "demo int not null default 0")
     con.execute("create unique index if not exists ac_session_idem on ac_session(device, idem_key)")
     con.execute("create index if not exists ac_message_session on ac_message(session_id, id)")
     con.execute("create index if not exists ac_ledger_tx on ac_ledger(tx_id)")
@@ -187,6 +194,21 @@ def _lock_wallet(con, device: str) -> tuple[int, int]:
         sql += " for update"
     row = con.execute(sql, (device,)).fetchone()
     return int(row[0]), int(row[1])
+
+
+def _lock_demo(con, device: str) -> int:
+    _lock_wallet(con, device)
+    sql = "select coalesce(demo_cents, 0) from ac_wallet where device=?"
+    if con.dialect == "postgres":
+        sql += " for update"
+    row = con.execute(sql, (device,)).fetchone()
+    return int(row[0] if row else 0)
+
+
+def _set_demo(con, device: str, cents: int) -> None:
+    if int(cents) < 0:
+        raise ConnectError("insufficient_balance", 402)
+    con.execute("update ac_wallet set demo_cents=? where device=?", (int(cents), device))
 
 
 def _set_wallet(con, device: str, stripe_cents: int, apple_cents: int) -> None:
@@ -271,11 +293,14 @@ def wallet_view(device: str) -> dict:
     with db.connect() as con:
         ensure(con)
         stripe_cents, apple_cents = _lock_wallet(con, device)
+        demo_cents = _lock_demo(con, device)
         activity = _wallet_activity(con, device)
     total = stripe_cents + apple_cents
     return {
         "stripe_cents": stripe_cents,
         "apple_cents": apple_cents,
+        "demo_cents": demo_cents,
+        "demo_label": money.money_label(demo_cents),
         "balance_cents": total,
         "balance_label": money.money_label(total),
         "activity": activity,
@@ -377,6 +402,7 @@ def astro_login(email: str, password: str) -> dict:
     email = (email or "").strip().lower()
     with db.connect() as con:
         ensure(con)
+        _sync_demo(con)
         row = con.execute("select id, password_hash, name, status, must_change from ac_astrologer where email=?", (email,)).fetchone()
         if not row or row[3] == "deleted" or not check_password(password or "", row[1]):
             raise ConnectError("unauthorized", 401)
@@ -412,6 +438,7 @@ def _temporary_password() -> str:
 
 
 def reset_astro_password(astrologer_id: str) -> dict:
+    protect_demo(astrologer_id)
     temporary = _temporary_password()
     with db.connect() as con:
         ensure(con)
@@ -426,6 +453,7 @@ def reset_astro_password(astrologer_id: str) -> dict:
 
 
 def change_astro_password(astrologer_id: str, password: str) -> dict:
+    protect_demo(astrologer_id)
     password = password or ""
     if len(password) < 8:
         raise ConnectError("bad_password", 400)
@@ -455,6 +483,8 @@ def _plan_live(status: str, trial_ends: str | None, period_end: str | None, grac
 
 
 def set_online(astrologer_id: str, online: bool) -> dict:
+    if _is_demo(astrologer_id):
+        return {"online": True}
     with db.connect() as con:
         ensure(con)
         row = con.execute(
@@ -502,9 +532,17 @@ def list_astrologers(device: str) -> list[dict]:
                and id not in (select astrologer_id from ac_block where device=?)
                order by name""",
             (device,)).fetchall()
-    moment = now()
-    visible = [row for row in rows if _plan_live(row[10], row[11], row[12], row[13], moment)]
-    return [_astro_public(row) for row in visible]
+        moment = now()
+        visible = [row for row in rows if row[0] != connect_demo.DEMO_ID and _plan_live(row[10], row[11], row[12], row[13], moment)]
+        listed = [_astro_public(row) for row in visible]
+        if _demo_visible(con, device) and not _demo_blocked(con, device):
+            demo = _demo_row(con)
+            if demo:
+                card = _astro_public(demo)
+                card["demo"] = True
+                card["online"] = True
+                listed.append(card)
+    return listed
 
 
 def admin_list() -> list[dict]:
@@ -559,8 +597,14 @@ def _bookable(astro) -> bool:
 def quote(device: str, astrologer_id: str) -> dict:
     with db.connect() as con:
         ensure(con)
+        demo = _is_demo(astrologer_id)
+        if demo and not _demo_visible(con, device):
+            raise ConnectError("unavailable", 404)
         astro = _load_astro(con, astrologer_id)
-        if not _bookable(astro):
+        if demo:
+            if not astro or astro[2] != "approved" or int(astro[4]) <= 0:
+                raise ConnectError("unavailable", 404)
+        elif not _bookable(astro):
             raise ConnectError("unavailable", 404)
         blocked = con.execute(
             "select 1 from ac_block where device=? and astrologer_id=?", (device, astrologer_id)).fetchone()
@@ -568,7 +612,14 @@ def quote(device: str, astrologer_id: str) -> dict:
             raise ConnectError("blocked", 403)
         rate = int(astro[4])
         hold = money.hold_cents(rate)
-        balance = wallet_view_in(con, device)
+        if demo:
+            demo_cents = _lock_demo(con, device)
+            balance = {
+                "stripe_cents": 0, "apple_cents": 0, "demo_cents": demo_cents,
+                "balance_cents": demo_cents, "balance_label": money.money_label(demo_cents), "demo": True,
+            }
+        else:
+            balance = wallet_view_in(con, device)
     return {
         "astrologer_id": astro[0],
         "name": astro[1],
@@ -613,24 +664,41 @@ def start_session(device: str, astrologer_id: str, mode: str, question: str, cha
             prior = con.execute("select id from ac_session where device=? and idem_key=?", (device, idem_key)).fetchone()
             if prior:
                 return session_view(prior[0], con)
+        demo = _is_demo(astrologer_id)
+        if demo and not _demo_visible(con, device):
+            raise ConnectError("unavailable", 404)
         astro = _load_astro(con, astrologer_id)
-        if not _bookable(astro):
+        if demo:
+            if not astro or astro[2] != "approved" or int(astro[4]) <= 0:
+                raise ConnectError("unavailable", 404)
+        elif not _bookable(astro):
             raise ConnectError("unavailable", 404)
         if con.execute("select 1 from ac_block where device=? and astrologer_id=?", (device, astrologer_id)).fetchone():
             raise ConnectError("blocked", 403)
         rate = int(astro[4])
         hold = money.hold_cents(rate)
-        stripe_cents, apple_cents = _lock_wallet(con, device)
-        try:
-            take_stripe, take_apple = money.draw_buckets(stripe_cents, apple_cents, hold)
-        except money.MoneyError as e:
-            raise ConnectError(e.code, 402, extra={"hold_cents": hold, "balance_cents": stripe_cents + apple_cents}) from e
         session_id = "ses_" + secrets.token_hex(8)
-        _set_wallet(con, device, stripe_cents - take_stripe, apple_cents - take_apple)
-        _post(con, "hold-" + session_id, [
-            (f"wallet:{device}", hold, 0),
-            (f"hold:{session_id}", 0, hold),
-        ], "session_hold", session_id)
+        if demo:
+            demo_cents = _lock_demo(con, device)
+            if demo_cents < hold:
+                raise ConnectError("insufficient_balance", 402, extra={"hold_cents": hold, "balance_cents": demo_cents})
+            _set_demo(con, device, demo_cents - hold)
+            take_stripe, take_apple = hold, 0
+            _post(con, "hold-" + session_id, [
+                (f"demo:{device}", hold, 0),
+                (f"hold:{session_id}", 0, hold),
+            ], "session_hold", session_id)
+        else:
+            stripe_cents, apple_cents = _lock_wallet(con, device)
+            try:
+                take_stripe, take_apple = money.draw_buckets(stripe_cents, apple_cents, hold)
+            except money.MoneyError as e:
+                raise ConnectError(e.code, 402, extra={"hold_cents": hold, "balance_cents": stripe_cents + apple_cents}) from e
+            _set_wallet(con, device, stripe_cents - take_stripe, apple_cents - take_apple)
+            _post(con, "hold-" + session_id, [
+                (f"wallet:{device}", hold, 0),
+                (f"hold:{session_id}", 0, hold),
+            ], "session_hold", session_id)
         created = _iso()
         con.execute(
             """insert into ac_session(id, device, astrologer_id, mode, rate_cents, status, hold_stripe, hold_apple,
@@ -638,6 +706,8 @@ def start_session(device: str, astrologer_id: str, mode: str, question: str, cha
                values(?,?,?,?,?,'ringing',?,?,0,?,?,?,?,?)""",
             (session_id, device, astrologer_id, mode, rate, take_stripe, take_apple, question, chart_json, idem_key,
              "drishti_" + session_id, created))
+        if demo:
+            _activate_demo(con, session_id)
         return session_view(session_id, con)
 
 
@@ -664,7 +734,11 @@ def session_view(session_id: str, con=None) -> dict:
         net_cents, fee_cents = money.split_gross(preview)
         chart = _chart(item.get("chart_json"))
         astro = con.execute("select name from ac_astrologer where id=?", (item["astrologer_id"],)).fetchone()
-        balance = wallet_view_in(con, item["device"])
+        if item["astrologer_id"] == connect_demo.DEMO_ID:
+            demo_cents = _lock_demo(con, item["device"])
+            balance = {"balance_cents": demo_cents, "balance_label": money.money_label(demo_cents)}
+        else:
+            balance = wallet_view_in(con, item["device"])
         return {
             "id": item["id"],
             "device": item["device"],
@@ -688,6 +762,7 @@ def session_view(session_id: str, con=None) -> dict:
             "question": item.get("question") or "",
             "chart": chart,
             "server_now": _iso(moment),
+            "demo": item["astrologer_id"] == connect_demo.DEMO_ID,
             **{k: balance[k] for k in ("balance_cents", "balance_label")},
         }
     finally:
@@ -757,7 +832,11 @@ def heartbeat(session_id: str, role: str, device: str | None, astrologer_id: str
         moment = now()
         column = "user_heartbeat" if who == "user" else "astro_heartbeat"
         con.execute(f"update ac_session set {column}=? where id=?", (_iso(moment), session_id))
+        if item["astrologer_id"] == connect_demo.DEMO_ID and who == "user":
+            con.execute("update ac_session set astro_heartbeat=? where id=?", (_iso(moment), session_id))
         item = _as_dict(con, _session_row(con, session_id))
+        if item["astrologer_id"] == connect_demo.DEMO_ID and item["status"] == "active" and item["mode"] == "chat":
+            _demo_script(con, item)
         _tick(con, item, moment)
         return session_view(session_id, con)
 
@@ -801,6 +880,20 @@ def _tick(con, item: dict, moment: datetime) -> None:
 
 
 def _extend_hold(con, item: dict, rate: int) -> None:
+    if item["astrologer_id"] == connect_demo.DEMO_ID:
+        demo_cents = _lock_demo(con, item["device"])
+        if demo_cents < rate:
+            return
+        _set_demo(con, item["device"], demo_cents - rate)
+        con.execute(
+            "update ac_session set hold_stripe=hold_stripe+? where id=? and status='active'",
+            (rate, item["id"]))
+        added = int(item["hold_stripe"]) + int(item["hold_apple"]) + rate
+        _post(con, "extend-" + item["id"] + "-" + str(added), [
+            (f"demo:{item['device']}", rate, 0),
+            (f"hold:{item['id']}", 0, rate),
+        ], "session_extend", item["id"])
+        return
     stripe_cents, apple_cents = _lock_wallet(con, item["device"])
     try:
         take_stripe, take_apple = money.draw_buckets(stripe_cents, apple_cents, rate)
@@ -850,6 +943,9 @@ def _settle(con, item: dict, moment: datetime, reason: str) -> None:
     current = _as_dict(con, _session_row(con, item["id"]))
     if current["status"] == "ended":
         return
+    if current["astrologer_id"] == connect_demo.DEMO_ID:
+        _settle_demo(con, current, moment, reason)
+        return
     started = _parse(current.get("started_at"))
     elapsed = int((moment - started).total_seconds()) if started and current["status"] == "active" else 0
     rate = int(current["rate_cents"])
@@ -895,6 +991,190 @@ def _settle(con, item: dict, moment: datetime, reason: str) -> None:
             con.execute("update ac_astrologer set online=1 where id=?", (current["astrologer_id"],))
 
 
+def _settle_demo(con, current: dict, moment: datetime, reason: str) -> None:
+    """Return unused review credit. Do not create an earning or a payout."""
+    started = _parse(current.get("started_at"))
+    elapsed = int((moment - started).total_seconds()) if started and current["status"] == "active" else 0
+    rate = int(current["rate_cents"])
+    hold = int(current["hold_stripe"]) + int(current["hold_apple"])
+    charge = min(hold, money.elapsed_cost(rate, elapsed) if current["status"] == "active" else 0)
+    refund = hold - charge
+    demo_cents = _lock_demo(con, current["device"])
+    _set_demo(con, current["device"], demo_cents + refund)
+    entries = [(f"hold:{current['id']}", hold, 0)]
+    if refund:
+        entries.append((f"demo:{current['device']}", 0, refund))
+    if charge:
+        entries.append(("demo:spent", 0, charge))
+    if hold:
+        _post(con, "settle-" + current["id"], entries, "session_settle", current["id"])
+    con.execute(
+        """update ac_session set status='ended', ended_at=?, billed_cents=?, end_reason=?
+           where id=? and status!='ended'""",
+        (_iso(moment), charge, reason, current["id"]))
+
+
+def _is_demo(astrologer_id: str) -> bool:
+    return astrologer_id == connect_demo.DEMO_ID
+
+
+def protect_demo(astrologer_id: str) -> None:
+    if _is_demo(astrologer_id):
+        raise ConnectError("demo_protected", 403)
+
+
+def demo_code_configured() -> bool:
+    return connect_demo.code_configured()
+
+
+def _demo_blocked(con, device: str) -> bool:
+    return bool(con.execute(
+        "select 1 from ac_block where device=? and astrologer_id=?",
+        (device, connect_demo.DEMO_ID)).fetchone())
+
+
+def _sync_demo(con) -> bool:
+    """Create or refresh the demo profile from env vars. Stays offline so other apps do not list it."""
+    email, password = connect_demo.credentials()
+    if not email:
+        return False
+    rate = money.rate_bounds()[0]
+    specs = json.dumps(["App Review"])
+    langs = json.dumps(["English"])
+    bio = "Scripted demo for App Review. Not a real person."
+    period = "2099-01-01T00:00:00+00:00"
+    row = con.execute(
+        "select id, email, password_hash from ac_astrologer where id=?",
+        (connect_demo.DEMO_ID,)).fetchone()
+    taken = con.execute("select id from ac_astrologer where email=?", (email,)).fetchone()
+    if taken and taken[0] != connect_demo.DEMO_ID:
+        log.warning("demo account was not saved because that email is already registered")
+        return False
+    if not row:
+        con.execute(
+            """insert into ac_astrologer(id, email, password_hash, name, specialties, languages, years, bio,
+               rate_cents, rating_tenths, photo, status, online, plan_status, period_end, must_change, demo, created)
+               values(?,?,?,?,?,?,?,?,?,0,?,'approved',0,'active',?,0,1,?)""",
+            (connect_demo.DEMO_ID, email, hash_password(password), connect_demo.DEMO_NAME, specs, langs, 1, bio,
+             rate, "", period, _iso()))
+        return True
+    fields = """update ac_astrologer set email=?, name=?, specialties=?, languages=?, years=1, bio=?,
+                rate_cents=?, photo='', status='approved', online=0, plan_status='active', period_end=?,
+                must_change=0, demo=1, stripe_account='', paypal_email='', payout_method='' where id=?"""
+    con.execute(fields, (email, connect_demo.DEMO_NAME, specs, langs, bio, rate, period, connect_demo.DEMO_ID))
+    if not check_password(password, row[2] or ""):
+        con.execute(
+            "update ac_astrologer set password_hash=? where id=?",
+            (hash_password(password), connect_demo.DEMO_ID))
+    return True
+
+
+def _demo_visible(con, device: str) -> bool:
+    if not _sync_demo(con):
+        return False
+    if connect_demo.review_all():
+        return True
+    return bool(con.execute(
+        "select 1 from ac_demo_device where device=?", ((device or "").strip(),)).fetchone())
+
+
+def _demo_row(con):
+    return con.execute(
+        """select id, name, specialties, languages, years, rate_cents, rating_tenths, online, status, photo,
+                  plan_status, trial_ends, period_end, grace_until
+           from ac_astrologer where id=?""",
+        (connect_demo.DEMO_ID,)).fetchone()
+
+
+def _activate_demo(con, session_id: str) -> None:
+    started = _iso()
+    con.execute(
+        """update ac_session set status='active', started_at=?, user_heartbeat=?, astro_heartbeat=?, resume_online=0
+           where id=? and status='ringing'""",
+        (started, started, started, session_id))
+    item = _as_dict(con, _session_row(con, session_id))
+    if item["mode"] == "chat":
+        _demo_script(con, item)
+
+
+def _insert_message(con, session_id: str, sender: str, body: str) -> None:
+    created = _iso()
+    con.execute(
+        "insert into ac_message(session_id, sender, body, created) values(?,?,?,?)",
+        (session_id, sender, body, created))
+    column = "astro_heartbeat" if sender == "astrologer" else "user_heartbeat"
+    con.execute(f"update ac_session set {column}=? where id=?", (created, session_id))
+
+
+def _demo_script(con, item: dict) -> None:
+    if item.get("mode") != "chat" or item.get("status") != "active":
+        return
+    sent = int(con.execute(
+        "select count(*) from ac_message where session_id=? and sender='astrologer'",
+        (item["id"],)).fetchone()[0])
+    started = _parse(item.get("started_at"))
+    elapsed = (now() - started).total_seconds() if started else 0
+    due = min(len(connect_demo.LINES), 1 + int(elapsed // connect_demo.REPLY_EVERY_SECONDS))
+    while sent < due:
+        _insert_message(con, item["id"], "astrologer", connect_demo.LINES[sent])
+        sent += 1
+
+
+def unlock_demo(device: str, code: str) -> dict:
+    device = (device or "").strip()
+    if not device or len(device) > 200:
+        raise ConnectError("bad_device", 400)
+    if not connect_demo.code_matches(code):
+        raise ConnectError("unauthorized", 401)
+    with db.connect() as con:
+        ensure(con)
+        if not _sync_demo(con):
+            raise ConnectError("demo_unavailable", 503)
+        con.execute(
+            "insert into ac_demo_device(device, created, granted_cents) values(?,?,0) on conflict(device) do nothing",
+            (device, _iso()))
+        con.execute(
+            "delete from ac_block where device=? and astrologer_id=?",
+            (device, connect_demo.DEMO_ID))
+    return {"ok": True, "demo": True}
+
+
+def grant_demo_credit(device: str) -> dict:
+    device = (device or "").strip()
+    if not device or len(device) > 200:
+        raise ConnectError("bad_device", 400)
+    with db.connect() as con:
+        ensure(con)
+        if not _demo_visible(con, device):
+            raise ConnectError("unauthorized", 401)
+        row = con.execute(
+            "select granted_cents from ac_demo_device where device=?", (device,)).fetchone()
+        granted = int(row[0]) if row else 0
+        if row is None:
+            con.execute(
+                "insert into ac_demo_device(device, created, granted_cents) values(?,?,0)",
+                (device, _iso()))
+        room = connect_demo.GRANT_CAP_CENTS - granted
+        add = min(connect_demo.GRANT_CENTS, max(0, room))
+        demo_cents = _lock_demo(con, device)
+        if add:
+            _set_demo(con, device, demo_cents + add)
+            granted += add
+            con.execute("update ac_demo_device set granted_cents=? where device=?", (granted, device))
+            _post(con, "demo-credit-" + device + "-" + str(granted), [
+                ("demo:review", add, 0),
+                (f"demo:{device}", 0, add),
+            ], "demo_credit", device)
+            demo_cents += add
+    return {
+        "ok": True,
+        "added_cents": add,
+        "demo_cents": demo_cents,
+        "demo_label": money.money_label(demo_cents),
+        "granted_cents": granted,
+    }
+
+
 def post_message(session_id: str, sender: str, body: str, device: str | None, astrologer_id: str | None) -> dict:
     body = (body or "").strip()
     if not body or len(body) > 2000:
@@ -927,6 +1207,8 @@ def list_messages(session_id: str, after: int, device: str | None, astrologer_id
         ensure(con)
         item = _as_dict(con, _session_row(con, session_id) or (_ for _ in ()).throw(ConnectError("not_found", 404)))
         _require_party(con, item, device, astrologer_id)
+        if item["astrologer_id"] == connect_demo.DEMO_ID and item["status"] == "active" and item["mode"] == "chat":
+            _demo_script(con, item)
         rows = con.execute(
             "select id, sender, body, created from ac_message where session_id=? and id>? order by id",
             (session_id, int(after))).fetchall()
@@ -947,6 +1229,27 @@ def issue_call(session_id: str, device: str | None, astrologer_id: str | None, a
     identity = "user-" + item["device"] if who == "user" else "astro-" + item["astrologer_id"]
     token = connect_livekit.join_token(api_key, api_secret, item["room"], identity, ttl=600)
     return {"url": url, "room": item["room"], "token": token, "identity": identity, "ttl_seconds": 600}
+
+
+def issue_demo_voice(session_id: str, device: str, api_key: str, api_secret: str, url: str) -> dict:
+    """A second LiveKit identity that publishes the review greeting. Not a real astrologer."""
+    with db.connect() as con:
+        ensure(con)
+        item = _as_dict(con, _session_row(con, session_id) or (_ for _ in ()).throw(ConnectError("not_found", 404)))
+        if not device or device != item["device"]:
+            raise ConnectError("unauthorized", 401)
+        if item["astrologer_id"] != connect_demo.DEMO_ID or item["mode"] != "call" or item["status"] != "active":
+            raise ConnectError("call_not_ready", 403)
+        room = item["room"]
+    if not api_key or not api_secret or not url:
+        raise ConnectError("call_unavailable", 503, "Voice is not configured on the server.")
+    import connect_livekit
+    token = connect_livekit.join_token(
+        api_key, api_secret, room, connect_demo.VOICE_IDENTITY, ttl=600, subscribe=False)
+    return {
+        "url": url, "room": room, "token": token,
+        "identity": connect_demo.VOICE_IDENTITY, "ttl_seconds": 600,
+    }
 
 
 def report(device: str, astrologer_id: str, session_id: str | None, reason: str) -> dict:
@@ -1047,12 +1350,20 @@ def delete_device(device: str, refund_fn=None) -> dict:
                 (f"wallet:{device}", int(apple_cents), 0),
                 ("writeoff:apple", 0, int(apple_cents)),
             ], "wallet_writeoff", "")
+        demo_cents = _lock_demo(con, device)
+        if demo_cents:
+            _post(con, "demooff-" + hashlib.sha256(device.encode()).hexdigest()[:16], [
+                (f"demo:{device}", int(demo_cents), 0),
+                ("writeoff:demo", 0, int(demo_cents)),
+            ], "wallet_writeoff", "")
+            _set_demo(con, device, 0)
         _set_wallet(con, device, 0, 0)
         session_ids = [row[0] for row in con.execute("select id from ac_session where device=?", (device,)).fetchall()]
         for session_id in session_ids:
             con.execute("delete from ac_message where session_id=?", (session_id,))
         con.execute("delete from ac_session where device=?", (device,))
         con.execute("update ac_ledger set account=? where account=?", ("wallet:removed", "wallet:" + device))
+        con.execute("update ac_ledger set account=? where account=?", ("demo:removed", "demo:" + device))
         con.execute("update ac_payment set device='' where device=?", (device,))
         con.execute("update ac_report set device='' where device=?", (device,))
         con.execute("update ac_apple_question set device='' where device=?", (device,))
@@ -1070,6 +1381,7 @@ def delete_astrologer(astrologer_id: str, cancel_fn=None) -> dict:
 
     Unpaid earnings of at least $1 stay for the weekly payout. Less than $1 is forfeited.
     """
+    protect_demo(astrologer_id)
     with db.connect() as con:
         ensure(con)
         row = con.execute(
@@ -1106,6 +1418,7 @@ def delete_astrologer(astrologer_id: str, cancel_fn=None) -> dict:
 
 
 def set_stripe_account(astrologer_id: str, account_id: str) -> None:
+    protect_demo(astrologer_id)
     with db.connect() as con:
         ensure(con)
         con.execute("update ac_astrologer set stripe_account=? where id=?", (account_id, astrologer_id))
@@ -1129,12 +1442,14 @@ def astrologer_private(astrologer_id: str) -> dict:
 
 
 def set_stripe_customer(astrologer_id: str, customer_id: str) -> None:
+    protect_demo(astrologer_id)
     with db.connect() as con:
         ensure(con)
         con.execute("update ac_astrologer set stripe_customer=? where id=?", (customer_id, astrologer_id))
 
 
 def grant_trial(astrologer_id: str) -> dict:
+    protect_demo(astrologer_id)
     days = money.trial_days()
     if days <= 0:
         raise ConnectError("trial_unavailable", 400)
@@ -1155,6 +1470,7 @@ def grant_trial(astrologer_id: str) -> dict:
 
 
 def apply_provider_plan(astrologer_id: str, stripe_status: str, period_end: str | None, trial_end: str | None, customer: str, subscription: str, interval: str = "") -> dict:
+    protect_demo(astrologer_id)
     moment = now()
     status = (stripe_status or "").strip()
     mapped = {
@@ -1250,12 +1566,13 @@ def astro_profile(astrologer_id: str) -> dict:
         raise ConnectError("not_found", 404)
     rate = int(row[3] or 0)
     return {
-        "name": row[0], "status": row[1], "online": bool(row[2]),
+        "name": row[0], "status": row[1], "online": True if _is_demo(astrologer_id) else bool(row[2]),
         "rate_cents": rate, "rate_label": money.money_label(rate, True), "email": row[4],
     }
 
 
 def set_rate(astrologer_id: str, rate_cents: int) -> dict:
+    protect_demo(astrologer_id)
     try:
         rate = money.check_rate(int(rate_cents))
     except money.MoneyError as e:
@@ -1286,6 +1603,7 @@ def _valid_email(email: str) -> bool:
 
 
 def set_payout_method(astrologer_id: str, method: str, paypal_email: str = "", confirm_email: str = "") -> dict:
+    protect_demo(astrologer_id)
     method = (method or "").strip().lower()
     if method == "razorpay":
         raise ConnectError("payout_unavailable", 400)
@@ -1330,7 +1648,7 @@ def payout_candidates(moment: datetime | None = None) -> list[dict]:
     out = []
     for astro_id, stripe_account, method, paypal_email, cents in rows:
         cents = int(cents)
-        if cents < 100:
+        if cents < 100 or astro_id == connect_demo.DEMO_ID:
             continue
         method = method or ("stripe" if stripe_account else "")
         if method == "paypal" and paypal_email:
@@ -1392,7 +1710,7 @@ def astro_live(astrologer_id: str) -> dict:
         astro = _load_astro(con, astrologer_id)
     active = next((s for s in sessions if s["status"] == "active"), None)
     return {
-        "online": bool(astro and astro[3]) and not active,
+        "online": (True if _is_demo(astrologer_id) else bool(astro and astro[3])) and not active,
         "in_session": bool(active),
         "session": active,
         "ringing": [s for s in sessions if s["status"] == "ringing"],

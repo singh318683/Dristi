@@ -212,10 +212,31 @@ class PlanIn(BaseModel):
     interval: Literal["month", "year"]
 
 
+class DemoCodeIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    device: str
+    code: str = ""
+
+
 @router.get("/api/connect/astrologers")
 def api_list(device: str):
     _gate()
-    return {"astrologers": _run(lambda: store.list_astrologers(device))}
+    return {
+        "astrologers": _run(lambda: store.list_astrologers(device)),
+        "demo_code": store.demo_code_configured(),
+    }
+
+
+@router.post("/api/connect/demo/unlock")
+def api_demo_unlock(body: DemoCodeIn):
+    _gate()
+    return _run(lambda: store.unlock_demo(body.device, body.code))
+
+
+@router.post("/api/connect/demo/credit")
+def api_demo_credit(body: DeviceIn):
+    _gate()
+    return _run(lambda: store.grant_demo_credit(body.device))
 
 
 @router.post("/api/connect/apply")
@@ -328,6 +349,7 @@ def api_payout_method(body: PayoutIn, request: Request):
 def api_stripe_onboard(request: Request):
     _gate()
     astro_id = _astro_id(request)
+    _run(lambda: store.protect_demo(astro_id))
     secret = (os.environ.get("STRIPE_SECRET_KEY") or "").strip()
     public = (os.environ.get("APP_PUBLIC_URL") or "").strip().rstrip("/")
     if not secret or not public:
@@ -573,6 +595,17 @@ def api_call_token(session_id: str, body: DeviceIn, request: Request):
     ))
 
 
+@router.post("/api/connect/sessions/{session_id}/demo-voice")
+def api_demo_voice(session_id: str, body: DeviceIn):
+    _gate()
+    return _run(lambda: store.issue_demo_voice(
+        session_id, body.device,
+        (os.environ.get("LIVEKIT_API_KEY") or "").strip(),
+        (os.environ.get("LIVEKIT_API_SECRET") or "").strip(),
+        (os.environ.get("LIVEKIT_URL") or "").strip(),
+    ))
+
+
 @router.post("/api/connect/livekit/webhook")
 async def api_livekit_webhook(request: Request):
     _gate()
@@ -666,6 +699,7 @@ def api_trial(request: Request):
 def api_plan(body: PlanIn, request: Request):
     _gate()
     astro_id = _astro_id(request)
+    _run(lambda: store.protect_demo(astro_id))
     secret = (os.environ.get("STRIPE_SECRET_KEY") or "").strip()
     price_key = "STRIPE_PRICE_PROVIDER_MONTHLY" if body.interval == "month" else "STRIPE_PRICE_PROVIDER_YEARLY"
     price = (os.environ.get(price_key) or "").strip()
@@ -695,6 +729,7 @@ def api_plan(body: PlanIn, request: Request):
 def api_portal(request: Request):
     _gate()
     astro_id = _astro_id(request)
+    _run(lambda: store.protect_demo(astro_id))
     secret = (os.environ.get("STRIPE_SECRET_KEY") or "").strip()
     public = (os.environ.get("APP_PUBLIC_URL") or "").strip().rstrip("/")
     info = _run(lambda: store.astrologer_private(astro_id))

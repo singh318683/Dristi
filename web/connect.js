@@ -16,6 +16,7 @@
   let beating = false;
   let sending = false;
   let generation = 0;
+  let greetingCtx = null;
   const seenIncoming = {};
 
   function on() {
@@ -76,6 +77,7 @@
       const voiceDebug = document.getElementById('voiceDebug');
       if (voiceDebug) voiceDebug.remove();
       releasePrimedMic();
+      releaseDemoVoice();
     }
     live = null;
     beating = false;
@@ -119,6 +121,8 @@
     bad_rate: ['Enter a per-minute rate between $0.30 and $5.00.', 'प्रति मिनट दर $0.30 से $5.00 के बीच डालें।'],
     payment_pending: ['The payment is still pending. Your wallet will update when it clears.', 'भुगतान अभी लंबित है। पूरा होते ही वॉलेट अपडेट होगा।'],
     session_active: ['End the session first, then delete the account.', 'पहले सत्र समाप्त करें, फिर खाता हटाएँ।'],
+    demo_protected: ['This shared review account cannot be changed.', 'यह साझा समीक्षा खाता बदला नहीं जा सकता।'],
+    demo_unavailable: ['The review demo is not configured on the server yet.', 'समीक्षा डेमो सर्वर पर अभी सेट नहीं है।'],
   };
   function friendly(code) {
     const row = PORTAL_ERRORS[code];
@@ -144,18 +148,47 @@
         <b>${esc(a.name)}</b>
         <p><span class="connect-dot"></span>${tr('Online', 'ऑनलाइन')} · ${esc(a.rate_label)} · ${esc(a.rating_label)} · ${a.years} ${tr('years', 'वर्ष')}</p>
         <p>${esc((a.specialties || []).join(', '))} · ${esc((a.languages || []).join(', '))}</p>
+        ${a.demo ? `<p>${tr('App Review demo. Not a real person.', 'ऐप समीक्षा डेमो। यह कोई वास्तविक व्यक्ति नहीं है।')}</p>
+          <button type="button" class="btn quiet" id="demoCredit">${tr('Add review credit', 'समीक्षा क्रेडिट जोड़ें')}</button>` : ''}
         <div class="connect-actions">
           <button type="button" class="btn" data-mode="chat" data-id="${esc(a.id)}">${tr('Chat', 'चैट')}</button>
           <button type="button" class="btn quiet" data-mode="call" data-id="${esc(a.id)}">${tr('Call', 'कॉल')}</button>
         </div>
       </div>
     </div>`).join('');
+    const codeBtn = data.demo_code ? `<button type="button" class="btn quiet block" id="demoCode">${tr('App Review code', 'ऐप समीक्षा कोड')}</button>` : '';
     sheet(`<div class="sheet connect" role="dialog" aria-modal="true" aria-label="${tr('Astrologers', 'ज्योतिषी')}">
       <button type="button" class="sheet-handle" aria-label="${tr('Drag down to close', 'बंद करने के लिए नीचे खींचें')}"><i></i></button>
       <div class="spread"><h3>${tr('Astrologers', 'ज्योतिषी')}</h3><button type="button" class="iconbtn" data-x aria-label="${tr('Close', 'बंद करें')}">×</button></div>
       ${rows || `<div class="connect-empty" id="connectEmpty"><p>${tr('No astrologer is online right now.', 'अभी कोई ज्योतिषी ऑनलाइन नहीं है।')}</p><p class="sub">${tr('Check back in a little while.', 'थोड़ी देर बाद फिर देखें।')}</p></div>`}
+      ${codeBtn}
     </div>`);
     document.querySelectorAll('#sheet [data-mode]').forEach(b => b.onclick = () => checkout(b.dataset.id, b.dataset.mode).catch(showErr));
+    const credit = $('#demoCredit');
+    if (credit) credit.onclick = () => addDemoCredit().then(() => list()).catch(showErr);
+    const code = $('#demoCode');
+    if (code) code.onclick = () => openDemoCode();
+  }
+  function openDemoCode() {
+    sheet(`<div class="sheet connect" role="dialog" aria-modal="true" aria-labelledby="demoCodeTitle">
+      <button type="button" class="sheet-handle" aria-label="${tr('Drag down to close', 'बंद करने के लिए नीचे खींचें')}"><i></i></button>
+      <h3 id="demoCodeTitle">${tr('App Review code', 'ऐप समीक्षा कोड')}</h3>
+      <p class="sub">${tr('Enter the code from App Store Connect. This shows the demo astrologer on this phone only.', 'ऐप स्टोर कनेक्ट का कोड डालें। इससे डेमो ज्योतिषी केवल इस फ़ोन पर दिखते हैं।')}</p>
+      <input class="input" id="demoCodeWord" autocomplete="off" aria-label="${tr('App Review code', 'ऐप समीक्षा कोड')}">
+      <button type="button" class="btn block" id="demoCodeGo">${tr('Continue', 'जारी रखें')}</button>
+    </div>`);
+    const go = $('#demoCodeGo');
+    if (go) go.onclick = () => {
+      const word = ($('#demoCodeWord') && $('#demoCodeWord').value) || '';
+      api('/api/connect/demo/unlock', {device: DEVICE, code: word}).then(() => list()).catch(showErr);
+    };
+  }
+  function addDemoCredit() {
+    return api('/api/connect/demo/credit', {device: DEVICE}).then(view => {
+      if (window.toast) toast(tr('Review credit added. No card was charged.', 'समीक्षा क्रेडिट जुड़ गया। कोई कार्ड नहीं कटा।'));
+      paintWallet();
+      return view;
+    });
   }
   function questionForSession(draft, pending, history) {
     const typed = String(draft || '').trim();
@@ -201,7 +234,7 @@
     const suggested = coverPack(need);
     const packBtn = (pid, label) => `<button type="button" class="btn pack${pid === suggested ? ' suggest' : ''}" data-pack="${pid}">${label}</button>`;
     const startLabel = short
-      ? tr('Add money to start', 'शुरू करने के लिए पैसे जोड़ें')
+      ? (q.demo ? tr('Add review credit', 'समीक्षा क्रेडिट जोड़ें') : tr('Add money to start', 'शुरू करने के लिए पैसे जोड़ें'))
       : (mode === 'call' ? tr('Start call', 'कॉल शुरू करें') : tr('Start chat', 'चैट शुरू करें'));
     sheet(`<div class="sheet connect" role="dialog" aria-modal="true" aria-labelledby="checkTitle">
       <button type="button" class="sheet-handle" aria-label="${tr('Drag down to close', 'बंद करने के लिए नीचे खींचें')}"><i></i></button>
@@ -210,7 +243,9 @@
       <p>${tr('A 5-minute hold', '5 मिनट की होल्ड')} · ${esc(q.hold_label)}. ${tr('Wallet balance', 'वॉलेट')} ${esc(q.balance_label)}.</p>
       <p class="sub">${tr('Your question and birth chart are shared with the astrologer. Billed per minute. End anytime. Unused hold returns to your wallet.', 'आपका प्रश्न और जन्म कुंडली ज्योतिषी के साथ साझा होती है। शुल्क प्रति मिनट। कभी भी समाप्त करें। बची होल्ड वॉलेट में लौटती है।')}</p>
       <p class="sub">${tr('Guidance for reflection, not medical, legal or financial advice.', 'यह चिंतन हेतु मार्गदर्शन है, चिकित्सा, कानूनी या वित्तीय सलाह नहीं।')}</p>
-      ${short ? `<div class="connect-packs">${packBtn('wallet_5', '$5')}${packBtn('wallet_10', '$10')}${packBtn('wallet_20', '$20')}</div>
+      ${q.demo ? `<p class="sub">${tr('This is the App Review demo. Review credit is used. No card is charged.', 'यह ऐप समीक्षा डेमो है। समीक्षा क्रेडिट लगता है। कार्ड नहीं कटता।')}</p>` : ''}
+      ${short && q.demo ? `<p class="sub" id="needMore">${tr('Add review credit to start. No card is needed.', 'शुरू करने के लिए समीक्षा क्रेडिट जोड़ें। कार्ड की ज़रूरत नहीं।')}</p>` : ''}
+      ${short && !q.demo ? `<div class="connect-packs">${packBtn('wallet_5', '$5')}${packBtn('wallet_10', '$10')}${packBtn('wallet_20', '$20')}</div>
       <p class="sub" id="needMore">${tr('Add at least ' + dollars(need) + ' to start. Tap an amount above.', 'शुरू करने के लिए कम से कम ' + dollars(need) + ' जोड़ें। ऊपर कोई राशि चुनें।')}</p>` : ''}
       <button type="button" class="btn block" id="connectStart">${startLabel}</button>
       <p class="legal">${tr('By continuing you agree to the', 'जारी रखकर आप मानते हैं')} <a href="terms.html">${tr('Terms', 'नियम')}</a> ${tr('and', 'और')} <a href="privacy.html">${tr('Privacy', 'गोपनीयता')}</a>.</p>
@@ -218,7 +253,8 @@
     document.querySelectorAll('#sheet [data-pack]').forEach(b => b.onclick = () => topup(b.dataset.pack).then(() => checkout(id, mode)).catch(showErr));
     const start = $('#connectStart');
     if (start) start.onclick = () => {
-      if (short) topup(suggested).then(() => checkout(id, mode)).catch(showErr);
+      if (short && q.demo) addDemoCredit().then(() => checkout(id, mode)).catch(showErr);
+      else if (short) topup(suggested).then(() => checkout(id, mode)).catch(showErr);
       else {
         if (mode === 'call') {
           preloadLiveKit();
@@ -701,10 +737,73 @@
     if (audio.parentNode !== host) host.appendChild(audio);
     return audio;
   }
+  function releaseDemoVoice() {
+    if (live && live.demoRoom && live.demoRoom.disconnect) {
+      try { live.demoRoom.disconnect(); } catch (e) { /* the review greeting room is already gone */ }
+    }
+    if (live) live.demoRoom = null;
+    if (greetingCtx && greetingCtx.close) {
+      try { greetingCtx.close(); } catch (e) { /* already closed */ }
+    }
+    greetingCtx = null;
+  }
+  function primeGreeting() {
+    try {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return;
+      if (!greetingCtx || greetingCtx.state === 'closed') greetingCtx = new AC();
+      if (greetingCtx.resume) greetingCtx.resume();
+    } catch (e) { /* the call still connects if the greeting context cannot start */ }
+  }
+  async function demoGreetingBuffer(ctx) {
+    try {
+      const res = await fetch('demo-greeting.wav');
+      if (res.ok) return await ctx.decodeAudioData(await res.arrayBuffer());
+    } catch (e) { /* a short tone is used if the file cannot be decoded */ }
+    const rate = ctx.sampleRate;
+    const length = Math.floor(rate * 1.6);
+    const buffer = ctx.createBuffer(1, length, rate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < length; i++) {
+      const t = i / rate;
+      const env = Math.min(1, i / (rate * 0.04)) * Math.min(1, (length - i) / (rate * 0.08));
+      data[i] = env * 0.25 * (Math.sin(2 * Math.PI * 220 * t) + 0.6 * Math.sin(2 * Math.PI * 330 * t));
+    }
+    return buffer;
+  }
+  async function startDemoVoice(session) {
+    if (!live || !session || !session.demo || live.demoRoom || live.role === 'astrologer') return;
+    const info = await api('/api/connect/sessions/' + session.id + '/demo-voice', {device: DEVICE});
+    const mod = LiveKit || await import('https://cdn.jsdelivr.net/npm/livekit-client@2.9.0/+esm');
+    LiveKit = mod;
+    const room = new mod.Room();
+    await room.connect(info.url, info.token);
+    try {
+      primeGreeting();
+      const ctx = greetingCtx;
+      if (!ctx) throw new Error('no_audio');
+      if (ctx.resume) await ctx.resume();
+      const buffer = await demoGreetingBuffer(ctx);
+      const src = ctx.createBufferSource();
+      src.buffer = buffer;
+      src.loop = true;
+      const dest = ctx.createMediaStreamDestination();
+      src.connect(dest);
+      src.start();
+      const track = dest.stream.getAudioTracks()[0];
+      await room.localParticipant.publishTrack(track, {source: mod.Track.Source.Microphone});
+      if (live) live.demoRoom = room;
+      else room.disconnect();
+    } catch (err) {
+      try { room.disconnect(); } catch (e) { /* already closed */ }
+      throw err;
+    }
+  }
   function primeCallAudio() {
     const audio = ensureRemoteAudio();
     try { const played = audio.play(); if (played && played.catch) played.catch(() => {}); } catch (e) { /* the Accept tap retries */ }
     primeMic();
+    primeGreeting();
     if (!LiveKit || !LiveKit.Room) return;
     if (!primedRoom) primedRoom = new LiveKit.Room();
     try {
@@ -850,6 +949,10 @@
     watchPlayback(room, mod);
     if (room.state !== 'connected') await room.connect(info.url, info.token);
     if (live) live.room = room;
+    if (live && live.session && live.session.demo) {
+      try { await startDemoVoice(live.session); }
+      catch (err) { setVoiceNote(tr('The demo greeting could not start.', 'डेमो अभिवादन शुरू नहीं हो सका।')); }
+    }
     ensureRemoteAudio();
     if (room.remoteParticipants && room.remoteParticipants.forEach) {
       room.remoteParticipants.forEach(person => {
@@ -1776,7 +1879,10 @@
     const list = items.length
       ? `<ul class="wallet-activity">${rows}</ul>`
       : `<p class="small muted wallet-empty">${tr('No wallet activity yet.', 'अभी कोई वॉलेट गतिविधि नहीं।')}</p>`;
-    return `<div class="spread wallet-head"><div><span class="small muted">${tr('Wallet', 'वॉलेट')}</span><b class="wallet-bal">${esc((view && view.balance_label) || '$0.00')}</b></div><button type="button" class="btn" id="walletAdd">${tr('Add money', 'पैसे जोड़ें')}</button></div>${list}`;
+    const review = Number(view && view.demo_cents) > 0
+      ? `<p class="small">${tr('Review credit', 'समीक्षा क्रेडिट')} ${esc(view.demo_label || '')}. ${tr('Not a card charge.', 'यह कार्ड से नहीं कटा।')}</p>`
+      : '';
+    return `<div class="spread wallet-head"><div><span class="small muted">${tr('Wallet', 'वॉलेट')}</span><b class="wallet-bal">${esc((view && view.balance_label) || '$0.00')}</b></div><button type="button" class="btn" id="walletAdd">${tr('Add money', 'पैसे जोड़ें')}</button></div>${review}${list}`;
   }
   function openWalletTopup() {
     sheet(`<div class="sheet connect" role="dialog" aria-modal="true" aria-labelledby="walletTitle">
