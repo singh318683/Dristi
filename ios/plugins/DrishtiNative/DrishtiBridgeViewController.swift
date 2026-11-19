@@ -11,7 +11,11 @@ final class DrishtiStoreProxy: NSObject, WKScriptMessageHandler {
     }
 
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
-        controller?.handleStoreMessage(message)
+        if message.name == "drishtiFile" {
+            controller?.handleFileMessage(message)
+        } else {
+            controller?.handleStoreMessage(message)
+        }
     }
 }
 
@@ -43,6 +47,37 @@ class DrishtiBridgeViewController: CAPBridgeViewController {
       delete window.__drishtiStorePending[id];
       var err = new Error(message || code || "missing");
       err.code = code || "missing";
+      box.reject(err);
+    };
+    """
+
+    private static let fileScript = """
+    window.DrishtiFiles = window.DrishtiFiles || {
+      sharePdf: function(filename, data) {
+        return new Promise(function(resolve, reject) {
+          var id = Date.now().toString(36) + Math.random().toString(36).slice(2);
+          window.__drishtiFilePending = window.__drishtiFilePending || {};
+          window.__drishtiFilePending[id] = {resolve: resolve, reject: reject};
+          window.webkit.messageHandlers.drishtiFile.postMessage({
+            id: id,
+            filename: String(filename || "drishti-kundli.pdf"),
+            data: String(data || "")
+          });
+        });
+      }
+    };
+    window.__drishtiFileResolve = function(id, payload) {
+      var box = window.__drishtiFilePending && window.__drishtiFilePending[id];
+      if (!box) return;
+      delete window.__drishtiFilePending[id];
+      box.resolve(payload || {ok: true});
+    };
+    window.__drishtiFileReject = function(id, code, message) {
+      var box = window.__drishtiFilePending && window.__drishtiFilePending[id];
+      if (!box) return;
+      delete window.__drishtiFilePending[id];
+      var err = new Error(message || code || "share_failed");
+      err.code = code || "share_failed";
       box.reject(err);
     };
     """
@@ -86,9 +121,18 @@ class DrishtiBridgeViewController: CAPBridgeViewController {
                 forMainFrameOnly: true
             ))
         }
+        if !controller.userScripts.contains(where: { $0.source.contains("window.__drishtiFileResolve") }) {
+            controller.addUserScript(WKUserScript(
+                source: Self.fileScript,
+                injectionTime: .atDocumentStart,
+                forMainFrameOnly: true
+            ))
+        }
         controller.removeScriptMessageHandler(forName: "drishtiStore")
+        controller.removeScriptMessageHandler(forName: "drishtiFile")
         if let storeProxy {
             controller.add(storeProxy, name: "drishtiStore")
+            controller.add(storeProxy, name: "drishtiFile")
         }
     }
 
@@ -123,6 +167,75 @@ class DrishtiBridgeViewController: CAPBridgeViewController {
         } catch {
             rejectStore(id: id, code: Self.storeCode(error), message: error.localizedDescription)
         }
+    }
+
+    func handleFileMessage(_ message: WKScriptMessage) {
+        guard message.name == "drishtiFile",
+              let body = message.body as? [String: Any] else { return }
+        let id: String
+        if let text = body["id"] as? String {
+            id = text
+        } else if let number = body["id"] as? NSNumber {
+            id = number.stringValue
+        } else {
+            return
+        }
+        let filename = (body["filename"] as? String) ?? "drishti-kundli.pdf"
+        let encoded = (body["data"] as? String) ?? ""
+        guard let data = Data(base64Encoded: encoded, options: .ignoreUnknownCharacters), !data.isEmpty else {
+            rejectFile(id: id, code: "empty", message: "The PDF was empty.")
+            return
+        }
+        do {
+            let url = try writePdf(filename: filename, data: data)
+            DispatchQueue.main.async { [weak self] in
+                self?.presentPdfShare(url: url, id: id)
+            }
+        } catch {
+            rejectFile(id: id, code: "write_failed", message: "The PDF could not be saved.")
+        }
+    }
+
+    private func writePdf(filename: String, data: Data) throws -> URL {
+        let base = (filename as NSString).lastPathComponent
+        let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: ".-"))
+        let cleaned = String(base.unicodeScalars.map { allowed.contains($0) ? Character($0) : "-" }.prefix(80))
+        var name = cleaned.isEmpty ? "drishti-kundli.pdf" : cleaned
+        if !name.lowercased().hasSuffix(".pdf") {
+            name += ".pdf"
+        }
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(name)
+        try data.write(to: url, options: .atomic)
+        return url
+    }
+
+    private func presentPdfShare(url: URL, id: String) {
+        let activity = UIActivityViewController(activityItems: [url], applicationActivities: nil)
+        if let popover = activity.popoverPresentationController {
+            let anchor = view ?? UIView()
+            popover.sourceView = anchor
+            popover.sourceRect = CGRect(x: anchor.bounds.midX, y: anchor.bounds.midY, width: 1, height: 1)
+            popover.permittedArrowDirections = []
+        }
+        activity.completionWithItemsHandler = { [weak self] _, _, _, error in
+            if let error = error {
+                self?.rejectFile(id: id, code: "share_failed", message: error.localizedDescription)
+            } else {
+                self?.resolveFile(id: id)
+            }
+        }
+        let host = presentedViewController ?? self
+        host.present(activity, animated: true)
+    }
+
+    private func resolveFile(id: String) {
+        let js = "window.__drishtiFileResolve(\(Self.jsonText(id)), {\"ok\":true})"
+        webView?.evaluateJavaScript(js, completionHandler: nil)
+    }
+
+    private func rejectFile(id: String, code: String, message: String) {
+        let js = "window.__drishtiFileReject(\(Self.jsonText(id)), \(Self.jsonText(code)), \(Self.jsonText(message)))"
+        webView?.evaluateJavaScript(js, completionHandler: nil)
     }
 
     private func rejectStore(id: String, code: String, message: String) {

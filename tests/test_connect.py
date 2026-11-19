@@ -1558,3 +1558,9 @@ def test_ios_store_bridge_maps_storekit_errors():
     fresh = ask.split("const takeToken", 1)[1].split("try { purchaseToken", 1)[0]
     assert "window.DrishtiStore" in fresh and "buyPlayQuestion()" in fresh
     assert fresh.find("buyPlayQuestion()") < fresh.find("buyFreshPlayQuestion")
+    assert "drishtiFile" in bridge and "window.DrishtiFiles" in bridge
+    assert "UIActivityViewController" in bridge and "popoverPresentationController" in bridge
+    assert "sourceView" in bridge and "sourceRect" in bridge
+    pdf = html.split("async function downloadKundli", 1)[1].split("function wrapCanvas", 1)[0]
+    assert "DrishtiFiles.sharePdf" in pdf and "createObjectURL" in pdf
+    assert "drishti-kundli.pdf" in pdf and "Preparing the PDF" in pdf

@@ -844,7 +844,7 @@ window.GITA_VERSES = window.__GITA_INJECTED__ || null;
 <div id="root"></div>
 <div id="sheet" class="sheet-bg" hidden></div>
 <div id="toast" class="toast" role="status" hidden></div>
-<script src="birthpicker.js?v=drishti-v51"></script>
+<script src="birthpicker.js?v=drishti-v52"></script>
 <script>
 'use strict';
 // ------------------------------------------------------------------ config
@@ -1995,16 +1995,32 @@ function openDosha(c, name) {
   const d = c.doshas.find(x => x.name === name); if (!d) return;
   openDetail(d.name, `<div class="item" ${hlAttr(doshaHL(c, d))}><div class="hd">${esc(d.name)} ${doshaTag(d)}</div><p>${esc(doshaLine(d))}</p></div><p class="small muted">${tr('Free explanation. Nothing here is a paid remedy.', 'मुफ़्त विवरण। यहाँ कोई सशुल्क उपाय नहीं।')}</p>`);
 }
+function blobBase64(blob) {
+  return blob.arrayBuffer().then(buf => {
+    const bytes = new Uint8Array(buf);
+    let binary = '';
+    for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+    return btoa(binary);
+  });
+}
 async function downloadKundli() {
   const p = activeProfile();
+  const buttons = ['#pdfBtn', '#pdfK'].map(sel => document.querySelector(sel)).filter(Boolean);
+  buttons.forEach(b => { b.disabled = true; });
   try {
+    toast(tr('Preparing the PDF…', 'PDF बन रहा है…'));
     const r = await fetch(API + '/api/kundli.pdf?lang=' + (hi() ? 'hi' : 'en'), {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(profileBody(p))});
     if (!r.ok) throw new Error(tr('Could not build the PDF', 'PDF नहीं बन सका'));
     const blob = await r.blob();
+    if (window.DrishtiFiles && typeof window.DrishtiFiles.sharePdf === 'function') {
+      await window.DrishtiFiles.sharePdf('drishti-kundli.pdf', await blobBase64(blob));
+      return;
+    }
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob); a.download = 'drishti-kundli.pdf'; a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 4000);
-  } catch (e) { toast(e.message); }
+  } catch (e) { toast((e && e.message) || tr('Could not build the PDF', 'PDF नहीं बन सका')); }
+  finally { buttons.forEach(b => { b.disabled = false; }); }
 }
 function wrapCanvas(g, text, x, y, maxW, lineH, maxLines) {
   const words = String(text || '').split(/\s+/).filter(Boolean);
@@ -3149,6 +3165,6 @@ window.shareGitaCard = () => shareCard('gita');
   maybeShowRate();
 })();
 </script>
-<script src="connect.js?v=drishti-v51"></script>
+<script src="connect.js?v=drishti-v52"></script>
 </body>
 </html>
