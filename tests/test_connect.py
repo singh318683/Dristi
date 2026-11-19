@@ -1188,3 +1188,87 @@ def test_stripe_signature_helper_rejects_a_stale_event():
     sig = hmac.new(b"sec", stamp.encode() + b"." + payload, hashlib.sha256).hexdigest()
     with pytest.raises(connect_stripe.StripeError):
         connect_stripe.verify_event(payload, f"t={stamp},v1={sig}", "sec")
+
+
+def test_delete_refunds_newest_card_first_and_still_deletes_when_stripe_fails(client, monkeypatch):
+    from datetime import datetime, timedelta, timezone
+    base = datetime(2026, 11, 19, tzinfo=timezone.utc)
+    monkeypatch.setattr(store, "now", lambda: base)
+    astro_id, token = seed(client, rate=100)
+    fund("phone", "wallet_10", "pi_old")
+    fund("phone", "wallet_5", "pi_new")
+    with db.connect() as con:
+        store.ensure(con)
+        con.execute("update ac_payment set created=? where id=?", ("2026-11-19T00:00:02+00:00", "pi_new"))
+    started = client.post("/api/connect/sessions", json={
+        "device": "phone", "astrologer_id": astro_id, "mode": "chat", "idempotency_key": "del-live",
+    }).json()
+    blocked = client.post("/api/connect/account/delete", json={"device": "phone"})
+    assert blocked.status_code == 409 and blocked.json()["detail"] == "session_active"
+    assert store.wallet_view("phone")["balance_cents"] == 1000
+    client.post("/api/connect/sessions/" + started["id"] + "/accept", headers=auth(token))
+    client.post("/api/connect/sessions/" + started["id"] + "/messages", json={
+        "device": "phone", "sender": "user", "body": "hello there",
+    })
+    monkeypatch.setattr(store, "now", lambda: base + timedelta(seconds=120))
+    client.post("/api/connect/sessions/" + started["id"] + "/end", json={"device": "phone"})
+    calls = []
+
+    def refund(secret, intent, cents, key):
+        calls.append((intent, cents))
+        if intent == "pi_old":
+            raise connect_stripe.StripeError("stripe_rejected")
+        return {"id": "re_new"}
+
+    monkeypatch.setenv("STRIPE_SECRET_KEY", "sk_test_delete")
+    monkeypatch.setattr(connect_stripe, "refund_payment", refund)
+    done = client.post("/api/connect/account/delete", json={"device": "phone"})
+    assert done.status_code == 200
+    body = done.json()
+    assert calls[0] == ("pi_new", 500)
+    assert calls[1] == ("pi_old", 800)
+    assert body["refunded_cents"] == 500 and body["refund_failed_cents"] == 800
+    assert store.wallet_view("phone")["balance_cents"] == 0
+    with db.connect() as con:
+        store.ensure(con)
+        assert con.execute("select count(*) from ac_session where device=?", ("phone",)).fetchone()[0] == 0
+        assert con.execute("select count(*) from ac_message where body=?", ("hello there",)).fetchone()[0] == 0
+        pay = con.execute("select device, refunded_cents from ac_payment where id='pi_new'").fetchone()
+        assert pay[0] == "" and int(pay[1]) == 500
+        accounts = [row[0] for row in con.execute("select distinct account from ac_ledger where reason like 'wallet%'").fetchall()]
+        assert "wallet:phone" not in accounts and "wallet:removed" in accounts
+
+
+def test_delete_astrologer_unlist_forfeit_and_cancel(client, monkeypatch):
+    astro_id, token = seed(client, rate=100)
+    cancelled = []
+    monkeypatch.setenv("STRIPE_SECRET_KEY", "sk_test_delete")
+    monkeypatch.setattr(connect_stripe, "cancel_subscription", lambda secret, sub: cancelled.append(sub) or {"id": sub})
+    with db.connect() as con:
+        store.ensure(con)
+        con.execute("update ac_astrologer set stripe_subscription=? where id=?", ("sub_plan", astro_id))
+        con.execute(
+            """insert into ac_earning(session_id, astrologer_id, amount_cents, platform_cents, fee_cents, available_at)
+               values(?,?,?,?,?,?)""",
+            ("ses_small", astro_id, 50, 3, 0, "2026-11-01T00:00:00+00:00"))
+    gone = client.post("/api/connect/astro/delete", headers=auth(token))
+    assert gone.status_code == 200 and gone.json()["forfeited"] is True
+    assert cancelled == ["sub_plan"]
+    assert client.get("/api/connect/astro/me", headers=auth(token)).status_code == 401
+    assert client.post("/api/connect/astro/login", json={"email": "meera@example.com", "password": "correct-horse"}).status_code == 401
+    listed = client.get("/api/connect/astrologers", params={"device": "phone"}).json()["astrologers"]
+    assert all(item["id"] != astro_id for item in listed)
+    with db.connect() as con:
+        store.ensure(con)
+        status, photo = con.execute("select status, photo from ac_astrologer where id=?", (astro_id,)).fetchone()
+        assert status == "deleted" and photo == ""
+        assert con.execute("select payout_id from ac_earning where session_id='ses_small'").fetchone()[0] == "forfeited"
+    connect = open(os.path.join(os.path.dirname(__file__), "..", "web", "connect.js"), encoding="utf-8").read()
+    html = open(os.path.join(os.path.dirname(__file__), "..", "web", "index.html"), encoding="utf-8").read()
+    terms = open(os.path.join(os.path.dirname(__file__), "..", "web", "terms.html"), encoding="utf-8").read()
+    assert "Type DELETE" in connect and "5–10 business days" in connect
+    assert 'id="deleteAccount"' in html and "terms.html" in html
+    assert 'id="regAgree"' in connect and 'id="connectReport"' in connect.split("async function openCall", 1)[1].split("async function finish", 1)[0]
+    assert "Harassment" in connect and "Or describe what happened" in connect
+    assert "Ikshana Solutions LLC" in terms and "273 Lewis Fisher Dr" in terms and "New Jersey" in terms
+    assert "independent providers" in terms and "5%" in terms

@@ -5,27 +5,29 @@
 <body>
 <p><a href="/">&larr; Back to Drishti</a></p>
 <h1><span>दृष्टि</span> Drishti — Privacy Policy</h1>
-<p><b>Last updated:</b> October 31, 2026 · Ikshana Solutions LLC</p>
-<p>Drishti is a Vedic astrology app. It calculates your birth chart (kundli) and lets you ask an AI astrologer questions about it. We collect as little as possible, and we never sell your data.</p>
+<p><b>Last updated:</b> November 19, 2026 · Ikshana Solutions LLC, 273 Lewis Fisher Dr, Hopewell NJ 08560</p>
+<p>Drishti is a Vedic astrology app and a marketplace for live astrologers. We collect as little as possible, and we never sell your data. See also the <a href="terms.html">Terms of Service</a>.</p>
 
 <h2>What you enter</h2>
-<p>Name, optional gender, date, time and place of birth for each profile you add (yourself, family or friends). Only add other people's details with their permission.</p>
-
-<h2>Where it is stored</h2>
-<p>Your profiles and chat history are stored <b>on your device</b> (browser/app storage). There is no account and no login. Deleting a profile, clearing chat history in the app, or uninstalling the app removes them.</p>
+<p>Name, optional gender, date, time and place of birth for each profile you add (yourself, family or friends). Only add other people's details with their permission. Profiles and Acharya chat history for the AI astrologer are stored on this phone.</p>
 
 <h2>What is sent to our server, and why</h2>
 <ul>
-<li><b>Chart calculation:</b> birth date, time, coordinates and time zone are sent to our server to compute the chart, matching and dashas. The server does not keep them after replying.</li>
+<li><b>Chart calculation:</b> birth date, time, coordinates and time zone are sent to our server to compute the chart, matching and dashas. A one-off chart request is not kept after the reply. A live session stores the chart you choose to share until that session is deleted.</li>
 <li><b>City search:</b> the letters you type are sent to look up cities in our bundled city list (GeoNames). No GPS is used.</li>
 <li data-store="play"><b>Acharya questions:</b> a random device ID is stored with the Google Play order id for each paid question, so one purchase can answer only one question. The purchase token is kept only until Google Play accepts that the question was delivered, then it is deleted. We keep the order id and a one-way hash of the token. We never receive your card number, UPI id, or Google password.</li>
 <li data-store="ios" hidden><b>Acharya questions:</b> a random device ID is stored with the App Store transaction id for each paid question, so one purchase can answer only one question. The signed transaction is kept only until Apple accepts that the question was delivered, then it is deleted. We keep the transaction id and a one-way hash. We never receive your card number or Apple ID password.</li>
 <li data-store="ios" data-lang="hi" hidden><b>आचार्य प्रश्न:</b> हर सशुल्क प्रश्न के साथ एक यादृच्छिक डिवाइस आईडी और App Store लेनदेन आईडी रखी जाती है, ताकि एक खरीदारी केवल एक प्रश्न का उत्तर दे। हस्ताक्षरित लेनदेन तभी तक रहता है जब तक Apple स्वीकार न कर ले कि प्रश्न दिया जा चुका है, फिर वह हट जाता है। हम लेनदेन आईडी और उसका एक-तरफ़ा हैश रखते हैं। हम आपका कार्ड नंबर या Apple ID पासवर्ड नहीं लेते।</li>
 </ul>
 
-<h2>AI answers</h2>
-<p>When you ask a question, the question, your recent messages in that chat, the profile name and the computed chart (birth date, time, place and planetary positions) are sent to our AI provider to generate the answer. We only use AI providers whose API terms say customer data is not used to train their models. We do not store your questions or answers on our server.</p>
-<p class="note">AI answers are astrological guidance for reflection and entertainment. They are not medical, legal, financial or psychological advice. For those, please talk to a qualified professional.</p>
+<h2>Live chat and voice</h2>
+<p>A live session stores the messages, the question, the shared chart, the timer, and the amount billed, tied to a random device id and the astrologer’s account. Voice is a live room on LiveKit. This server signs a short join token and does not record the call. LiveKit carries the audio between the two people for the length of the session.</p>
+
+<h2>Wallet</h2>
+<p>Wallet top-ups are Stripe card payments. We store the PaymentIntent id, the amount, and the device id. We never receive your card number. The balance is kept as cents on that device. Spending a session moves cents out of the wallet and, when a hold is unused or nobody accepts within two minutes, cents return.</p>
+
+<h2>Astrologer accounts</h2>
+<p>Astrologers create an account with name, email, password, languages, specialties, a short bio, an optional photo, and a per-minute rate. The password is stored as a hash. Payouts use a Stripe account or a PayPal email. The listing plan is a Stripe subscription. We store the Stripe customer id and subscription id, not the card.</p>
 
 <h2>Payments</h2>
 <p data-store="play">Each question to Acharya costs <b>$0.99</b>, paid as a Google Play consumable (one purchase, one question). There is no free question and no credit pack. Google Play handles the payment. We never see or store your card details.</p>
@@ -34,17 +36,24 @@
 <p data-store="ios" data-lang="hi" hidden>आचार्य का हर प्रश्न <b>$0.99</b> का है, App Store से (एक खरीदारी, एक प्रश्न)। कोई मुफ़्त प्रश्न नहीं और कोई क्रेडिट पैक नहीं। भुगतान Apple करता है। हम आपका कार्ड विवरण नहीं देखते और नहीं रखते।</p>
 <p>The birth chart, life periods, dosha, panchang, matching, daily horoscope and kundli PDF are free and do not require a purchase.</p>
 
+<h2>AI answers</h2>
+<p>When you ask Acharya, the question, your recent messages in that chat, the profile name and the computed chart are sent to our AI provider to generate the answer. We only use AI providers whose API terms say customer data is not used to train their models. Those Acharya questions and answers are not stored on our server. Live-session messages are stored, as described above, because both people need the thread.</p>
+<p class="note">AI answers and live sessions are astrological guidance for reflection and entertainment. They are not medical, legal, financial or psychological advice.</p>
+
+<h2>What we keep after deletion</h2>
+<p>Deleting the account in the app removes profiles on the phone, Acharya chats on the phone, live-session messages, and the shared chart on the session. The remaining Stripe wallet balance is refunded to the original card. We keep payment, payout, and tax records, with the device id removed from the wallet ledger. We keep the PaymentIntent id so a refund can be traced. Card numbers are never stored.</p>
+
 <h2>Analytics, ads and tracking</h2>
 <p>None. Drishti has no advertising, no third-party analytics and no cross-app tracking.</p>
 
 <h2>Children</h2>
-<p>Drishti is not directed at children under 13 and does not knowingly collect their information. Parents may add a child's birth details as a family profile; that data stays on the parent's device except as described above.</p>
+<p>Drishti is not directed at children under 13, and live sessions are for people 18 or older. We do not knowingly collect information from children under 13.</p>
 
 <h2>Your choices</h2>
-<p>You can edit or delete any profile at any time in the app. To delete your wallet record, email us your device ID (shown under Profile) and we will remove it.</p>
+<p>You can edit or delete any profile in the app. Delete account, on Profile, removes this phone’s server session data and asks Stripe to refund the remaining card balance. An astrologer deletes the provider account from Astrologer mode, Settings.</p>
 
 <h2>Contact</h2>
-<p>Questions: <b>ikshanasolution123@gmail.com</b></p>
+<p>Ikshana Solutions LLC, 273 Lewis Fisher Dr, Hopewell NJ 08560 · <b>ikshanasolution123@gmail.com</b></p>
 <script>
 function inIosApp() {
   try {

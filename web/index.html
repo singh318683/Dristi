@@ -88,6 +88,13 @@ button:disabled:active,.btn:disabled:active{transform:none}
 .btn.block{width:100%}
 .btn.sec2{background:var(--surface);color:var(--ink);border:1px solid var(--line-strong)}
 .btn.quiet{background:transparent;color:var(--primary);min-height:44px;padding:0 10px}
+.btn.badfill{background:var(--bad);color:#fff}
+.btn.badfill:disabled{opacity:.45}
+button.danger{display:block;width:100%;text-align:left;background:none;border:0;color:var(--bad);font-weight:700;font-size:16px;min-height:48px;padding:0;margin-top:4px}
+.legal{color:var(--muted);font-size:13.5px;line-height:1.45;margin:8px 0}
+.legal a{font-weight:650}
+.agree{display:flex;gap:10px;align-items:flex-start;font-size:14.5px;line-height:1.4;margin:8px 0 12px}
+.agree input{width:22px;height:22px;margin-top:2px;flex:none}
 .btn.sm{min-height:44px;font-size:15px;padding:0 14px;border-radius:12px}
 .chips{display:flex;flex-wrap:wrap;gap:8px}
 .chip{min-height:44px;border:1px solid var(--line-strong);background:var(--surface);border-radius:999px;padding:0 15px;font-size:15px;font-weight:400;color:var(--ink);display:inline-flex;gap:7px;align-items:center}
@@ -837,7 +844,7 @@ window.GITA_VERSES = window.__GITA_INJECTED__ || null;
 <div id="root"></div>
 <div id="sheet" class="sheet-bg" hidden></div>
 <div id="toast" class="toast" role="status" hidden></div>
-<script src="birthpicker.js?v=drishti-v47"></script>
+<script src="birthpicker.js?v=drishti-v48"></script>
 <script>
 'use strict';
 // ------------------------------------------------------------------ config
@@ -2981,7 +2988,9 @@ function pageMe() {
     ${(S.status && S.status.astrologer_connect) ? `<button type="button" class="card link" id="astroJoin"><div class="minirow"><span class="grow"><b>${tr('Are you an astrologer?', 'क्या आप ज्योतिषी हैं?')}</b><span class="small muted" style="display:block">${tr('Register as a live astrologer', 'लाइव ज्योतिषी बनें')}</span></span>${I.chev()}</div></button>` : ''}
     <section class="card" id="prefs"><div class="setrow"><span>${tr('Language', 'भाषा')}</span><div class="seg" id="setLang"><button data-v="en" aria-pressed="${!hi()}">EN</button><button data-v="hi" aria-pressed="${hi()}">हि</button></div></div>
       <div class="setrow"><span>${tr('Chart', 'कुंडली')}</span><div class="seg" id="setSty"><button data-v="north" aria-pressed="${S.style === 'north'}">${tr('North', 'उत्तर')}</button><button data-v="south" aria-pressed="${S.style === 'south'}">${tr('South', 'दक्षिण')}</button></div></div></section>
-    <div class="chips wrap"><button class="chip" id="aboutBtn">${tr('About', 'जानकारी')}</button><button class="chip" id="clr">${tr('Clear chat', 'चैट मिटाएँ')}</button></div></main>`;
+    <div class="chips wrap"><button class="chip" id="aboutBtn">${tr('About', 'जानकारी')}</button><button class="chip" id="clr">${tr('Clear chat', 'चैट मिटाएँ')}</button></div>
+    <p class="legal"><a href="terms.html">${tr('Terms of Service', 'सेवा की शर्तें')}</a> · <a href="privacy.html">${tr('Privacy Policy', 'गोपनीयता नीति')}</a></p>
+    ${(S.status && S.status.astrologer_connect) ? `<button type="button" class="danger" id="deleteAccount">${tr('Delete account', 'खाता हटाएँ')}</button>` : ''}</main>`;
   bindHeader();
   $('#personRow').onclick = openPeople;
   $$('#setLang button').forEach(b => b.onclick = () => { S.lang = b.dataset.v; store.set('lang', S.lang); render(); });
@@ -2991,7 +3000,9 @@ function pageMe() {
   if (join) join.onclick = () => { location.hash = '#astro'; render(); };
   if (window.DrishtiConnect && DrishtiConnect.paintBanner) DrishtiConnect.paintBanner();
   if (window.DrishtiConnect && DrishtiConnect.paintWallet) DrishtiConnect.paintWallet();
-  $('#aboutBtn').onclick = () => openDetail(tr('About', 'जानकारी'), `<p class="small">${tr('Charts use the Swiss Ephemeris, Lahiri ayanamsa, whole-sign houses and Vimshottari dasha. Acharya is an AI astrologer, not a person.', 'कुंडली स्विस एफेमेरिस, लाहिरी, पूर्ण राशि भाव और विंशोत्तरी दशा से बनती है। आचार्य AI ज्योतिषी हैं, व्यक्ति नहीं।')}</p><p class="small muted">${tr('Guidance for reflection, not medical, legal or financial advice. Remedies are optional and free.', 'यह चिंतन हेतु मार्गदर्शन है, चिकित्सा, कानूनी या वित्तीय सलाह नहीं। उपाय वैकल्पिक और मुफ़्त हैं।')}</p>${(S.status && S.status.astrologer_connect) ? `<p><a href="#astro">${tr('Register as a live astrologer', 'लाइव ज्योतिषी बनें')}</a></p>` : ''}<p class="small muted">${tr('Device ID', 'डिवाइस आईडी')}: <code style="font-size:11px;word-break:break-all">${esc(DEVICE)}</code></p><p><a href="privacy.html">${tr('Privacy policy', 'गोपनीयता नीति')}</a></p>`);
+  const del = $('#deleteAccount');
+  if (del && window.DrishtiConnect && DrishtiConnect.openDelete) del.onclick = () => DrishtiConnect.openDelete();
+  $('#aboutBtn').onclick = () => openDetail(tr('About', 'जानकारी'), `<p class="small">${tr('Charts use the Swiss Ephemeris, Lahiri ayanamsa, whole-sign houses and Vimshottari dasha. Acharya is an AI astrologer, not a person.', 'कुंडली स्विस एफेमेरिस, लाहिरी, पूर्ण राशि भाव और विंशोत्तरी दशा से बनती है। आचार्य AI ज्योतिषी हैं, व्यक्ति नहीं।')}</p><p class="small muted">${tr('Guidance for reflection, not medical, legal or financial advice. Remedies are optional and free.', 'यह चिंतन हेतु मार्गदर्शन है, चिकित्सा, कानूनी या वित्तीय सलाह नहीं। उपाय वैकल्पिक और मुफ़्त हैं।')}</p>${(S.status && S.status.astrologer_connect) ? `<p><a href="#astro">${tr('Register as a live astrologer', 'लाइव ज्योतिषी बनें')}</a></p>` : ''}<p class="small muted">${tr('Device ID', 'डिवाइस आईडी')}: <code style="font-size:11px;word-break:break-all">${esc(DEVICE)}</code></p><p class="legal"><a href="terms.html">${tr('Terms of Service', 'सेवा की शर्तें')}</a> · <a href="privacy.html">${tr('Privacy Policy', 'गोपनीयता नीति')}</a></p>`);
   if (S.pendingSheet === 'people') { S.pendingSheet = null; openPeople(); }
 }
 // ------------------------------------------------------------------ rate
@@ -3123,6 +3134,6 @@ window.shareGitaCard = () => shareCard('gita');
   maybeShowRate();
 })();
 </script>
-<script src="connect.js?v=drishti-v47"></script>
+<script src="connect.js?v=drishti-v48"></script>
 </body>
 </html>

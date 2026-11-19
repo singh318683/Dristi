@@ -278,6 +278,34 @@ def create_portal(secret: str, customer: str, return_url: str) -> dict:
     return _form(secret, "billing_portal/sessions", {"customer": customer, "return_url": return_url}, None)
 
 
+def refund_payment(secret: str, intent_id: str, amount_cents: int, idempotency_key: str) -> dict:
+    intent_id = (intent_id or "").strip()
+    if not intent_id.startswith("pi_") or not intent_id.replace("_", "").isalnum():
+        raise StripeError("bad_payment")
+    return _form(secret, "refunds", {
+        "payment_intent": intent_id,
+        "amount": str(int(amount_cents)),
+    }, idempotency_key)
+
+
+def cancel_subscription(secret: str, subscription_id: str) -> dict:
+    subscription_id = (subscription_id or "").strip()
+    if not subscription_id.startswith("sub_") or not subscription_id.replace("_", "").isalnum():
+        raise StripeError("bad_payment")
+    try:
+        res = httpx.delete(
+            "https://api.stripe.com/v1/subscriptions/" + subscription_id,
+            auth=(secret, ""),
+            timeout=20,
+        )
+    except httpx.HTTPError as e:
+        log.warning("stripe unreachable error=%s", type(e).__name__)
+        raise StripeError("stripe_unavailable") from e
+    if res.status_code >= 400:
+        _reject(res)
+    return res.json()
+
+
 def create_transfer(secret: str, amount_cents: int, destination: str, idempotency_key: str) -> dict:
     # v2 accounts with stripe_transfers still receive these v1 transfers.
     return _form(secret, "transfers", {

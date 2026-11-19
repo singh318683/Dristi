@@ -8,11 +8,14 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import logging
 import secrets
 from datetime import datetime, timedelta, timezone
 
 import db
 import connect_money as money
+
+log = logging.getLogger("drishti.connect")
 
 PBKDF2_ROUNDS = 50_000
 RING_WAIT_SECONDS = 120
@@ -159,6 +162,7 @@ def ensure(con) -> None:
     _add_column(con, "ac_astrologer", "paypal_email", "paypal_email text not null default ''")
     _add_column(con, "ac_payout", "paypal_batch", "paypal_batch text not null default ''")
     _add_column(con, "ac_session", "resume_online", "resume_online int not null default 0")
+    _add_column(con, "ac_payment", "refunded_cents", "refunded_cents int not null default 0")
     con.execute("create unique index if not exists ac_session_idem on ac_session(device, idem_key)")
     con.execute("create index if not exists ac_message_session on ac_message(session_id, id)")
     con.execute("create index if not exists ac_ledger_tx on ac_ledger(tx_id)")
@@ -374,7 +378,7 @@ def astro_login(email: str, password: str) -> dict:
     with db.connect() as con:
         ensure(con)
         row = con.execute("select id, password_hash, name, status, must_change from ac_astrologer where email=?", (email,)).fetchone()
-        if not row or not check_password(password or "", row[1]):
+        if not row or row[3] == "deleted" or not check_password(password or "", row[1]):
             raise ConnectError("unauthorized", 401)
         token = secrets.token_urlsafe(32)
         con.execute("insert into ac_astro_token(token, astrologer_id, created) values(?,?,?)", (token, row[0], _iso()))
@@ -965,6 +969,140 @@ def block(device: str, astrologer_id: str) -> dict:
             "insert into ac_block(device, astrologer_id, created) values(?,?,?) on conflict(device, astrologer_id) do nothing",
             (device, astrologer_id, _iso()))
     return {"blocked": True}
+
+
+def _live_session(con, column: str, value: str):
+    return con.execute(
+        f"select 1 from ac_session where {column}=? and status in ('ringing','active')",
+        (value,)).fetchone()
+
+
+def delete_device(device: str, refund_fn=None) -> dict:
+    """Remove a seeker's live data. Card refunds use the newest Stripe top-ups first.
+
+    Ledger rows stay. The device id is taken off the wallet account and payment rows.
+    A failed refund is logged and the deletion still finishes.
+    """
+    device = (device or "").strip()
+    if not device or len(device) > 200:
+        raise ConnectError("bad_device", 400)
+    with db.connect() as con:
+        ensure(con)
+        if _live_session(con, "device", device):
+            raise ConnectError("session_active", 409)
+        stripe_cents, apple_cents = _lock_wallet(con, device)
+        payments = con.execute(
+            """select id, gross_cents, coalesce(refunded_cents, 0) from ac_payment
+               where device=? and provider='stripe' order by created desc, id desc""",
+            (device,)).fetchall()
+    left = int(stripe_cents)
+    refunded = 0
+    failed = 0
+    applied: list[tuple[str, int]] = []
+    for payment_id, gross, already in payments:
+        if left <= 0:
+            break
+        room = int(gross) - int(already)
+        if room <= 0:
+            continue
+        take = min(left, room)
+        try:
+            if refund_fn is None:
+                raise RuntimeError("stripe_not_configured")
+            refund_fn(payment_id, take, int(already))
+        except Exception as err:
+            log.warning("delete refund failed payment=%s cents=%s error=%s", payment_id, take, type(err).__name__)
+            failed += take
+            left -= take
+            continue
+        applied.append((payment_id, take))
+        refunded += take
+        left -= take
+    failed += max(0, left)
+    if apple_cents:
+        log.warning("delete cleared apple balance cents=%s", int(apple_cents))
+    with db.connect() as con:
+        ensure(con)
+        stripe_cents, apple_cents = _lock_wallet(con, device)
+        balance = stripe_cents
+        for payment_id, take in applied:
+            if balance <= 0 or take <= 0:
+                break
+            take = min(balance, take)
+            con.execute(
+                "update ac_payment set refunded_cents=coalesce(refunded_cents, 0)+? where id=?",
+                (take, payment_id))
+            _post(con, "refund-" + payment_id + "-" + str(take) + "-" + str(balance), [
+                (f"wallet:{device}", take, 0),
+                ("cash:stripe", 0, take),
+            ], "wallet_refund", payment_id)
+            balance -= take
+        if balance:
+            _post(con, "writeoff-" + hashlib.sha256(device.encode()).hexdigest()[:16], [
+                (f"wallet:{device}", balance, 0),
+                ("writeoff:refund", 0, balance),
+            ], "wallet_writeoff", "")
+        if apple_cents:
+            _post(con, "appleoff-" + hashlib.sha256(device.encode()).hexdigest()[:16], [
+                (f"wallet:{device}", int(apple_cents), 0),
+                ("writeoff:apple", 0, int(apple_cents)),
+            ], "wallet_writeoff", "")
+        _set_wallet(con, device, 0, 0)
+        session_ids = [row[0] for row in con.execute("select id from ac_session where device=?", (device,)).fetchall()]
+        for session_id in session_ids:
+            con.execute("delete from ac_message where session_id=?", (session_id,))
+        con.execute("delete from ac_session where device=?", (device,))
+        con.execute("update ac_ledger set account=? where account=?", ("wallet:removed", "wallet:" + device))
+        con.execute("update ac_payment set device='' where device=?", (device,))
+        con.execute("update ac_report set device='' where device=?", (device,))
+        con.execute("update ac_apple_question set device='' where device=?", (device,))
+        con.execute("delete from ac_block where device=?", (device,))
+    return {
+        "ok": True,
+        "refunded_cents": refunded,
+        "refund_failed_cents": failed,
+        "apple_cents_cleared": int(apple_cents),
+    }
+
+
+def delete_astrologer(astrologer_id: str, cancel_fn=None) -> dict:
+    """Unlist an astrologer, cancel the plan, and keep payout records.
+
+    Unpaid earnings of at least $1 stay for the weekly payout. Less than $1 is forfeited.
+    """
+    with db.connect() as con:
+        ensure(con)
+        row = con.execute(
+            "select stripe_subscription, status from ac_astrologer where id=?",
+            (astrologer_id,)).fetchone()
+        if not row:
+            raise ConnectError("not_found", 404)
+        if row[1] == "deleted":
+            return {"ok": True, "already": True, "forfeited": False, "unpaid_cents": 0}
+        if _live_session(con, "astrologer_id", astrologer_id):
+            raise ConnectError("session_active", 409)
+        subscription = row[0] or ""
+        unpaid = con.execute(
+            "select coalesce(sum(amount_cents), 0) from ac_earning where astrologer_id=? and payout_id is null",
+            (astrologer_id,)).fetchone()
+    unpaid_cents = int(unpaid[0] if unpaid else 0)
+    if subscription and cancel_fn:
+        try:
+            cancel_fn(subscription)
+        except Exception as err:
+            log.warning("delete subscription cancel failed subscription=%s error=%s", subscription, type(err).__name__)
+    with db.connect() as con:
+        ensure(con)
+        if unpaid_cents < 100:
+            con.execute(
+                "update ac_earning set payout_id='forfeited' where astrologer_id=? and payout_id is null",
+                (astrologer_id,))
+        con.execute("delete from ac_astro_token where astrologer_id=?", (astrologer_id,))
+        con.execute(
+            """update ac_astrologer set status='deleted', online=0, photo='', bio='',
+               plan_status='canceled', password_hash=? where id=?""",
+            (hash_password(secrets.token_urlsafe(24)), astrologer_id))
+    return {"ok": True, "forfeited": unpaid_cents < 100, "unpaid_cents": unpaid_cents}
 
 
 def set_stripe_account(astrologer_id: str, account_id: str) -> None:

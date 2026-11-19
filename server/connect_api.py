@@ -593,6 +593,38 @@ async def api_livekit_webhook(request: Request):
     return {"ok": True}
 
 
+class DeleteIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    device: str
+
+
+@router.post("/api/connect/account/delete")
+def api_delete_device(body: DeleteIn):
+    _gate()
+    secret = (os.environ.get("STRIPE_SECRET_KEY") or "").strip()
+
+    def refund(payment_id, cents, already):
+        if not secret:
+            raise connect_stripe.StripeError("stripe_not_configured")
+        return connect_stripe.refund_payment(secret, payment_id, cents, f"refund-{payment_id}-{already}-{cents}")
+
+    return _run(lambda: store.delete_device(body.device, refund))
+
+
+@router.post("/api/connect/astro/delete")
+def api_delete_astro(request: Request):
+    _gate()
+    astro_id = _astro_id(request)
+    secret = (os.environ.get("STRIPE_SECRET_KEY") or "").strip()
+
+    def cancel(subscription_id):
+        if not secret:
+            raise connect_stripe.StripeError("stripe_not_configured")
+        return connect_stripe.cancel_subscription(secret, subscription_id)
+
+    return _run(lambda: store.delete_astrologer(astro_id, cancel))
+
+
 @router.post("/api/connect/report")
 def api_report(body: ReportIn):
     _gate()

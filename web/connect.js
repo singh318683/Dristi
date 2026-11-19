@@ -118,6 +118,7 @@
     invalid_rate: ['Enter a per-minute rate between $0.30 and $5.00.', 'प्रति मिनट दर $0.30 से $5.00 के बीच डालें।'],
     bad_rate: ['Enter a per-minute rate between $0.30 and $5.00.', 'प्रति मिनट दर $0.30 से $5.00 के बीच डालें।'],
     payment_pending: ['The payment is still pending. Your wallet will update when it clears.', 'भुगतान अभी लंबित है। पूरा होते ही वॉलेट अपडेट होगा।'],
+    session_active: ['End the session first, then delete the account.', 'पहले सत्र समाप्त करें, फिर खाता हटाएँ।'],
   };
   function friendly(code) {
     const row = PORTAL_ERRORS[code];
@@ -212,6 +213,7 @@
       ${short ? `<div class="connect-packs">${packBtn('wallet_5', '$5')}${packBtn('wallet_10', '$10')}${packBtn('wallet_20', '$20')}</div>
       <p class="sub" id="needMore">${tr('Add at least ' + dollars(need) + ' to start. Tap an amount above.', 'शुरू करने के लिए कम से कम ' + dollars(need) + ' जोड़ें। ऊपर कोई राशि चुनें।')}</p>` : ''}
       <button type="button" class="btn block" id="connectStart">${startLabel}</button>
+      <p class="legal">${tr('By continuing you agree to the', 'जारी रखकर आप मानते हैं')} <a href="terms.html">${tr('Terms', 'नियम')}</a> ${tr('and', 'और')} <a href="privacy.html">${tr('Privacy', 'गोपनीयता')}</a>.</p>
     </div>`);
     document.querySelectorAll('#sheet [data-pack]').forEach(b => b.onclick = () => topup(b.dataset.pack).then(() => checkout(id, mode)).catch(showErr));
     const start = $('#connectStart');
@@ -582,7 +584,7 @@
     </div>`, {live: true});
     $('#connectEnd').onclick = () => finish().catch(showErr);
     $('#connectForm').onsubmit = e => { e.preventDefault(); send().catch(showErr); };
-    $('#connectReport').onclick = () => report(session).catch(showErr);
+    $('#connectReport').onclick = () => openReport(session, null);
     $('#connectBlock').onclick = () => block(session).catch(showErr);
     paintClock();
     showMessages([]);
@@ -921,11 +923,19 @@
           <button type="button" class="btn quiet" id="connectSpeaker" aria-pressed="false">${tr('Speaker', 'स्पीकर')}</button>
           <button type="button" class="btn" id="connectEnd">${tr('End', 'समाप्त')}</button>
         </div>
+        <div class="call-controls">
+          <button type="button" class="btn quiet" id="connectReport">${tr('Report', 'रिपोर्ट')}</button>
+          <button type="button" class="btn quiet" id="connectBlock">${tr('Block', 'ब्लॉक')}</button>
+        </div>
       </div>
     </div>`, {live: true});
     $('#connectEnd').onclick = () => finish().catch(showErr);
     bindMute($('#connectMute'));
     bindSpeaker($('#connectSpeaker'));
+    const reportCall = $('#connectReport');
+    if (reportCall) reportCall.onclick = () => openReport(session, null);
+    const blockCall = $('#connectBlock');
+    if (blockCall) blockCall.onclick = () => block(session).catch(showErr);
     paintClock();
     if (session.status === 'active') joinVoice();
   }
@@ -936,10 +946,42 @@
     await api('/api/connect/sessions/' + id + '/end', {device: DEVICE});
     closeSheet();
   }
-  async function report(session) {
-    const reason = tr('Report from the session', 'सत्र से रिपोर्ट');
-    await api('/api/connect/report', {device: DEVICE, astrologer_id: session.astrologer_id, session_id: session.id, reason: reason});
-    if (window.toast) toast(tr('Report sent', 'रिपोर्ट भेज दी गई'));
+  function openReport(session, auth) {
+    const choices = [
+      [tr('Harassment', 'उत्पीड़न'), tr('Harassment', 'उत्पीड़न')],
+      [tr('Sexual content', 'यौन सामग्री'), tr('Sexual content', 'यौन सामग्री')],
+      [tr('Scam or payment', 'धोखा या भुगतान'), tr('Scam or payment', 'धोखा या भुगतान')],
+    ];
+    sheet(`<div class="sheet connect" role="dialog" aria-modal="true" aria-labelledby="reportTitle">
+      <button type="button" class="sheet-handle" aria-label="${tr('Drag down to close', 'बंद करने के लिए नीचे खींचें')}"><i></i></button>
+      <h3 id="reportTitle">${tr('Report', 'रिपोर्ट')}</h3>
+      <div class="chips wrap" id="reportReasons">${choices.map((item, i) => `<button type="button" class="chip" data-reason="${i}">${esc(item[0])}</button>`).join('')}</div>
+      <textarea class="input" id="reportText" rows="3" maxlength="300" aria-label="${tr('Or describe what happened', 'या बताएँ क्या हुआ')}" placeholder="${tr('Or describe what happened', 'या बताएँ क्या हुआ')}"></textarea>
+      <button type="button" class="btn block" id="reportSend">${tr('Send report', 'रिपोर्ट भेजें')}</button>
+    </div>`);
+    let picked = '';
+    document.querySelectorAll('#reportReasons [data-reason]').forEach(b => b.onclick = () => {
+      picked = choices[Number(b.dataset.reason)][1];
+      document.querySelectorAll('#reportReasons [data-reason]').forEach(x => x.setAttribute('aria-pressed', x === b ? 'true' : 'false'));
+    });
+    const send = $('#reportSend');
+    if (send) send.onclick = () => {
+      const typed = ($('#reportText') && $('#reportText').value || '').trim();
+      const reason = typed || picked;
+      if (reason.length < 3) {
+        showErr(new Error(tr('Choose a reason or write a short note.', 'कोई कारण चुनें या छोटा नोट लिखें।')));
+        return;
+      }
+      api('/api/connect/report', {
+        device: (session && session.device) || DEVICE,
+        astrologer_id: session.astrologer_id,
+        session_id: session.id || '',
+        reason: reason,
+      }, auth || null).then(() => {
+        if (window.closeSheet) closeSheet();
+        if (window.toast) toast(tr('Report sent', 'रिपोर्ट भेज दी गई'));
+      }).catch(showErr);
+    };
   }
   async function block(session) {
     await api('/api/connect/block', {device: DEVICE, astrologer_id: session.astrologer_id});
@@ -1008,7 +1050,8 @@
       <input class="input" id="regRate" inputmode="decimal" aria-label="${tr('Your rate per minute', 'आपका प्रति मिनट शुल्क')}" placeholder="${tr('Rate per minute, e.g. 1.00', 'प्रति मिनट शुल्क, जैसे 1.00')}">
       <p class="sub">${tr('Same rate for chat and call.', 'चैट और कॉल का एक ही शुल्क।')} $${(p.low / 100).toFixed(2)}–$${(p.high / 100).toFixed(2)}</p>
       <label class="sub">${tr('Photo', 'फ़ोटो')}<input id="regPhoto" type="file" accept="image/*"></label>
-      <button class="btn block" type="submit">${tr('Create account', 'खाता बनाएँ')}</button>
+      <label class="agree"><input type="checkbox" id="regAgree"> <span>${tr('I agree to the', 'मैं मानता/मानती हूँ')} <a href="terms.html">${tr('Terms of Service', 'सेवा की शर्तें')}</a> ${tr('and', 'और')} <a href="privacy.html">${tr('Privacy Policy', 'गोपनीयता नीति')}</a>.</span></label>
+      <button class="btn block" type="submit" id="regSubmit" disabled>${tr('Create account', 'खाता बनाएँ')}</button>
       <button class="btn quiet" type="button" id="showLogin">${tr('I already have an account', 'मेरा खाता पहले से है')}</button></form>`;
   }
   function seekerLabel(session) {
@@ -1099,9 +1142,7 @@
     const form = $('#connectForm');
     if (form) form.onsubmit = e => { e.preventDefault(); sendAstro(token).catch(showErr); };
     const reportBtn = $('#connectReport');
-    if (reportBtn) reportBtn.onclick = () => api('/api/connect/report', {
-      device: session.device, astrologer_id: session.astrologer_id, session_id: session.id, reason: tr('Report from the session', 'सत्र से रिपोर्ट'),
-    }, token).then(() => { if (window.toast) toast(tr('Report sent', 'रिपोर्ट भेज दी गई')); }).catch(showErr);
+    if (reportBtn) reportBtn.onclick = () => openReport(session, token);
     const blockBtn = $('#connectBlock');
     if (blockBtn) blockBtn.onclick = () => api('/api/connect/block', {device: session.device, astrologer_id: session.astrologer_id}, token).then(() => {
       if (window.toast) toast(tr('Seeker blocked', 'साधक ब्लॉक हो गए'));
@@ -1346,7 +1387,10 @@
           <button type="button" class="btn" id="managePlan">${tr('Manage plan', 'योजना प्रबंधित करें')}</button>
           <button type="button" class="btn quiet" id="planMonth">${tr('Monthly', 'मासिक')} ${esc(plans.month)}</button>
           <button type="button" class="btn quiet" id="planYear">${tr('Yearly', 'वार्षिक')} ${esc(plans.year)}</button></div>
-        <button type="button" class="btn quiet astro-switch" id="switchUserSettings">${tr('Switch to User mode', 'उपयोगकर्ता मोड पर जाएँ')}</button>`;
+        <div class="card"><h3>${tr('Account', 'खाता')}</h3>
+          <p class="legal"><a href="terms.html">${tr('Terms of Service', 'सेवा की शर्तें')}</a> · <a href="privacy.html">${tr('Privacy Policy', 'गोपनीयता नीति')}</a></p>
+          <button type="button" class="danger" id="deleteAstro">${tr('Delete astrologer account', 'ज्योतिषी खाता हटाएँ')}</button>
+          <p class="sub">${tr('Your public listing is removed as soon as you confirm.', 'पुष्टि करते ही आपकी सार्वजनिक प्रोफ़ाइल हट जाती है।')}</p></div>`;
       $('#rateForm').onsubmit = e => {
         e.preventDefault();
         const dollars = parseFloat(String($('#rateDollars').value).replace(/[^0-9.]/g, ''));
@@ -1361,8 +1405,8 @@
       };
       const change = $('#payoutChange');
       if (change) change.onclick = openPayoutChooser;
-      const settingsSwitch = $('#switchUserSettings');
-      if (settingsSwitch) settingsSwitch.onclick = switchToUser;
+      const deleteAstro = $('#deleteAstro');
+      if (deleteAstro) deleteAstro.onclick = () => openAstroDelete(token);
       bindPaidButtons(token);
       const manage = $('#managePlan');
       if (manage) manage.onclick = () => {
@@ -1475,8 +1519,15 @@
         const forgot = $('#forgotPass');
         if (forgot) forgot.onclick = () => { const note = $('#forgotNote'); if (note) note.hidden = false; };
       };
+      const agree = $('#regAgree');
+      const regSubmit = $('#regSubmit');
+      if (agree && regSubmit) agree.onchange = () => { regSubmit.disabled = !agree.checked; };
       $('#astroRegister').onsubmit = async e => {
         e.preventDefault();
+        if (!agree || !agree.checked) {
+          showErr(new Error(tr('Agree to the Terms of Service and Privacy Policy to continue.', 'जारी रखने के लिए सेवा की शर्तें और गोपनीयता नीति मानें।')));
+          return;
+        }
         const dollars = parseFloat(String($('#regRate').value).replace(/[^0-9.]/g, ''));
         if (!isFinite(dollars) || dollars < 0.3 || dollars > 5) {
           showErr(new Error(tr('Enter a per-minute rate between $0.30 and $5.00, for example 1.50', 'प्रति मिनट दर $0.30 से $5.00 के बीच डालें, जैसे 1.50')));
@@ -1733,6 +1784,7 @@
       <h3 id="walletTitle">${tr('Add money', 'पैसे जोड़ें')}</h3>
       <p class="sub">${tr('Choose an amount. It is added to your wallet.', 'राशि चुनें। यह आपके वॉलेट में जुड़ जाएगी।')}</p>
       <div class="connect-packs"><button type="button" class="btn pack" data-pack="wallet_5">$5</button><button type="button" class="btn pack" data-pack="wallet_10">$10</button><button type="button" class="btn pack" data-pack="wallet_20">$20</button></div>
+      <p class="legal">${tr('By continuing you agree to the', 'जारी रखकर आप मानते हैं')} <a href="terms.html">${tr('Terms of Service', 'सेवा की शर्तें')}</a> ${tr('and', 'और')} <a href="privacy.html">${tr('Privacy Policy', 'गोपनीयता नीति')}</a>.</p>
     </div>`);
     document.querySelectorAll('#sheet [data-pack]').forEach(b => b.onclick = () => {
       topup(b.dataset.pack).then(() => {
@@ -1756,7 +1808,75 @@
       card.innerHTML = `<p class="small muted">${tr('Wallet is unavailable right now.', 'वॉलेट अभी उपलब्ध नहीं है।')}</p>`;
     }
   }
-  window.DrishtiConnect = {takeover: takeover, offer: offer, list: list, stop: stop, paintBanner: paintBanner, paintWallet: paintWallet, switchToAstro: switchToAstro};
+  function clearLocalAccount() {
+    try {
+      (S.profiles || []).forEach(p => localStorage.removeItem('dr-chat-' + p.id));
+      S.profiles = [];
+      S.active = null;
+      S.charts = {};
+      store.set('profiles', []);
+      store.set('active', null);
+    } catch (e) { /* storage can be blocked */ }
+  }
+  function openDelete() {
+    sheet(`<div class="sheet connect" role="dialog" aria-modal="true" aria-labelledby="deleteTitle">
+      <button type="button" class="sheet-handle" aria-label="${tr('Drag down to close', 'बंद करने के लिए नीचे खींचें')}"><i></i></button>
+      <h3 id="deleteTitle">${tr('Delete account', 'खाता हटाएँ')}</h3>
+      <p>${tr('This removes this phone’s Drishti account.', 'यह इस फ़ोन का दृष्टि खाता हटाता है।')}</p>
+      <p><b>${tr('Deleted now', 'अभी हटेगा')}</b><br>${tr('Profiles and birth details on this phone, Acharya chats, and saved charts.', 'इस फ़ोन की प्रोफ़ाइल और जन्म विवरण, आचार्य चैट, और सहेजी कुंडलियाँ।')}</p>
+      <p><b>${tr('Refund', 'वापसी')}</b><br>${tr('The remaining wallet balance will be refunded to your card in 5–10 business days.', 'बचा वॉलेट बैलेंस 5–10 कार्यदिवस में आपके कार्ड पर लौटेगा।')}</p>
+      <div class="card" style="background:var(--sunk);box-shadow:none"><b>${tr('Kept', 'रहेगा')}</b><br><span class="small">${tr('Payment and session records we must retain for taxes and disputes. Card numbers are never stored.', 'कर और विवाद के लिए भुगतान और सत्र के रिकॉर्ड। कार्ड नंबर कभी नहीं रखे जाते।')}</span></div>
+      <p class="sub">${tr('Type DELETE to confirm.', 'पुष्टि के लिए DELETE लिखें।')}</p>
+      <input class="input" id="deleteWord" autocomplete="off" aria-label="${tr('Type DELETE', 'DELETE लिखें')}">
+      <button type="button" class="btn badfill block" id="deleteGo" disabled>${tr('Delete account', 'खाता हटाएँ')}</button>
+      <button type="button" class="btn sec2 block" id="deleteCancel">${tr('Cancel', 'रद्द करें')}</button>
+    </div>`);
+    const word = $('#deleteWord');
+    const go = $('#deleteGo');
+    if (word && go) word.oninput = () => { go.disabled = word.value !== 'DELETE'; };
+    const cancel = $('#deleteCancel');
+    if (cancel) cancel.onclick = () => { if (window.closeSheet) closeSheet(); };
+    if (go) go.onclick = () => {
+      api('/api/connect/account/delete', {device: DEVICE}).then(result => {
+        clearLocalAccount();
+        if (window.closeSheet) closeSheet();
+        const failed = Number(result && result.refund_failed_cents) || 0;
+        if (window.toast) toast(failed
+          ? tr('Account deleted. A refund still needs to be finished. Email support if it does not arrive.', 'खाता हट गया। एक वापसी अभी पूरी होनी है। न आए तो सहायता को लिखें।')
+          : tr('Account deleted. A card refund, if any, arrives in 5–10 business days.', 'खाता हट गया। कार्ड पर वापसी हो तो 5–10 कार्यदिवस में आएगी।'));
+        if (typeof render === 'function') render();
+      }).catch(showErr);
+    };
+  }
+  function openAstroDelete(token) {
+    sheet(`<div class="sheet connect" role="dialog" aria-modal="true" aria-labelledby="deleteAstroTitle">
+      <button type="button" class="sheet-handle" aria-label="${tr('Drag down to close', 'बंद करने के लिए नीचे खींचें')}"><i></i></button>
+      <h3 id="deleteAstroTitle">${tr('Delete astrologer account', 'ज्योतिषी खाता हटाएँ')}</h3>
+      <p><b>${tr('Removed now', 'अभी हटेगा')}</b><br>${tr('Your public profile, photo, and listing. You go offline and cannot be booked.', 'आपकी सार्वजनिक प्रोफ़ाइल, फ़ोटो और लिस्टिंग। आप ऑफ़लाइन हो जाते हैं और बुकिंग बंद हो जाती है।')}</p>
+      <p><b>${tr('Earnings', 'कमाई')}</b><br>${tr('Available earnings of $1.00 or more are paid on the next weekly payout. Amounts under $1.00 cannot be sent and are forfeited.', '$1.00 या अधिक उपलब्ध कमाई अगले साप्ताहिक भुगतान में जाएगी। $1.00 से कम भेजा नहीं जा सकता और वह छोड़ दी जाती है।')}</p>
+      <div class="card" style="background:var(--sunk);box-shadow:none"><span class="small">${tr('The monthly or yearly plan is cancelled in Stripe. Payout and tax records are kept. Sign-in for this account stops working.', 'मासिक या वार्षिक योजना Stripe में रद्द होती है। भुगतान और कर के रिकॉर्ड रहते हैं। इस खाते से साइन-इन बंद हो जाता है।')}</span></div>
+      <p class="sub">${tr('Type DELETE to confirm.', 'पुष्टि के लिए DELETE लिखें।')}</p>
+      <input class="input" id="deleteWord" autocomplete="off" aria-label="${tr('Type DELETE', 'DELETE लिखें')}">
+      <button type="button" class="btn badfill block" id="deleteGo" disabled>${tr('Delete astrologer account', 'ज्योतिषी खाता हटाएँ')}</button>
+      <button type="button" class="btn sec2 block" id="deleteCancel">${tr('Cancel', 'रद्द करें')}</button>
+    </div>`);
+    const word = $('#deleteWord');
+    const go = $('#deleteGo');
+    if (word && go) word.oninput = () => { go.disabled = word.value !== 'DELETE'; };
+    const cancel = $('#deleteCancel');
+    if (cancel) cancel.onclick = () => { if (window.closeSheet) closeSheet(); };
+    if (go) go.onclick = () => {
+      api('/api/connect/astro/delete', {}, token).then(() => {
+        sessionStorage.removeItem('dr-astro-token');
+        sessionStorage.removeItem('dr-astro-status');
+        sessionStorage.removeItem('dr-astro-must-change');
+        if (window.closeSheet) closeSheet();
+        if (window.toast) toast(tr('Astrologer account deleted', 'ज्योतिषी खाता हट गया'));
+        switchToUser();
+      }).catch(showErr);
+    };
+  }
+  window.DrishtiConnect = {takeover: takeover, offer: offer, list: list, stop: stop, paintBanner: paintBanner, paintWallet: paintWallet, switchToAstro: switchToAstro, openDelete: openDelete};
   if (store.get('app-mode') === 'astro' && sessionStorage.getItem('dr-astro-token') && location.hash !== '#astro' && location.hash !== '#admin') {
     location.hash = '#astro';
   }

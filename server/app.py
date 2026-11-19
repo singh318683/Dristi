@@ -1086,4 +1086,9 @@ def privacy():
     return FileResponse(os.path.join(WEB, "privacy.html"))
 
 
+@app.get("/terms")
+def terms():
+    return FileResponse(os.path.join(WEB, "terms.html"))
+
+
 app.mount("/", StaticFiles(directory=WEB), name="web")
