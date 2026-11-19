@@ -91,6 +91,16 @@ def _astro_id(request: Request, *, allow_password_change: bool = False) -> str:
     return astro_id
 
 
+def _ios_shell(request: Request) -> bool:
+    """True when the iOS app marks the request. Safari does not send this."""
+    return (request.headers.get("x-drishti-shell") or "").strip().lower() == "ios"
+
+
+def _refuse_native_plan(request: Request) -> None:
+    if _ios_shell(request):
+        raise HTTPException(403, "plan_not_in_app")
+
+
 def _run(fn):
     try:
         return fn()
@@ -691,6 +701,7 @@ def api_admin_reset(astrologer_id: str, request: Request):
 @router.post("/api/connect/astro/trial")
 def api_trial(request: Request):
     _gate()
+    _refuse_native_plan(request)
     astro_id = _astro_id(request)
     return _run(lambda: store.grant_trial(astro_id))
 
@@ -698,6 +709,7 @@ def api_trial(request: Request):
 @router.post("/api/connect/astro/plan")
 def api_plan(body: PlanIn, request: Request):
     _gate()
+    _refuse_native_plan(request)
     astro_id = _astro_id(request)
     _run(lambda: store.protect_demo(astro_id))
     secret = (os.environ.get("STRIPE_SECRET_KEY") or "").strip()
@@ -728,6 +740,7 @@ def api_plan(body: PlanIn, request: Request):
 @router.post("/api/connect/astro/portal")
 def api_portal(request: Request):
     _gate()
+    _refuse_native_plan(request)
     astro_id = _astro_id(request)
     _run(lambda: store.protect_demo(astro_id))
     secret = (os.environ.get("STRIPE_SECRET_KEY") or "").strip()

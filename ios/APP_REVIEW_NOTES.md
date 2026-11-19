@@ -17,7 +17,7 @@ Also keep the existing LiveKit variables (`LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIV
 
 The demo astrologer is stored as **offline**. An older Android build that shares a database will not list it. Review credit is a separate balance. It cannot pay a real astrologer, and the demo never creates a payout, Stripe transfer, or PayPal payout.
 
-**Astrologer listing plan.** Live chat and voice are person-to-person consultations (Stripe, guideline 3.1.3(d)). The Acharya question is In-App Purchase. The monthly or yearly fee an astrologer pays to keep a listing is still charged with Stripe inside the app. That fee is not a person-to-person consultation. App Review may decide it must use In-App Purchase. Confirm that before you submit, or be ready for Apple to ask about it. This build does not change that fee.
+**Astrologer listing plan.** The iOS app does not sell the listing plan. Astrologer mode is sign-in only. There is no registration form, no free-trial button, and no monthly or yearly price. If the account has no active plan, the app says it is not active yet and offers Terms, Privacy, and delete. It does not link to a website checkout. The 90-day trial and the Stripe listing plan stay on the website when someone opens it in Safari. Live chats and calls remain person-to-person payments under guideline 3.1.3(d). The Acharya question remains In-App Purchase.
 
 ## For App Review
 
@@ -28,7 +28,7 @@ Drishti is a Vedic chart app with an optional marketplace of live astrologers. Y
 - Live chat and live voice are consultations between the user and an independent astrologer. The user pays from a wallet funded by card through Stripe. We offer this under guideline 3.1.3(d) (person-to-person services).
 - The review demo does not charge a card. It uses review credit, described below.
 - Each question to Acharya, the in-app AI astrologer, is a digital feature sold with In-App Purchase at $0.99. The chart, matching, and horoscope are free.
-- Astrologers can also pay a monthly or yearly listing fee through Stripe. That fee is separate from the live consultation and from the Acharya question.
+- The listing fee an astrologer pays to be listed is not part of this app. It is offered on the website in Safari. The iOS app has no price and no button for it.
 
 ### See the demo astrologer
 
@@ -56,13 +56,13 @@ The rate is the minimum, $0.30 per minute, taken from the review credit. A five-
 
 ### Astrologer mode
 
-1. Open Profile and tap **Are you an astrologer?**, or open the Astrologer screen.
-2. Tap **I already have an account**.
+1. Open Profile and tap **Are you an astrologer?** The line under it says **Sign in**.
+2. Enter the email and password. The app does not ask you to create an account.
 3. Email: `<DEMO_ASTRO_EMAIL>`
 4. Password: `<DEMO_ASTRO_PASSWORD>`
-5. You are in Astrologer mode, with Dashboard, Sessions, Earnings, and Settings.
+5. You are in Astrologer mode, with Dashboard, Sessions, Earnings, and Settings. Settings has no listing plan and no price.
 
-This is a shared review login. It cannot change the payout account, buy a listing plan, change the rate, or delete the shared account. Those actions are refused so the login keeps working for the next reviewer and cannot pay anyone.
+This is a shared review login. It cannot change the payout account, change the rate, or delete the shared account. Those actions are refused so the login keeps working for the next reviewer. The demo account is already active, so you will not see the inactive-account screen.
 
 ### Delete account
 

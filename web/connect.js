@@ -43,6 +43,7 @@
   function api(path, body, auth) {
     const headers = {'Content-Type': 'application/json'};
     if (auth) headers.Authorization = 'Bearer ' + auth;
+    if (nativeShell()) headers['X-Drishti-Shell'] = 'ios';
     return fetch((window.API || '') + path, {
       method: body ? 'POST' : 'GET',
       cache: 'no-store',
@@ -1099,6 +1100,13 @@
     if (back) back.onclick = () => { if (location.hash) location.hash = ''; };
     return $('#portalBody');
   }
+  function nativeShell() {
+    try { return typeof inIosApp === 'function' && inIosApp(); } catch (e) { return false; }
+  }
+  function listingInactive(money) {
+    const status = String((money && money.plan_status) || 'none');
+    return status === 'none' || status === 'canceled' || status === '';
+  }
   function planCards() {
     const days = (S.status && S.status.provider_trial_days) || 90;
     const month = (S.status && S.status.provider_monthly_label) || '$9.99';
@@ -1108,6 +1116,7 @@
     return {days, month, year, low, high};
   }
   function startPaidPlan(token, interval) {
+    if (nativeShell()) return Promise.resolve();
     return api('/api/connect/astro/plan', {interval: interval}, token).then(d => { if (d.url) location.href = d.url; });
   }
   function bindPaidButtons(token, monthId, yearId) {
@@ -1133,7 +1142,7 @@
       <p class="sub">${tr('A card is needed only for the paid plan. It starts when the free trial ends.', 'कार्ड केवल सशुल्क योजना के लिए चाहिए। यह निःशुल्क परीक्षण समाप्त होने पर शुरू होती है।')}</p></div>`;
   }
   function revealPaidPlans(money, token) {
-    if ($('#paidPlans')) return;
+    if (nativeShell() || $('#paidPlans')) return;
     const earn = $('#earnings');
     const html = paidPlanHtml(money);
     if (earn) earn.insertAdjacentHTML('beforebegin', html);
@@ -1156,6 +1165,42 @@
       <label class="agree"><input type="checkbox" id="regAgree"> <span>${tr('I agree to the', 'मैं मानता/मानती हूँ')} <a href="terms.html">${tr('Terms of Service', 'सेवा की शर्तें')}</a> ${tr('and', 'और')} <a href="privacy.html">${tr('Privacy Policy', 'गोपनीयता नीति')}</a>.</span></label>
       <button class="btn block" type="submit" id="regSubmit" disabled>${tr('Create account', 'खाता बनाएँ')}</button>
       <button class="btn quiet" type="button" id="showLogin">${tr('I already have an account', 'मेरा खाता पहले से है')}</button></form>`;
+  }
+  function signInForm() {
+    return `<form class="card" id="astroLogin"><h3>${tr('Sign in', 'साइन इन')}</h3>
+      <p class="sub">${tr('Sign in to answer live chats and calls.', 'लाइव चैट और कॉल का जवाब देने के लिए साइन इन करें।')}</p>
+      <input class="input" id="astroEmail" type="email" autocomplete="username" aria-label="${tr('Email', 'ईमेल')}" placeholder="${tr('Email', 'ईमेल')}">
+      <input class="input" id="astroPass" type="password" autocomplete="current-password" aria-label="${tr('Password', 'पासवर्ड')}" placeholder="${tr('Password', 'पासवर्ड')}">
+      <button class="btn block" type="submit">${tr('Sign in', 'साइन इन')}</button>
+      <button class="btn quiet" type="button" id="forgotPass">${tr('Forgot password?', 'पासवर्ड भूल गए?')}</button>
+      <p class="sub" id="forgotNote" hidden>${tr('Contact Drishti support to reset your password.', 'पासवर्ड रीसेट करने के लिए दृष्टि सहायता से संपर्क करें।')} <a href="mailto:ikshanasolution123@gmail.com">ikshanasolution123@gmail.com</a></p></form>`;
+  }
+  function bindSignIn() {
+    // TODO: when SMTP_HOST, SMTP_USER, and SMTP_PASSWORD are set, email a one-time reset link instead of asking the astrologer to contact support.
+    const form = $('#astroLogin');
+    if (form) form.onsubmit = async e => {
+      e.preventDefault();
+      try {
+        const got = await api('/api/connect/astro/login', {email: $('#astroEmail').value, password: $('#astroPass').value});
+        rememberAstro(got);
+        render();
+      } catch (err) { showSignInErr(err); }
+    };
+    const forgot = $('#forgotPass');
+    if (forgot) forgot.onclick = () => { const note = $('#forgotNote'); if (note) note.hidden = false; };
+  }
+  function showInactiveAstro(body, me) {
+    body.innerHTML = `<h2>${tr('Account', 'खाता')}</h2>
+      <div class="card"><p>${tr("Your astrologer account isn't active yet. Sign in again once it is active.", 'आपका ज्योतिषी खाता अभी सक्रिय नहीं है। सक्रिय होने पर फिर साइन इन करें।')}</p></div>
+      <div class="card"><h3>${tr('Account', 'खाता')}</h3>
+        <p class="sub">${tr('You can review the Terms of Service and Privacy Policy, or delete this account.', 'आप सेवा की शर्तें और गोपनीयता नीति देख सकते हैं, या यह खाता हटा सकते हैं।')}</p>
+        <p class="legal"><a href="terms.html">${tr('Terms of Service', 'सेवा की शर्तें')}</a> · <a href="privacy.html">${tr('Privacy Policy', 'गोपनीयता नीति')}</a></p>
+        <button type="button" class="danger" id="deleteAstro">${tr('Delete astrologer account', 'ज्योतिषी खाता हटाएँ')}</button></div>
+      <button type="button" class="btn quiet astro-switch" id="switchUserInactive">${tr('Switch to User mode', 'उपयोगकर्ता मोड पर जाएँ')}</button>`;
+    const leave = $('#switchUserInactive');
+    if (leave) leave.onclick = switchToUser;
+    const remove = $('#deleteAstro');
+    if (remove) remove.onclick = () => openAstroDelete(sessionStorage.getItem('dr-astro-token') || '');
   }
   function seekerLabel(session) {
     return (session && session.seeker_name) || tr('Seeker', 'साधक');
@@ -1483,13 +1528,13 @@
         <div class="card"><h3>${tr('Payout method', 'भुगतान तरीका')}</h3><p>${money.payout_method === 'paypal' ? 'PayPal' : 'Stripe'}</p>
           <button type="button" class="btn quiet" id="payoutChange">${tr('Change', 'बदलें')}</button>
           <p class="sub">${tr('Another method can be added here later.', 'बाद में यहाँ दूसरा तरीका जोड़ा जा सकता है।')}</p></div>
-        <div class="card"><h3>${tr('Plan', 'योजना')}</h3>
+        ${nativeShell() ? '' : `<div class="card"><h3>${tr('Plan', 'योजना')}</h3>
           <p>${plans.days} ${tr('day free trial, then', 'दिन का निःशुल्क परीक्षण, फिर')} ${esc(plans.month)} ${tr('a month or', 'माह या')} ${esc(plans.year)} ${tr('a year.', 'वर्ष।')}</p>
           <p class="sub">${tr('You keep 95%. Drishti keeps 5%.', 'आप 95% रखते हैं। दृष्टि 5% रखती है।')}</p>
           <p class="sub">${esc(trialNote(money))}</p>
           <button type="button" class="btn" id="managePlan">${tr('Manage plan', 'योजना प्रबंधित करें')}</button>
           <button type="button" class="btn quiet" id="planMonth">${tr('Monthly', 'मासिक')} ${esc(plans.month)}</button>
-          <button type="button" class="btn quiet" id="planYear">${tr('Yearly', 'वार्षिक')} ${esc(plans.year)}</button></div>
+          <button type="button" class="btn quiet" id="planYear">${tr('Yearly', 'वार्षिक')} ${esc(plans.year)}</button></div>`}
         <div class="card"><h3>${tr('Account', 'खाता')}</h3>
           <p class="legal"><a href="terms.html">${tr('Terms of Service', 'सेवा की शर्तें')}</a> · <a href="privacy.html">${tr('Privacy Policy', 'गोपनीयता नीति')}</a></p>
           <button type="button" class="danger" id="deleteAstro">${tr('Delete astrologer account', 'ज्योतिषी खाता हटाएँ')}</button>
@@ -1602,25 +1647,15 @@
       return;
     }
     if (!token) {
+      if (nativeShell()) {
+        body.innerHTML = signInForm();
+        bindSignIn();
+        return;
+      }
       body.innerHTML = registerForm();
       $('#showLogin').onclick = () => {
-        body.innerHTML = `<form class="card" id="astroLogin"><h3>${tr('Sign in', 'साइन इन')}</h3>
-          <input class="input" id="astroEmail" type="email" autocomplete="username" aria-label="${tr('Email', 'ईमेल')}">
-          <input class="input" id="astroPass" type="password" autocomplete="current-password" aria-label="${tr('Password', 'पासवर्ड')}">
-          <button class="btn block" type="submit">${tr('Sign in', 'साइन इन')}</button>
-          <button class="btn quiet" type="button" id="forgotPass">${tr('Forgot password?', 'पासवर्ड भूल गए?')}</button>
-          <p class="sub" id="forgotNote" hidden>${tr('Contact Drishti support to reset your password.', 'पासवर्ड रीसेट करने के लिए दृष्टि सहायता से संपर्क करें।')} <a href="mailto:ikshanasolution123@gmail.com">ikshanasolution123@gmail.com</a></p></form>`;
-        // TODO: when SMTP_HOST, SMTP_USER, and SMTP_PASSWORD are set, email a one-time reset link instead of asking the astrologer to contact support.
-        $('#astroLogin').onsubmit = async e => {
-          e.preventDefault();
-          try {
-            const got = await api('/api/connect/astro/login', {email: $('#astroEmail').value, password: $('#astroPass').value});
-            rememberAstro(got);
-            render();
-          } catch (err) { showSignInErr(err); }
-        };
-        const forgot = $('#forgotPass');
-        if (forgot) forgot.onclick = () => { const note = $('#forgotNote'); if (note) note.hidden = false; };
+        body.innerHTML = signInForm();
+        bindSignIn();
       };
       const agree = $('#regAgree');
       const regSubmit = $('#regSubmit');
@@ -1671,13 +1706,17 @@
       return;
     }
     sessionStorage.setItem('dr-astro-status', me.status || '');
+    if (nativeShell() && listingInactive(money)) {
+      showInactiveAstro(body, me);
+      return;
+    }
     if (me.status === 'approved') {
       renderAstroMode(desk, money, me, token);
       return;
     }
     store.set('app-mode', 'user');
     const plans = planCards();
-    const needsPlan = !money.plan_status || money.plan_status === 'none' || money.plan_status === 'canceled';
+    const needsPlan = !nativeShell() && listingInactive(money);
     body.innerHTML = `${needsPlan ? `<div class="card" id="planPicker"><h3>${tr('Choose a plan', 'योजना चुनें')}</h3>
       <button type="button" class="btn block" id="planTrial">${plans.days} ${tr('day free trial', 'दिन का निःशुल्क परीक्षण')}</button>
       <p class="sub">${plans.days} ${tr('days free. No card.', 'दिन मुफ़्त। कार्ड नहीं।')}</p>
@@ -1686,13 +1725,13 @@
       <p class="sub">${tr('Monthly or yearly starts after the free trial ends. No lifetime plan.', 'मासिक या वार्षिक योजना निःशुल्क परीक्षण के बाद शुरू होती है। कोई आजीवन योजना नहीं।')}</p></div>` : ''}
       <div class="card"><label class="spread"><span id="onlineLabel">${tr('Online', 'ऑनलाइन')}</span><input type="checkbox" id="astroOnline"></label>
       <p class="sub">${tr('You keep 95%. Drishti keeps 5% of each session.', 'आप 95% रखते हैं। दृष्टि हर सत्र का 5% रखती है।')}</p>
-      <p class="sub">${tr('Plan', 'योजना')}: ${esc(money.plan_status || 'none')}${money.renews_at ? ' · ' + esc(String(money.renews_at).slice(0, 10)) : ''}</p></div>
+      ${nativeShell() ? '' : `<p class="sub">${tr('Plan', 'योजना')}: ${esc(money.plan_status || 'none')}${money.renews_at ? ' · ' + esc(String(money.renews_at).slice(0, 10)) : ''}</p>`}</div>
       <div id="incoming"></div>
       <div class="card" id="earnings"><h3>${tr('Earnings', 'कमाई')}</h3>
         <p>${tr('Gross', 'कुल')} ${esc(money.gross_label || '$0.00')}</p>
         <p>${tr('Drishti fee', 'दृष्टि शुल्क')} ${esc(money.fee_label || '$0.00')}</p>
         <p><b>${tr('Net', 'शुद्ध')} ${esc(money.net_label || '$0.00')}</b></p>
-        <button type="button" class="btn" id="managePlan">${tr('Manage plan', 'योजना प्रबंधित करें')}</button>
+        ${nativeShell() ? '' : `<button type="button" class="btn" id="managePlan">${tr('Manage plan', 'योजना प्रबंधित करें')}</button>`}
         <button type="button" class="btn quiet" id="astroStripe">${money.payouts_ready ? tr('Payouts ready', 'भुगतान तैयार') : (money.has_payout_account ? tr('Finish payout setup', 'भुगतान सेटअप पूरा करें') : tr('Set up payouts', 'भुगतान सेट करें'))}</button>
         <p class="sub" id="payoutPrivacy">${tr('Your bank and ID details go straight to Stripe. Drishti never sees or stores them.', 'आपके बैंक और पहचान के विवरण सीधे Stripe को जाते हैं। दृष्टि उन्हें कभी नहीं देखती या सहेजती।')}</p></div>`;
     const trial = $('#planTrial');
@@ -1704,7 +1743,8 @@
     paintIncoming(desk.ringing || [], token);
     watchIncoming(token);
     $('#astroStripe').onclick = () => choosePayoutMethod('stripe', token).catch(showErr);
-    $('#managePlan').onclick = () => {
+    const managePending = $('#managePlan');
+    if (managePending) managePending.onclick = () => {
       if (!money.has_billing_account) { revealPaidPlans(money, token); return; }
       api('/api/connect/astro/portal', {}, token).then(d => { if (d.url) location.href = d.url; }).catch(err => {
         if (err && err.code === 'no_billing_account') { revealPaidPlans(money, token); return; }

@@ -1394,3 +1394,47 @@ def test_demo_is_hidden_until_a_device_opts_in(client, monkeypatch):
     with wave.open(os.path.join(root, "web", "demo-greeting.wav")) as greeting:
         assert greeting.getnchannels() == 1
         assert greeting.getnframes() / greeting.getframerate() > 1
+
+
+def test_ios_shell_cannot_start_a_listing_plan(client, monkeypatch):
+    created = client.post("/api/connect/apply", json={
+        "email": "native@example.com", "password": "correct-horse", "name": "Native Rao",
+        "specialties": ["career"], "languages": ["English"], "years": 4, "bio": "Timing.", "rate_cents": 100,
+    })
+    assert created.status_code == 200
+    admin = auth("admin-test-token")
+    listing = client.get("/api/connect/admin/astrologers", headers=admin).json()["astrologers"]
+    astro_id = next(item["id"] for item in listing if item["email"] == "native@example.com")
+    assert client.post("/api/connect/admin/astrologers/" + astro_id, headers=admin, json={"action": "approve"}).status_code == 200
+    token = client.post("/api/connect/astro/login", json={"email": "native@example.com", "password": "correct-horse"}).json()["token"]
+    shell = {**auth(token), "X-Drishti-Shell": "ios"}
+    refused = client.post("/api/connect/astro/trial", headers=shell)
+    assert refused.status_code == 403 and refused.json()["detail"] == "plan_not_in_app"
+    assert "http" not in refused.text
+    assert client.post("/api/connect/astro/trial", headers=auth(token)).status_code == 200
+    monkeypatch.setenv("STRIPE_SECRET_KEY", "sk_test_native")
+    monkeypatch.setenv("STRIPE_PRICE_PROVIDER_MONTHLY", "price_month")
+    monkeypatch.setenv("APP_PUBLIC_URL", "https://drishti-ios.vercel.app")
+
+    def explode(*_args, **_kwargs):
+        raise AssertionError("stripe checkout")
+
+    monkeypatch.setattr(connect_stripe, "create_customer", lambda *a, **k: {"id": "cus_native"})
+    monkeypatch.setattr(connect_stripe, "create_checkout", explode)
+    monkeypatch.setattr(connect_stripe, "create_portal", explode)
+    plan = client.post("/api/connect/astro/plan", headers=shell, json={"interval": "month"})
+    portal = client.post("/api/connect/astro/portal", headers=shell)
+    assert plan.status_code == 403 and plan.json()["detail"] == "plan_not_in_app"
+    assert portal.status_code == 403 and portal.json()["detail"] == "plan_not_in_app"
+    assert "url" not in plan.json() and "url" not in portal.json()
+    root = os.path.join(os.path.dirname(__file__), "..")
+    connect = open(os.path.join(root, "web", "connect.js"), encoding="utf-8").read()
+    html = open(os.path.join(root, "web", "index.html"), encoding="utf-8").read()
+    notes = open(os.path.join(root, "ios", "APP_REVIEW_NOTES.md"), encoding="utf-8").read()
+    assert "function nativeShell()" in connect and "X-Drishti-Shell" in connect
+    assert "Your astrologer account isn't active yet." in connect
+    assert "id=\"astroRegister\"" in connect
+    me = html.split("function pageMe()", 1)[1].split("function peopleHtml", 1)[0]
+    assert "inIosApp()" in me and "Sign in" in me and "Register as a live astrologer" in me
+    assert "sign-in only" in notes.lower() or "Sign-in only" in notes or "sign-in only" in notes
+    assert "listing fee" in notes
