@@ -1544,6 +1544,12 @@ def test_ios_store_bridge_maps_storekit_errors():
     assert "atDocumentStart" in bridge and "weak var controller" in bridge
     assert "allowsInlineMediaPlayback = true" in bridge
     assert "mediaTypesRequiringUserActionForPlayback = []" in bridge
+    assert "override func capacitorDidLoad()" in bridge
+    assert "override func webView(with frame: CGRect, configuration: WKWebViewConfiguration)" in bridge
+    assert "webViewDelegationHandler.contentController" in bridge
+    config_fn = bridge.split("override func webViewConfiguration", 1)[1].split("override func webView(with frame:", 1)[0]
+    assert "addUserScript" not in config_fn
+    assert "add(DrishtiStoreProxy" not in config_fn and 'name: "drishtiStore"' not in config_fn
     html = open(os.path.join(root, "web", "index.html"), encoding="utf-8").read()
     buy = html.split("async function buyPlayQuestion", 1)[1].split("function noteAskError", 1)[0]
     assert "billing_unavailable" in buy and "payment_pending" in buy and "payment_invalid" in buy

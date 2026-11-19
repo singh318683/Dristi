@@ -18,6 +18,8 @@ final class DrishtiStoreProxy: NSObject, WKScriptMessageHandler {
 /// Keeps voice playback inline and exposes `window.DrishtiStore` to the page.
 /// Capacitor 6 already sets inline playback; this subclass keeps it if that default changes.
 class DrishtiBridgeViewController: CAPBridgeViewController {
+    private var storeProxy: DrishtiStoreProxy?
+
     private static let storeScript = """
     window.DrishtiStore = window.DrishtiStore || {
       purchase: function(productId) {
@@ -49,8 +51,35 @@ class DrishtiBridgeViewController: CAPBridgeViewController {
         let config = super.webViewConfiguration(for: instanceConfiguration)
         config.allowsInlineMediaPlayback = true
         config.mediaTypesRequiringUserActionForPlayback = []
-        let controller = config.userContentController
-        if !controller.userScripts.contains(where: { $0.source.contains("window.DrishtiStore") }) {
+        // Do not add scripts here. Capacitor 6 then assigns
+        // webConfig.userContentController = delegationHandler.contentController,
+        // which drops anything added on the configuration's original controller.
+        return config
+    }
+
+    override func webView(with frame: CGRect, configuration: WKWebViewConfiguration) -> WKWebView {
+        // prepareWebView has already swapped in the live content controller.
+        // Register before WKWebView copies that configuration.
+        installStoreBridge(on: configuration.userContentController)
+        return super.webView(with: frame, configuration: configuration)
+    }
+
+    override func capacitorDidLoad() {
+        super.capacitorDidLoad()
+        // Capacitor injects window.Capacitor onto this same controller after the
+        // web view exists and before loadWebView(). Match that.
+        if let capBridge = bridge as? CapacitorBridge {
+            installStoreBridge(on: capBridge.webViewDelegationHandler.contentController)
+        } else if let controller = webView?.configuration.userContentController {
+            installStoreBridge(on: controller)
+        }
+    }
+
+    private func installStoreBridge(on controller: WKUserContentController) {
+        if storeProxy == nil {
+            storeProxy = DrishtiStoreProxy(controller: self)
+        }
+        if !controller.userScripts.contains(where: { $0.source.contains("window.__drishtiStoreResolve") }) {
             controller.addUserScript(WKUserScript(
                 source: Self.storeScript,
                 injectionTime: .atDocumentStart,
@@ -58,8 +87,9 @@ class DrishtiBridgeViewController: CAPBridgeViewController {
             ))
         }
         controller.removeScriptMessageHandler(forName: "drishtiStore")
-        controller.add(DrishtiStoreProxy(controller: self), name: "drishtiStore")
-        return config
+        if let storeProxy {
+            controller.add(storeProxy, name: "drishtiStore")
+        }
     }
 
     func handleStoreMessage(_ message: WKScriptMessage) {
