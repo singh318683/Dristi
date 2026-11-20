@@ -844,7 +844,7 @@ window.GITA_VERSES = window.__GITA_INJECTED__ || null;
 <div id="root"></div>
 <div id="sheet" class="sheet-bg" hidden></div>
 <div id="toast" class="toast" role="status" hidden></div>
-<script src="birthpicker.js?v=drishti-v52"></script>
+<script src="birthpicker.js?v=drishti-v54"></script>
 <script>
 'use strict';
 // ------------------------------------------------------------------ config
@@ -2465,6 +2465,8 @@ const ERR = {
   payment_in_progress: () => [tr('That purchase is already in use', 'वह खरीदारी पहले से इस्तेमाल हो रही है'), tr('Wait a moment, then ask again. You were not charged again.', 'थोड़ी देर रुककर फिर पूछें। दोबारा शुल्क नहीं लगा।')],
   billing_not_configured: () => [storeLine('Play Billing is not ready on the server', 'सर्वर पर Play Billing तैयार नहीं है', 'App Store billing is not ready on the server', 'सर्वर पर App Store बिलिंग तैयार नहीं है'), tr('The question was not answered, and the purchase was not used. The chart and the other tools still work.', 'प्रश्न का उत्तर नहीं दिया गया, और खरीदारी इस्तेमाल नहीं हुई। कुंडली और बाकी उपकरण काम करते हैं।')],
   billing_unavailable: () => [storeLine('Google Play could not be reached', 'Google Play तक नहीं पहुँच सके', 'The App Store could not be reached', 'App Store तक नहीं पहुँच सके'), tr('The question was not answered. Try again with the same purchase.', 'प्रश्न का उत्तर नहीं दिया गया। उसी खरीदारी के साथ फिर कोशिश करें।')],
+  billing_key_invalid: () => [tr('App Store billing is not ready on the server', 'सर्वर पर App Store बिलिंग तैयार नहीं है'), tr('The question was not answered. The same purchase can be used again.', 'प्रश्न का उत्तर नहीं दिया गया। वही खरीदारी फिर इस्तेमाल हो सकती है।')],
+  billing_unauthorized: () => [tr('The App Store rejected the server login', 'App Store ने सर्वर लॉगिन अस्वीकार किया'), tr('The question was not answered. The same purchase can be used again once the server key is corrected.', 'प्रश्न का उत्तर नहीं दिया गया। सर्वर कुंजी ठीक होने पर वही खरीदारी फिर इस्तेमाल हो सकती है।')],
   play_unavailable: () => [storeLine('Google Play is not available here', 'यहाँ Google Play उपलब्ध नहीं है', 'The App Store is not available here', 'यहाँ App Store उपलब्ध नहीं है'), storeLine('Each Acharya question is $0.99 inside the Android app. This browser cannot start a Play purchase. Your chart, periods, dosha, panchang, matching, horoscope and kundli PDF stay free.', 'आचार्य का हर प्रश्न Android ऐप में $0.99 है। यह ब्राउज़र Play खरीदारी शुरू नहीं कर सकता। कुंडली, दशा, दोष, पंचांग, मिलान, राशिफल और कुंडली PDF मुफ़्त हैं।', 'Each Acharya question is $0.99 inside the iPhone app. This browser cannot start an App Store purchase. Your chart, periods, dosha, panchang, matching, horoscope and kundli PDF stay free.', 'आचार्य का हर प्रश्न iPhone ऐप में $0.99 है। यह ब्राउज़र App Store खरीदारी शुरू नहीं कर सकता। कुंडली, दशा, दोष, पंचांग, मिलान, राशिफल और कुंडली PDF मुफ़्त हैं।')],
   payment_cancelled: () => [tr('Purchase cancelled', 'खरीदारी रद्द'), tr('The question was not sent.', 'प्रश्न नहीं भेजा गया।')],
   network: () => [tr("Couldn't reach the astrologer", 'ज्योतिषी से संपर्क नहीं हो सका'), tr('Check your connection and try again. If you already paid, use that purchase again. You were not charged a second time.', 'कनेक्शन जाँचें और फिर कोशिश करें। अगर भुगतान हो चुका है, तो वही खरीदारी फिर इस्तेमाल करें। दूसरी बार शुल्क नहीं लगा।')],
@@ -2806,13 +2808,39 @@ async function buyFreshPlayQuestion(sku) {
   keepPlayToken(token);
   return token;
 }
+function rememberApplePurchase(bought) {
+  const txn = bought && (bought.transactionId || bought.transaction_id);
+  if (!txn) return '';
+  S.applePurchase = {
+    transactionId: String(txn),
+    signedTransaction: bought.signedTransaction || bought.signed_transaction || '',
+    productId: bought.productId || bought.product_id || '',
+  };
+  try { store.set('applePurchase', S.applePurchase); } catch (e) { /* storage can be blocked */ }
+  return S.applePurchase.transactionId;
+}
+function applePurchaseId() {
+  const cur = S.applePurchase;
+  const id = cur && (cur.transactionId || cur.transaction_id);
+  if (id) return String(id);
+  try {
+    const saved = store.get('applePurchase', null);
+    if (saved && saved.transactionId) { S.applePurchase = saved; return String(saved.transactionId); }
+  } catch (e) { /* ignore a bad saved purchase */ }
+  return '';
+}
+function dropApplePurchase() {
+  S.applePurchase = null;
+  try { localStorage.removeItem('dr-applePurchase'); } catch (e) { /* storage can be blocked */ }
+}
 async function buyPlayQuestion() {
   if (window.DrishtiStore && typeof window.DrishtiStore.purchase === 'function') {
+    const kept = applePurchaseId();
+    if (kept) return kept;
     try {
       const bought = await window.DrishtiStore.purchase(playProductId());
-      const txn = bought && (bought.transactionId || bought.transaction_id);
+      const txn = rememberApplePurchase(bought);
       if (!txn) throw cancelledPlayError();
-      S.applePurchase = bought;
       return txn;
     } catch (e) {
       const code = String((e && e.code) || '');
@@ -2847,7 +2875,11 @@ async function ask(q) {
   let purchaseToken = '';
   const takeToken = async fresh => {
     try {
-      if (window.DrishtiStore && typeof window.DrishtiStore.purchase === 'function') return await buyPlayQuestion();
+      if (window.DrishtiStore && typeof window.DrishtiStore.purchase === 'function') {
+        const kept = applePurchaseId();
+        if (kept) return kept;
+        return await buyPlayQuestion();
+      }
       return fresh ? await buyFreshPlayQuestion(playProductId()) : await buyPlayQuestion();
     }
     catch (e) {
@@ -2906,7 +2938,7 @@ async function ask(q) {
   let text = '', err = null;
   try { ({text, err} = await readChat(purchaseToken)); }
   catch (e) { err = {code: 'network'}; }
-  if (err && err.code === 'payment_invalid') {
+  if (err && err.code === 'payment_invalid' && applePurchaseId() !== purchaseToken) {
     const rejected = purchaseToken;
     dropPlayToken();
     try {
@@ -2921,8 +2953,9 @@ async function ask(q) {
     } catch (e) { if (!err) err = {code: 'network'}; }
   }
   S.streaming = false;
-  if (!err || text) { settlePlaySheet(); dropPlayToken(); }
-  else if (err.code === 'payment_invalid') { dropPlayToken(); }
+  if (!err || text) { settlePlaySheet(); dropPlayToken(); dropApplePurchase(); }
+  else if (err.code === 'payment_used') { dropPlayToken(); dropApplePurchase(); }
+  else if (err.code === 'payment_invalid' && !applePurchaseId()) { dropPlayToken(); }
   else keepPlayToken(purchaseToken);
   if (err) {
     if (document.body.classList.contains('answer-open')) closeSheet({skipRate: true});
@@ -3165,6 +3198,6 @@ window.shareGitaCard = () => shareCard('gita');
   maybeShowRate();
 })();
 </script>
-<script src="connect.js?v=drishti-v52"></script>
+<script src="connect.js?v=drishti-v54"></script>
 </body>
 </html>

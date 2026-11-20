@@ -1724,6 +1724,9 @@ def redeem_apple_question(device: str, transaction_id: str, signed_transaction: 
     except connect_storekit.StoreKitError as e:
         status = 400 if e.code == "payment_invalid" else 503
         raise ConnectError(e.code, status, e.message) from e
+    except Exception as e:
+        log.warning("apple redeem failed error=%s", type(e).__name__)
+        raise ConnectError("billing_unavailable", 503, "The App Store could not be checked.") from e
     if info.get("product_id") != money.ACHARYA_PRODUCT:
         raise ConnectError("payment_invalid", 400, "The App Store did not accept that purchase.")
     txn = info["transaction_id"]

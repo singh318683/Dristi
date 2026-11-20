@@ -1536,6 +1536,93 @@ def test_storekit_404_on_production_retries_sandbox(monkeypatch):
     assert calls[0].startswith(connect_storekit.SANDBOX_HOST)
 
 
+def _apple_env(monkeypatch):
+    monkeypatch.setenv("APPLE_ISSUER_ID", "iss")
+    monkeypatch.setenv("APPLE_KEY_ID", "kid")
+    monkeypatch.setenv("APPLE_IAP_PRIVATE_KEY", "key")
+    monkeypatch.setenv("APPLE_BUNDLE_ID", "com.ikshana.drishti")
+    monkeypatch.delenv("APPLE_IAP_ENV", raising=False)
+    monkeypatch.setattr(connect_storekit, "_bearer", lambda: "token")
+
+
+def test_apple_auth_failure_is_not_a_missing_transaction(monkeypatch):
+    _apple_env(monkeypatch)
+    calls = []
+    signed = _store_jws({
+        "transactionId": "2000001", "productId": "acharya_question", "bundleId": "com.ikshana.drishti",
+    })
+
+    def get(url, headers=None, timeout=None):
+        calls.append(url)
+        if connect_storekit.SANDBOX_HOST in url:
+            return _StoreRes(200, {"signedTransactionInfo": signed})
+        return _StoreRes(401, {"errorCode": 4010000, "errorMessage": "Unauthenticated"})
+
+    monkeypatch.setattr(connect_storekit.httpx, "get", get)
+    info = connect_storekit.fetch_transaction("2000001")
+    assert info["product_id"] == "acharya_question"
+    assert calls[0].startswith(connect_storekit.PRODUCTION_HOST)
+    assert calls[1].startswith(connect_storekit.SANDBOX_HOST)
+
+    def denied(url, headers=None, timeout=None):
+        calls.append(url)
+        code = 4040010 if connect_storekit.SANDBOX_HOST in url else 4000006
+        status = 404 if code == 4040010 else 400
+        message = "Transaction id not found." if code == 4040010 else "Invalid transaction id."
+        return _StoreRes(status, {"errorCode": code, "errorMessage": message})
+
+    calls.clear()
+    monkeypatch.setattr(connect_storekit.httpx, "get", denied)
+    with pytest.raises(connect_storekit.StoreKitError) as missing:
+        connect_storekit.fetch_transaction("2000000000000001")
+    assert missing.value.code == "payment_invalid"
+    assert [item["errorCode"] for item in connect_storekit._attempts] == [4000006, 4040010]
+
+    def unauth(url, headers=None, timeout=None):
+        calls.append(url)
+        return _StoreRes(401, {"errorCode": 4010000, "errorMessage": "Unauthenticated"})
+
+    calls.clear()
+    monkeypatch.setattr(connect_storekit.httpx, "get", unauth)
+    with pytest.raises(connect_storekit.StoreKitError) as auth:
+        connect_storekit.fetch_transaction("2000000000000001")
+    assert auth.value.code == "billing_unauthorized"
+    assert connect_storekit._attempts[-1]["kind"] == "auth"
+    assert connect_storekit._attempts[-1]["status"] == 401
+
+
+def test_apple_diagnostics_reports_status_without_secrets(client, monkeypatch):
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric import ec
+    key = ec.generate_private_key(ec.SECP256R1())
+    pem = key.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption(),
+    ).decode()
+    monkeypatch.setenv("APPLE_ISSUER_ID", "iss")
+    monkeypatch.setenv("APPLE_KEY_ID", "kid")
+    monkeypatch.setenv("APPLE_IAP_PRIVATE_KEY", pem)
+    monkeypatch.setenv("APPLE_BUNDLE_ID", "com.ikshana.drishti")
+    monkeypatch.delenv("APPLE_IAP_ENV", raising=False)
+
+    def get(url, headers=None, timeout=None):
+        assert "Bearer " in (headers or {}).get("Authorization", "")
+        assert pem not in (headers or {}).get("Authorization", "")
+        return _StoreRes(401, {"errorCode": 4010000, "errorMessage": "Unauthenticated"})
+
+    monkeypatch.setattr(connect_storekit.httpx, "get", get)
+    body = client.get("/api/apple/diagnostics").json()
+    assert body["apple_configured"] is True and body["apple_key_parses"] is True and body["apple_jwt_ok"] is True
+    assert body["apple_last_status"] == 401
+    assert body["apple_last_error_code"] == 4010000
+    assert body["apple_last_kind"] == "auth"
+    assert body["attempts"][0]["host"] == "production"
+    assert body["attempts"][1]["host"] == "sandbox"
+    dumped = json.dumps(body)
+    assert "PRIVATE KEY" not in dumped and pem not in dumped
+
+
 def test_ios_store_bridge_maps_storekit_errors():
     root = os.path.join(os.path.dirname(__file__), "..")
     bridge = open(os.path.join(root, "ios", "plugins", "DrishtiNative", "DrishtiBridgeViewController.swift"), encoding="utf-8").read()
@@ -1564,3 +1651,55 @@ def test_ios_store_bridge_maps_storekit_errors():
     pdf = html.split("async function downloadKundli", 1)[1].split("function wrapCanvas", 1)[0]
     assert "DrishtiFiles.sharePdf" in pdf and "createObjectURL" in pdf
     assert "drishti-kundli.pdf" in pdf and "Preparing the PDF" in pdf
+    buy_again = html.split("async function buyPlayQuestion", 1)[1].split("function noteAskError", 1)[0]
+    assert "applePurchaseId()" in buy_again
+    assert "function dropApplePurchase" in html and "applePurchase" in html
+
+
+def test_bad_apple_key_is_an_sse_error(client, monkeypatch):
+    monkeypatch.setattr("llm.configured", lambda: True)
+    monkeypatch.setenv("APPLE_ISSUER_ID", "iss")
+    monkeypatch.setenv("APPLE_KEY_ID", "kid")
+    monkeypatch.setenv("APPLE_BUNDLE_ID", "com.ikshana.drishti")
+    monkeypatch.setenv("APPLE_IAP_PRIVATE_KEY", '"not a key"')
+    res = _apple_chat(client, "2000000000000001")
+    assert res.status_code == 200
+    assert b"billing_key_invalid" in res.content
+    assert b"not a key" not in res.content
+    status = client.get("/api/status").json()
+    assert status["apple_configured"] is True
+    assert status["apple_key_parses"] is False
+    assert status["apple_jwt_ok"] is False
+    dumped = json.dumps(status)
+    assert "PRIVATE" not in dumped and "not a key" not in dumped
+    monkeypatch.setattr(connect_storekit, "fetch_transaction", lambda _txn: (_ for _ in ()).throw(RuntimeError("secret-key-material")))
+    blown = _apple_chat(client, "2000000000000002")
+    assert blown.status_code == 200
+    assert b"billing_unavailable" in blown.content
+    assert b"secret-key-material" not in blown.content
+
+
+def test_apple_key_normalizes_a_collapsed_pem(monkeypatch):
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric import ec
+    key = ec.generate_private_key(ec.SECP256R1())
+    pem = key.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption(),
+    ).decode()
+    b64 = "".join(line for line in pem.splitlines() if line and not line.startswith("-----"))
+    forms = [
+        f"-----BEGIN PRIVATE KEY----- {b64} -----END PRIVATE KEY-----",
+        '"' + pem.replace("\n", "\\n") + '"',
+        b64,
+        pem.replace("\n", "\r\n"),
+    ]
+    monkeypatch.setenv("APPLE_ISSUER_ID", "iss")
+    monkeypatch.setenv("APPLE_KEY_ID", "kid")
+    monkeypatch.setenv("APPLE_BUNDLE_ID", "com.ikshana.drishti")
+    for raw in forms:
+        monkeypatch.setenv("APPLE_IAP_PRIVATE_KEY", raw)
+        assert connect_storekit.key_parses() is True
+        assert connect_storekit.jwt_ok() is True
+        assert "\\n" not in connect_storekit.apple_private_key()

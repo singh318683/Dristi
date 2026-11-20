@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import os
 import re
 import secrets
@@ -19,6 +20,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 import connect_api
+import connect_storekit
 import db
 import engine
 import gita
@@ -26,6 +28,8 @@ import llm
 import playbilling
 from matching import milan
 from playbilling import PlayError
+
+log = logging.getLogger("drishti")
 
 APP_NAME = "Drishti"
 ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -494,7 +498,14 @@ def status():
     return {"app": APP_NAME, "ai_configured": llm.configured(), "model": c["model"] if llm.configured() else None,
             "referral_bonus": 0, "astrologer_connect": connect_api.store_ready(),
             "stripe_publishable_key": connect_api.publishable_key(),
-            **connect_api.public_plans()} | billing_public()
+            **connect_api.public_plans(),
+            **connect_storekit.apple_status()} | billing_public()
+
+
+@app.get("/api/apple/diagnostics")
+def apple_diagnostics():
+    """What Apple last said. Status codes only, never the key or the JWT."""
+    return connect_storekit.apple_diagnostics()
 
 
 @app.get("/api/wallet")
@@ -568,6 +579,9 @@ async def api_chat(r: ChatReq):
             redemption = connect_store.redeem_apple_question(r.device, r.transaction_id or "", r.signed_transaction)
         except connect_store.ConnectError as e:
             return _sse_error(e.code, e.message)
+        except Exception as e:
+            log.warning("apple chat failed error=%s", type(e).__name__)
+            return _sse_error("billing_unavailable", "The App Store could not be checked. You were not charged again.")
         def finish():
             connect_store.finish_apple(redemption)
         def release():
