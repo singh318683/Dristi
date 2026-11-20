@@ -1,0 +1,316 @@
+"""Stripe PaymentIntents, Connect Express, and transfer helpers. No Stripe SDK."""
+from __future__ import annotations
+
+import hashlib
+import hmac
+import json
+import logging
+import re
+import time
+
+import httpx
+
+log = logging.getLogger("drishti.stripe")
+_SECRET = re.compile(r"\b(?:sk|rk)_(?:live|test)_[A-Za-z0-9]+|whsec_[A-Za-z0-9]+")
+# Express Dashboard plus Stripe as the losses collector needs this preview version.
+ACCOUNT_API_VERSION = "2026-10-28.preview"
+
+
+class StripeError(Exception):
+    def __init__(self, code: str, stripe_code: str = "", message: str = "", status: int = 0):
+        super().__init__(code)
+        self.code = code
+        self.stripe_code = stripe_code or ""
+        self.stripe_message = message or ""
+        self.status = int(status or 0)
+
+
+def _safe(text: str) -> str:
+    return _SECRET.sub("[redacted]", str(text or ""))[:400]
+
+
+def payout_code(err: StripeError) -> str:
+    blob = f"{getattr(err, 'stripe_message', '')} {getattr(err, 'stripe_code', '')}".lower()
+    if "signed up for connect" in blob:
+        return "connect_not_enabled"
+    if "not enabled" in blob and ("platform" in blob or "connect" in blob):
+        return "connect_not_enabled"
+    return "payout_setup_failed"
+
+
+def _reject(res) -> None:
+    stripe_code = ""
+    message = ""
+    try:
+        body = res.json()
+    except (ValueError, TypeError):
+        body = None
+    err = body.get("error") if isinstance(body, dict) else None
+    if isinstance(err, dict):
+        stripe_code = _safe(err.get("code") or err.get("type") or "")[:80]
+        message = _safe(err.get("message") or "")
+    log.warning("stripe error status=%s code=%s message=%s", getattr(res, "status_code", 0), stripe_code, message)
+    raise StripeError("stripe_rejected", stripe_code=stripe_code, message=message, status=getattr(res, "status_code", 0) or 0)
+
+
+def verify_event(payload: bytes, header: str, secret: str, now: int | None = None, tolerance: int = 300) -> dict:
+    now = int(time.time() if now is None else now)
+    ts = None
+    sigs: list[str] = []
+    for item in (header or "").split(","):
+        key, _, value = item.strip().partition("=")
+        if key == "t" and value.isdigit():
+            ts = int(value)
+        elif key == "v1" and value:
+            sigs.append(value)
+    if ts is None or not sigs or abs(now - ts) > tolerance:
+        raise StripeError("invalid_signature")
+    signed = str(ts).encode() + b"." + payload
+    expect = hmac.new(secret.encode(), signed, hashlib.sha256).hexdigest()
+    if not any(hmac.compare_digest(expect, sig) for sig in sigs):
+        raise StripeError("invalid_signature")
+    return json.loads(payload)
+
+
+def _form(secret: str, path: str, data: dict, idempotency_key: str | None = None) -> dict:
+    headers = {"Idempotency-Key": idempotency_key} if idempotency_key else {}
+    try:
+        res = httpx.post(
+            "https://api.stripe.com/v1/" + path,
+            data=data,
+            auth=(secret, ""),
+            headers=headers,
+            timeout=20,
+        )
+    except httpx.HTTPError as e:
+        log.warning("stripe unreachable error=%s", type(e).__name__)
+        raise StripeError("stripe_unavailable") from e
+    if res.status_code >= 400:
+        _reject(res)
+    return res.json()
+
+
+def retrieve_payment_intent(secret: str, intent_id: str) -> dict:
+    intent_id = (intent_id or "").strip()
+    if not intent_id.startswith("pi_") or not intent_id.replace("_", "").isalnum():
+        raise StripeError("bad_payment")
+    try:
+        res = httpx.get(
+            "https://api.stripe.com/v1/payment_intents/" + intent_id,
+            auth=(secret, ""),
+            timeout=20,
+        )
+    except httpx.HTTPError as e:
+        log.warning("stripe unreachable error=%s", type(e).__name__)
+        raise StripeError("stripe_unavailable") from e
+    if res.status_code >= 400:
+        _reject(res)
+    return res.json()
+
+
+def create_payment_intent(secret: str, amount_cents: int, metadata: dict, idempotency_key: str) -> dict:
+    # 2026-09-30.endive and later reject payment_method_types. Dynamic methods
+    # stay on, but redirect-based methods stay off for the in-app Payment Element.
+    flat = {
+        "amount": str(int(amount_cents)),
+        "currency": "usd",
+        "automatic_payment_methods[enabled]": "true",
+        "automatic_payment_methods[allow_redirects]": "never",
+    }
+    for key, value in metadata.items():
+        flat[f"metadata[{key}]"] = str(value)
+    return _form(secret, "payment_intents", flat, idempotency_key)
+
+
+def connected_account_body(email: str) -> dict:
+    """Accounts v2. Stripe collects losses; the platform pays Stripe fees.
+
+    A recipient-only account cannot set losses_collector to stripe, so the
+    merchant card_payments capability is requested as well. Transfers still
+    arrive through stripe_transfers. Country stays US.
+    """
+    return {
+        "contact_email": email,
+        "dashboard": "express",
+        "identity": {"country": "US"},
+        "defaults": {
+            "responsibilities": {
+                "fees_collector": "application",
+                "losses_collector": "stripe",
+            },
+        },
+        "configuration": {
+            "merchant": {"capabilities": {"card_payments": {"requested": True}}},
+            "recipient": {
+                "capabilities": {
+                    "stripe_balance": {"stripe_transfers": {"requested": True}},
+                },
+            },
+        },
+        "include": ["configuration.merchant", "configuration.recipient", "identity", "defaults"],
+    }
+
+
+def account_link_body(account_id: str, refresh_url: str, return_url: str) -> dict:
+    # This API version chooses which account setups to collect. Do not send that list.
+    return {
+        "account": account_id,
+        "use_case": {
+            "type": "account_onboarding",
+            "account_onboarding": {
+                "collection_options": {"fields": "currently_due"},
+                "refresh_url": refresh_url,
+                "return_url": return_url,
+            },
+        },
+    }
+
+
+def transfers_active(account: dict) -> bool:
+    try:
+        cap = account["configuration"]["recipient"]["capabilities"]["stripe_balance"]["stripe_transfers"]
+    except (KeyError, TypeError):
+        return False
+    return isinstance(cap, dict) and cap.get("status") == "active"
+
+
+def _deadline_status(node) -> str:
+    if not isinstance(node, dict):
+        return ""
+    deadline = node.get("minimum_deadline")
+    if not isinstance(deadline, dict):
+        return ""
+    return str(deadline.get("status") or "")
+
+
+def more_info_due(account: dict) -> bool:
+    """True when Stripe is asking for something now, or a deadline was missed."""
+    reqs = account.get("requirements") if isinstance(account, dict) else None
+    if not isinstance(reqs, dict):
+        return False
+    summary = reqs.get("summary") if isinstance(reqs.get("summary"), dict) else {}
+    if _deadline_status(summary) in ("currently_due", "past_due"):
+        return True
+    entries = reqs.get("entries")
+    if not isinstance(entries, list):
+        return False
+    return any(_deadline_status(entry) in ("currently_due", "past_due") for entry in entries)
+
+
+def payouts_ready(account: dict) -> bool:
+    return transfers_active(account) and not more_info_due(account)
+
+
+def _json(secret: str, path: str, payload: dict, idempotency_key: str | None = None) -> dict:
+    headers = {"Stripe-Version": ACCOUNT_API_VERSION, "Content-Type": "application/json"}
+    if idempotency_key:
+        headers["Idempotency-Key"] = idempotency_key
+    try:
+        res = httpx.post(
+            "https://api.stripe.com/" + path.lstrip("/"),
+            json=payload,
+            auth=(secret, ""),
+            headers=headers,
+            timeout=20,
+        )
+    except httpx.HTTPError as e:
+        log.warning("stripe unreachable error=%s", type(e).__name__)
+        raise StripeError("stripe_unavailable") from e
+    if res.status_code >= 400:
+        _reject(res)
+    return res.json()
+
+
+def create_express_account(secret: str, email: str, idempotency_key: str) -> dict:
+    return _json(secret, "v2/core/accounts", connected_account_body(email), idempotency_key)
+
+
+def create_account_link(secret: str, account_id: str, refresh_url: str, return_url: str) -> dict:
+    return _json(secret, "v2/core/account_links", account_link_body(account_id, refresh_url, return_url))
+
+
+def retrieve_account(secret: str, account_id: str) -> dict:
+    account_id = (account_id or "").strip()
+    if not account_id.startswith("acct_") or not account_id.replace("_", "").isalnum():
+        raise StripeError("bad_account")
+    headers = {"Stripe-Version": ACCOUNT_API_VERSION}
+    try:
+        res = httpx.get(
+            "https://api.stripe.com/v2/core/accounts/" + account_id,
+            params=[("include", "configuration.recipient"), ("include", "requirements")],
+            auth=(secret, ""),
+            headers=headers,
+            timeout=20,
+        )
+    except httpx.HTTPError as e:
+        log.warning("stripe unreachable error=%s", type(e).__name__)
+        raise StripeError("stripe_unavailable") from e
+    if res.status_code >= 400:
+        _reject(res)
+    return res.json()
+
+
+def create_customer(secret: str, email: str, astrologer_id: str) -> dict:
+    return _form(secret, "customers", {
+        "email": email,
+        "metadata[astrologer_id]": astrologer_id,
+    }, "cus-" + astrologer_id)
+
+
+def create_checkout(secret: str, price: str, customer: str, success: str, cancel: str, astrologer_id: str, trial_days: int) -> dict:
+    data = {
+        "mode": "subscription",
+        "customer": customer,
+        "success_url": success,
+        "cancel_url": cancel,
+        "client_reference_id": astrologer_id,
+        "line_items[0][price]": price,
+        "line_items[0][quantity]": "1",
+        "metadata[astrologer_id]": astrologer_id,
+        "subscription_data[metadata][astrologer_id]": astrologer_id,
+    }
+    if trial_days > 0:
+        data["subscription_data[trial_period_days]"] = str(int(trial_days))
+    return _form(secret, "checkout/sessions", data, None)
+
+
+def create_portal(secret: str, customer: str, return_url: str) -> dict:
+    return _form(secret, "billing_portal/sessions", {"customer": customer, "return_url": return_url}, None)
+
+
+def refund_payment(secret: str, intent_id: str, amount_cents: int, idempotency_key: str) -> dict:
+    intent_id = (intent_id or "").strip()
+    if not intent_id.startswith("pi_") or not intent_id.replace("_", "").isalnum():
+        raise StripeError("bad_payment")
+    return _form(secret, "refunds", {
+        "payment_intent": intent_id,
+        "amount": str(int(amount_cents)),
+    }, idempotency_key)
+
+
+def cancel_subscription(secret: str, subscription_id: str) -> dict:
+    subscription_id = (subscription_id or "").strip()
+    if not subscription_id.startswith("sub_") or not subscription_id.replace("_", "").isalnum():
+        raise StripeError("bad_payment")
+    try:
+        res = httpx.delete(
+            "https://api.stripe.com/v1/subscriptions/" + subscription_id,
+            auth=(secret, ""),
+            timeout=20,
+        )
+    except httpx.HTTPError as e:
+        log.warning("stripe unreachable error=%s", type(e).__name__)
+        raise StripeError("stripe_unavailable") from e
+    if res.status_code >= 400:
+        _reject(res)
+    return res.json()
+
+
+def create_transfer(secret: str, amount_cents: int, destination: str, idempotency_key: str) -> dict:
+    # v2 accounts with stripe_transfers still receive these v1 transfers.
+    return _form(secret, "transfers", {
+        "amount": str(int(amount_cents)),
+        "currency": "usd",
+        "destination": destination,
+    }, idempotency_key)
+

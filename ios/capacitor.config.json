@@ -1,0 +1,15 @@
+{
+  "appId": "com.ikshana.drishti",
+  "appName": "Drishti",
+  "webDir": "../web",
+  "server": {
+    "url": "https://drishti-ios.vercel.app",
+    "cleartext": false,
+    "androidScheme": "https"
+  },
+  "ios": {
+    "backgroundColor": "#FAF7F2",
+    "allowsInlineMediaPlayback": true,
+    "mediaTypesRequiringUserActionForPlayback": []
+  }
+}

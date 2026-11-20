@@ -36,7 +36,7 @@ def test_profile_fits_without_invite_or_sign_in():
     subprocess.check_call([node, script], cwd=ROOT, env=env)
 
 
-def test_phone_audio_unlocks_and_makes_sound():
+def test_background_music_stays_off():
     node = shutil.which("node")
     chrome = os.environ.get("CHROME") or shutil.which("google-chrome") or shutil.which("chromium")
     if not node or not chrome:
