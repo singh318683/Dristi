@@ -163,6 +163,9 @@ def _read_transaction(res, transaction_id: str) -> dict:
     }
 
 
+_lookup_source = "verify"
+
+
 def fetch_transaction(transaction_id: str) -> dict:
     """Return Apple's transaction fields. Override this in tests."""
     if not configured():
@@ -174,6 +177,9 @@ def fetch_transaction(transaction_id: str) -> dict:
     except Exception as e:
         log.warning("apple fetch failed error=%s", type(e).__name__)
         raise StoreKitError("billing_unavailable", "The App Store could not be checked.") from e
+    finally:
+        if _lookup_source == "chat":
+            _save_chat_attempts(transaction_id)
 
 
 def _host_label(host: str) -> str:
@@ -252,12 +258,13 @@ def _fetch_transaction(transaction_id: str) -> dict:
             continue
         if res.status_code < 400:
             return _read_transaction(res, transaction_id)
-        if attempt["kind"] == "auth" or any(item["kind"] == "auth" for item in _attempts):
+        decided = [item for item in _attempts if item["kind"] != "auth"]
+        if not decided:
             raise StoreKitError(
                 "billing_unauthorized",
                 "The App Store rejected the server credentials. Check the key id, issuer id, and bundle id.",
             )
-        if attempt["kind"] == "not_found":
+        if decided[-1]["kind"] == "not_found":
             raise StoreKitError("payment_invalid", "The App Store did not accept that purchase.")
         raise StoreKitError("billing_unavailable", "The App Store could not be reached.")
     raise StoreKitError("payment_invalid", "The App Store did not accept that purchase.")
@@ -274,6 +281,7 @@ def apple_diagnostics() -> dict:
     status["apple_last_error_message"] = ""
     status["apple_last_host"] = ""
     status["apple_last_kind"] = status["apple_key_kind"]
+    status["last_chat"] = last_chat_attempts()
     if not status["apple_jwt_ok"]:
         return status
     try:
@@ -292,6 +300,66 @@ def apple_diagnostics() -> dict:
     return status
 
 
+def _txn_suffix(transaction_id: str) -> str:
+    digits = "".join(ch for ch in str(transaction_id or "") if ch.isdigit())
+    return digits[-4:]
+
+
+def _lookup_table(con) -> None:
+    con.execute(
+        """create table if not exists ac_apple_lookup(
+            id text primary key,
+            txn_suffix text not null,
+            host text not null,
+            status int not null,
+            error_code int,
+            error_message text not null default '',
+            kind text not null,
+            created text not null)"""
+    )
+
+
+def _save_chat_attempts(transaction_id: str) -> None:
+    """Remember the last real purchase check. Only the last four id digits are stored."""
+    suffix = _txn_suffix(transaction_id)
+    try:
+        import db
+        from datetime import datetime, timezone
+        created = datetime.now(timezone.utc).isoformat()
+        with db.connect() as con:
+            _lookup_table(con)
+            con.execute("delete from ac_apple_lookup")
+            for index, attempt in enumerate(_attempts):
+                con.execute(
+                    """insert into ac_apple_lookup(
+                        id, txn_suffix, host, status, error_code, error_message, kind, created)
+                       values(?,?,?,?,?,?,?,?)""",
+                    (created + "-" + str(index), suffix, attempt["host"], int(attempt["status"] or 0),
+                     attempt["errorCode"], attempt["errorMessage"] or "", attempt["kind"], created),
+                )
+    except Exception as e:
+        log.warning("apple lookup log failed error=%s", type(e).__name__)
+
+
+def last_chat_attempts() -> list[dict]:
+    try:
+        import db
+        with db.connect() as con:
+            _lookup_table(con)
+            rows = con.execute(
+                """select txn_suffix, host, status, error_code, error_message, kind
+                   from ac_apple_lookup order by id"""
+            ).fetchall()
+    except Exception as e:
+        log.warning("apple lookup read failed error=%s", type(e).__name__)
+        return []
+    return [
+        {"transaction": row[0], "host": row[1], "status": row[2], "errorCode": row[3],
+         "errorMessage": row[4], "kind": row[5]}
+        for row in rows
+    ]
+
+
 def _jws_payload(token: str) -> dict:
     import base64
     import json
@@ -306,9 +374,15 @@ def _jws_payload(token: str) -> dict:
         raise StoreKitError("payment_invalid", "The App Store did not accept that purchase.") from e
 
 
-def verify_transaction(transaction_id: str, signed_transaction: str | None = None) -> dict:
+def verify_transaction(transaction_id: str, signed_transaction: str | None = None, source: str = "verify") -> dict:
     """Prefer the server-to-Apple lookup. The phone's JWS is not trusted on its own."""
-    info = fetch_transaction((transaction_id or "").strip())
+    global _lookup_source
+    previous = _lookup_source
+    _lookup_source = source
+    try:
+        info = fetch_transaction((transaction_id or "").strip())
+    finally:
+        _lookup_source = previous
     if signed_transaction:
         claimed = _jws_payload(signed_transaction)
         if str(claimed.get("transactionId") or "") not in ("", info["transaction_id"]):

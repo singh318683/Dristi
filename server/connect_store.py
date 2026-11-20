@@ -1720,7 +1720,7 @@ def astro_live(astrologer_id: str) -> dict:
 def redeem_apple_question(device: str, transaction_id: str, signed_transaction: str | None):
     import connect_storekit
     try:
-        info = connect_storekit.verify_transaction(transaction_id, signed_transaction)
+        info = connect_storekit.verify_transaction(transaction_id, signed_transaction, source="chat")
     except connect_storekit.StoreKitError as e:
         status = 400 if e.code == "payment_invalid" else 503
         raise ConnectError(e.code, status, e.message) from e

@@ -1590,6 +1590,19 @@ def test_apple_auth_failure_is_not_a_missing_transaction(monkeypatch):
     assert connect_storekit._attempts[-1]["kind"] == "auth"
     assert connect_storekit._attempts[-1]["status"] == 401
 
+    def sandbox_rejects_id(url, headers=None, timeout=None):
+        calls.append(url)
+        if connect_storekit.SANDBOX_HOST in url:
+            return _StoreRes(400, {"errorCode": 4000006, "errorMessage": "Invalid transaction id."})
+        return _StoreRes(401, {})
+
+    calls.clear()
+    monkeypatch.setattr(connect_storekit.httpx, "get", sandbox_rejects_id)
+    with pytest.raises(connect_storekit.StoreKitError) as mixed:
+        connect_storekit.fetch_transaction("2000000999888777")
+    assert mixed.value.code == "payment_invalid"
+    assert [item["kind"] for item in connect_storekit._attempts] == ["auth", "not_found"]
+
 
 def test_apple_diagnostics_reports_status_without_secrets(client, monkeypatch):
     from cryptography.hazmat.primitives import serialization
@@ -1621,6 +1634,27 @@ def test_apple_diagnostics_reports_status_without_secrets(client, monkeypatch):
     assert body["attempts"][1]["host"] == "sandbox"
     dumped = json.dumps(body)
     assert "PRIVATE KEY" not in dumped and pem not in dumped
+    assert body["last_chat"] == []
+
+
+def test_real_purchase_attempt_is_kept_for_diagnostics(client, monkeypatch):
+    monkeypatch.setattr("llm.configured", lambda: True)
+    _apple_env(monkeypatch)
+
+    def get(url, headers=None, timeout=None):
+        if connect_storekit.SANDBOX_HOST in url:
+            return _StoreRes(400, {"errorCode": 4000006, "errorMessage": "Invalid transaction id."})
+        return _StoreRes(401, {})
+
+    monkeypatch.setattr(connect_storekit.httpx, "get", get)
+    res = _apple_chat(client, "2000000999888777")
+    assert res.status_code == 200 and b"payment_invalid" in res.content
+    assert b"billing_unauthorized" not in res.content
+    body = client.get("/api/apple/diagnostics").json()
+    assert body["last_chat"][0]["transaction"] == "8777"
+    assert body["last_chat"][0]["host"] == "production" and body["last_chat"][0]["kind"] == "auth"
+    assert body["last_chat"][1]["host"] == "sandbox" and body["last_chat"][1]["errorCode"] == 4000006
+    assert "2000000999888777" not in json.dumps(body)
 
 
 def test_ios_store_bridge_maps_storekit_errors():
@@ -1654,6 +1688,7 @@ def test_ios_store_bridge_maps_storekit_errors():
     buy_again = html.split("async function buyPlayQuestion", 1)[1].split("function noteAskError", 1)[0]
     assert "applePurchaseId()" in buy_again
     assert "function dropApplePurchase" in html and "applePurchase" in html
+    assert "err.code === 'payment_used' || err.code === 'payment_invalid'" in html
 
 
 def test_bad_apple_key_is_an_sse_error(client, monkeypatch):

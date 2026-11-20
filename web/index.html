@@ -844,7 +844,7 @@ window.GITA_VERSES = window.__GITA_INJECTED__ || null;
 <div id="root"></div>
 <div id="sheet" class="sheet-bg" hidden></div>
 <div id="toast" class="toast" role="status" hidden></div>
-<script src="birthpicker.js?v=drishti-v54"></script>
+<script src="birthpicker.js?v=drishti-v55"></script>
 <script>
 'use strict';
 // ------------------------------------------------------------------ config
@@ -2954,8 +2954,7 @@ async function ask(q) {
   }
   S.streaming = false;
   if (!err || text) { settlePlaySheet(); dropPlayToken(); dropApplePurchase(); }
-  else if (err.code === 'payment_used') { dropPlayToken(); dropApplePurchase(); }
-  else if (err.code === 'payment_invalid' && !applePurchaseId()) { dropPlayToken(); }
+  else if (err.code === 'payment_used' || err.code === 'payment_invalid') { dropPlayToken(); dropApplePurchase(); }
   else keepPlayToken(purchaseToken);
   if (err) {
     if (document.body.classList.contains('answer-open')) closeSheet({skipRate: true});
@@ -3198,6 +3197,6 @@ window.shareGitaCard = () => shareCard('gita');
   maybeShowRate();
 })();
 </script>
-<script src="connect.js?v=drishti-v54"></script>
+<script src="connect.js?v=drishti-v55"></script>
 </body>
 </html>
