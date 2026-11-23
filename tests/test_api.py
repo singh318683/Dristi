@@ -1,6 +1,7 @@
 """Wallet, referral credits, magic-link sign-in, panchang and kundli PDF endpoints."""
 import json
 import os
+import subprocess
 import sys
 from datetime import datetime, timedelta, timezone
 
@@ -120,27 +121,16 @@ def test_horoscope_date_follows_the_device_within_one_day(client):
     assert bad.status_code == 400
 
 
-def test_background_music_is_one_synthesized_drone():
+def test_background_music_never_starts():
     root = os.path.join(os.path.dirname(__file__), "..")
     html = open(os.path.join(root, "web", "index.html"), encoding="utf-8").read()
+    connect = open(os.path.join(root, "web", "connect.js"), encoding="utf-8").read()
     credits = open(os.path.join(root, "CREDITS.md"), encoding="utf-8").read()
-    assert 'id="musicBtn"' in html
-    assert html.count("function musicBuild") == 1
-    assert "if (musicCtx) return" in html
-    assert "webkitAudioContext" in html
-    assert "return musicPhone() ? 0.55 : 0.25" in html
-    assert "musicRamp(musicLevel(), fresh ? 3 : 0.8)" in html
-    assert "visibilitychange" in html and "pageshow" in html
-    assert "createPeriodicWave" in html and "const sa = 196" in html
-    assert "createMediaStreamDestination" in html and "playsinline" in html
-    assert "audioSession" in html and "interrupted" in html
-    assert "createBuffer(1, 1" in html
-    assert "touchstart" in html and "touchend" in html
-    assert "audiodebug=1" in html and "audioDebug" in html
-    assert "drishtiUnlockAudio" in html
-    assert ".mp3" not in html and ".ogg" not in html and ".m4a" not in html
-    assert "Web Audio" in credits and "no third-party music license" in credits
-    assert "drishti-v18" in open(os.path.join(root, "web", "sw.js"), encoding="utf-8").read()
+    for gone in ("musicBtn", "musicBuild", "musicUnlock", "webkitAudioContext", "AudioContext", "musicOut", "drishtiUnlockAudio", "drishtiMusicHold", "createMediaStreamDestination"):
+        assert gone not in html
+    assert "drishtiMusicHold" not in connect and "drishtiMusicRelease" not in connect
+    assert "does not play background music" in credits and "no third-party music license" in credits
+    assert "drishti-v56" in open(os.path.join(root, "web", "sw.js"), encoding="utf-8").read()
 
 
 def test_home_asks_for_the_device_date():
@@ -167,7 +157,7 @@ def test_home_periods_card_and_local_clock():
     assert "Good evening" in greet and "clock.getHours() < 5" in greet
     assert "function glanceTitle" in html and "function horoGlanceSentence" in html
     assert "glanceHoroLine" not in html
-    assert "drishti-v18" in open(os.path.join(os.path.dirname(__file__), "..", "web", "sw.js"), encoding="utf-8").read()
+    assert "drishti-v56" in open(os.path.join(os.path.dirname(__file__), "..", "web", "sw.js"), encoding="utf-8").read()
 
 
 def test_profile_screen_drops_invite_and_sign_in():
@@ -181,7 +171,7 @@ def test_profile_screen_drops_invite_and_sign_in():
     assert 'id="personRow"' in me and 'id="credN"' in me and 'id="aboutBtn"' in me and 'id="clr"' in me
     assert "per Acharya question" in me and "Paid on Google Play" in me
     assert "pullSync" in html and "/api/auth/verify" in html and "/api/referral/attach" in html and "scheduleSync" in html
-    assert 'id="musicBtn"' in html and "function musicUnlock" in html
+    assert 'id="musicBtn"' not in html and "function musicUnlock" not in html
 
 
 def test_owned_purchase_lookup_uses_the_purchase_json_and_the_listener():
@@ -228,21 +218,21 @@ def test_owned_play_question_is_sent_again_instead_of_bought():
     assert "buyPlayQuestion" in ask and "buyFreshPlayQuestion" in ask
     assert "payment_invalid" in ask and "keepPlayToken(purchaseToken)" in ask
     assert "response.complete('success')" in html
-    assert "drishti-v18" in open(os.path.join(root, "web", "sw.js"), encoding="utf-8").read()
+    assert "drishti-v56" in open(os.path.join(root, "web", "sw.js"), encoding="utf-8").read()
 
 
 def test_answer_opens_in_a_reading_sheet():
     html = open(os.path.join(os.path.dirname(__file__), "..", "web", "index.html"), encoding="utf-8").read()
     assert "function openAnswerSheet" in html
     assert 'class="sheet answer"' in html and 'id="answerRead"' in html
-    assert "body.answer-open .composer,body.answer-open .ask-stage{display:none}" in html
+    assert "body.answer-open .composer,body.answer-open .ask-stage,body.connect-open .composer,body.connect-open .ask-stage{display:none}" in html
     assert 'class="read-open"' in html and "Read this answer" in html and "यह उत्तर पढ़ें" in html
     ask = html.split("async function ask", 1)[1].split("const KOOTA", 1)[0]
     assert ask.find("purchaseToken = await takeToken(false)") < ask.find("openAnswerSheet(aiEl, true)")
     assert "openAnswerSheet(aiEl, true)" in ask
     assert "openAnswerSheet(painted, true)" in ask
     assert "id=\"askSend\"" in html and "priceLabel()" in html
-    assert "drishti-v18" in open(os.path.join(os.path.dirname(__file__), "..", "web", "sw.js"), encoding="utf-8").read()
+    assert "drishti-v56" in open(os.path.join(os.path.dirname(__file__), "..", "web", "sw.js"), encoding="utf-8").read()
 
 
 def test_rate_prompt_is_quiet_and_remembers_a_dismissal():
@@ -262,7 +252,227 @@ def test_rate_prompt_is_quiet_and_remembers_a_dismissal():
     assert "closeSheet({skipRate: true})" in ask
     closed = html.split("function closeSheet", 1)[1].split("function bindSheetSwipe", 1)[0]
     assert "answer-read" in closed and "v.read = true" in closed
-    assert "drishti-v18" in open(os.path.join(os.path.dirname(__file__), "..", "web", "sw.js"), encoding="utf-8").read()
+    assert "drishti-v56" in open(os.path.join(os.path.dirname(__file__), "..", "web", "sw.js"), encoding="utf-8").read()
+    assert "Rate on the App Store" in rate and "App Store पर रेट करें" in rate
+    assert "apps.apple.com" in rate and "if (inIosApp())" in rate
+
+
+def test_store_copy_follows_the_ios_shell():
+    root = os.path.join(os.path.dirname(__file__), "..")
+    html = open(os.path.join(root, "web", "index.html"), encoding="utf-8").read()
+    privacy = open(os.path.join(root, "web", "privacy.html"), encoding="utf-8").read()
+    helper = html.split("function inIosApp()", 1)[1].split("function onboarding()", 1)[0]
+    assert "getPlatform" in helper and "platform === 'ios'" in helper
+    assert "return inIosApp() ? tr(iosEn, iosHi) : tr(playEn, playHi);" in helper
+    pairs = [
+        ("Each Acharya question is $0.99 on Google Play.", "Each Acharya question is $0.99 on the App Store."),
+        ("आचार्य का हर प्रश्न Google Play पर $0.99 है।", "आचार्य का हर प्रश्न App Store पर $0.99 है।"),
+        ("Pay with Google Play to ask.", "Pay with Apple to ask."),
+        ("पूछने के लिए Google Play से भुगतान करें।", "पूछने के लिए Apple से भुगतान करें।"),
+        ("Google Play did not accept that purchase", "The App Store did not accept that purchase"),
+        ("Google Play ने यह खरीदारी स्वीकार नहीं की", "App Store ने यह खरीदारी स्वीकार नहीं की"),
+        ("Google Play is still processing the payment", "Apple is still processing the payment"),
+        ("Google Play अभी भुगतान पूरा कर रहा है", "Apple अभी भुगतान पूरा कर रहा है"),
+        ("Play Billing is not ready on the server", "App Store billing is not ready on the server"),
+        ("सर्वर पर Play Billing तैयार नहीं है", "सर्वर पर App Store बिलिंग तैयार नहीं है"),
+        ("Google Play could not be reached", "The App Store could not be reached"),
+        ("Google Play तक नहीं पहुँच सके", "App Store तक नहीं पहुँच सके"),
+        ("Google Play is not available here", "The App Store is not available here"),
+        ("यहाँ Google Play उपलब्ध नहीं है", "यहाँ App Store उपलब्ध नहीं है"),
+        ("inside the Android app", "inside the iPhone app"),
+        ("Android ऐप में $0.99 है", "iPhone ऐप में $0.99 है"),
+        ("each, through Google Play.", "each, through the App Store."),
+        ("प्रत्येक, Google Play से।", "प्रत्येक, App Store से।"),
+        ("Paid on Google Play, one question at a time.", "Paid on the App Store, one question at a time."),
+        ("Google Play पर भुगतान, एक बार में एक प्रश्न।", "App Store पर भुगतान, एक बार में एक प्रश्न।"),
+        ("Rate on Google Play", "Rate on the App Store"),
+        ("Google Play पर रेट करें", "App Store पर रेट करें"),
+    ]
+    for play, apple in pairs:
+        assert play in html and apple in html
+    assert "DrishtiPlay" in html and "getDigitalGoodsService" in html and "market://details?id=" in html
+    assert 'data-store="play"' in privacy and 'data-store="ios" hidden' in privacy
+    assert "Google Play handles the payment" in privacy and "Apple handles the payment" in privacy
+    assert "Apple ID password" in privacy
+    assert "आचार्य का हर प्रश्न" in privacy and "App Store से" in privacy and "भुगतान Apple करता है" in privacy
+    assert "platform === 'ios'" in privacy
+    assert "function useIosCopy()" in privacy and "drishti-ios" in privacy and "androidApp" in privacy
+    assert "Ikshana Solutions LLC" in privacy and "273 Lewis Fisher Dr" in privacy
+    assert "ikshanasolution123@gmail.com" in privacy and "LiveKit" in privacy and "PayPal" in privacy
+    support = open(os.path.join(root, "web", "support.html"), encoding="utf-8").read()
+    assert "ikshanasolution123@gmail.com" in support and "privacy.html" in support and "terms.html" in support
+    assert "$0.99" in support and "Delete account" in support and "five-minute hold" in support
+    script_privacy = r"""
+const fs = require('fs');
+const html = fs.readFileSync(process.argv[1], 'utf8');
+const src = html.split('function inIosApp()')[1].split('document.documentElement', 1)[0];
+eval('function inIosApp()' + src);
+function check(host, win) {
+  global.location = {hostname: host};
+  global.window = win;
+  return useIosCopy();
+}
+if (!check('drishti-ios.vercel.app', {})) process.exit(2);
+if (!check('example.com', {})) process.exit(3);
+if (check('play.example', {DrishtiPlay: {}})) process.exit(4);
+if (check('play.example', {Capacitor: {getPlatform() { return 'android'; }, isNativePlatform() { return true; }}})) process.exit(5);
+if (!check('drishti-ios.vercel.app', {DrishtiPlay: {}})) process.exit(6);
+if (!check('example.com', {Capacitor: {getPlatform() { return 'ios'; }, isNativePlatform() { return true; }}})) process.exit(7);
+"""
+    ran_privacy = subprocess.run(["node", "-e", script_privacy, os.path.join(root, "web", "privacy.html")], capture_output=True, text=True)
+    assert ran_privacy.returncode == 0, ran_privacy.stderr or ran_privacy.stdout
+    script = r"""
+const fs = require('fs');
+const html = fs.readFileSync(process.argv[1], 'utf8');
+const src = html.split('function inIosApp()')[1].split('function onboarding()')[0];
+eval('function inIosApp()' + src);
+function tr(en, hi) { return global.lang === 'hi' ? hi : en; }
+function say() { return storeLine('on Google Play', 'Google Play पर', 'on the App Store', 'App Store पर'); }
+global.window = {};
+global.lang = 'en';
+if (say() !== 'on Google Play') process.exit(2);
+global.lang = 'hi';
+if (say() !== 'Google Play पर') process.exit(3);
+global.window = { Capacitor: { getPlatform() { return 'ios'; } } };
+global.lang = 'en';
+if (say() !== 'on the App Store') process.exit(4);
+global.lang = 'hi';
+if (say() !== 'App Store पर') process.exit(5);
+global.window = { Capacitor: { getPlatform() { return 'android'; } } };
+global.lang = 'en';
+if (say() !== 'on Google Play') process.exit(6);
+"""
+    ran = subprocess.run(["node", "-e", script, os.path.join(root, "web", "index.html")], capture_output=True, text=True)
+    assert ran.returncode == 0, ran.stderr or ran.stdout
+
+
+def test_live_astrologer_entries_are_visible_when_the_flag_is_on():
+    root = os.path.join(os.path.dirname(__file__), "..")
+    html = open(os.path.join(root, "web", "index.html"), encoding="utf-8").read()
+    connect = open(os.path.join(root, "web", "connect.js"), encoding="utf-8").read()
+    me = html.split("function pageMe()", 1)[1].split("function peopleHtml", 1)[0]
+    ask = html.split("function pageAsk()", 1)[1].split("function updateQuota", 1)[0]
+    assert "Are you an astrologer?" in me and "क्या आप ज्योतिषी हैं?" in me
+    assert "Register as a live astrologer" in me and "लाइव ज्योतिषी बनें" in me
+    assert 'id="astroJoin"' in me and "location.hash = '#astro'" in me
+    assert "S.status.astrologer_connect" in me
+    assert "talkLiveHtml()" in ask
+    assert "Talk to a live astrologer" in html and "लाइव ज्योतिषी से बात करें" in html
+    assert 'id="talkLive"' in html and "DrishtiConnect.list" in html
+    assert "function talkLiveHtml" in html and "astrologer_connect" in html.split("function talkLiveHtml", 1)[1].split("function bindTalkLive", 1)[0]
+    assert 'id="portalBack"' in connect and "वापस" in connect
+    assert "No astrologer is online right now." in connect and "अभी कोई ज्योतिषी ऑनलाइन नहीं है।" in connect
+    assert "Check back in a little while." in connect and "थोड़ी देर बाद फिर देखें।" in connect
+    assert 'id="connectEmpty"' in connect
+    assert "days free. No card." in connect and "दिन मुफ़्त। कार्ड नहीं।" in connect
+    assert "Monthly or yearly starts after the free trial ends." in connect
+    assert "on the free trial until " in connect
+    assert "Choose a plan to keep your listing after it ends." in connect
+    assert "Your application is waiting for approval." in connect
+    assert "no_billing_account" in connect and "stripe_not_configured" in connect
+    assert "invalid_rate" in connect and "trial_unavailable" in connect
+    assert "Something went wrong. Please try again." in connect
+    assert "has_billing_account" in connect and "id=\"paidPlans\"" in connect
+    assert "Forgot password?" in connect and "पासवर्ड भूल गए?" in connect
+    assert "Contact Drishti support to reset your password." in connect
+    assert "mailto:ikshanasolution123@gmail.com" in connect
+    assert "Email or password is incorrect" in connect and "ईमेल या पासवर्ड गलत है" in connect
+    assert "Reset password" in connect and "temporary_password" in connect
+    assert "Set a new password" in connect and "SMTP_HOST" in connect
+    assert "function clearPayForm" in connect and "stripePayBtn" in connect
+    assert "setPacksDisabled(true)" in connect and "pay.disabled = true" in connect
+    assert "/api/connect/wallet/confirm" in connect
+    assert "function chime" in connect and "navigator.vibrate" in connect
+    assert "New request" in connect and "नया अनुरोध" in connect
+    assert "seenIncoming" in connect and "incoming-banner" in connect
+    assert "openAstroSession" in connect and "astroSession" in connect
+    assert "In a session" in connect and "सत्र में" in connect
+    assert "No question yet" in connect and "अभी कोई प्रश्न नहीं" in connect
+    assert "Seeker" in connect and "साधक" in connect
+    assert "No one accepted in time." in connect
+    assert "End session" in connect and "Back to dashboard" in connect
+    assert "/api/connect/astro/live" in connect
+    assert "payment_intent.succeeded" in open(os.path.join(root, "docs", "ASTROLOGER_CONNECT.md"), encoding="utf-8").read()
+    assert "Processing…" in connect and "प्रक्रिया जारी…" in connect
+    assert "applePay: 'never'" in connect and "googlePay: 'never'" in connect
+    assert "confirmParams: {return_url: returnUrl}" in connect
+    assert "30000, 'confirmPayment'" in connect and "30000, 'wallet-confirm'" in connect
+    assert "Payment is taking longer than usual." in connect
+    assert "function withTimeout" in connect and "function waitForBalance" in connect
+    script = r"""
+const fs = require('fs');
+const src = fs.readFileSync(process.argv[1], 'utf8');
+const start = src.indexOf('function withTimeout');
+const end = src.indexOf('function sleep');
+function payLog() {}
+eval(src.slice(start, end));
+let timed = null;
+withTimeout(new Promise(() => {}), 40, 'confirmPayment').catch(err => { timed = err; });
+setTimeout(() => {
+  if (!timed || timed.code !== 'timeout' || timed.step !== 'confirmPayment') process.exit(2);
+  withTimeout(Promise.resolve('ok'), 200, 'wallet-confirm').then(value => {
+    if (value !== 'ok') process.exit(3);
+  }).catch(() => process.exit(4));
+}, 80);
+"""
+    ran = subprocess.run(["node", "-e", script, os.path.join(root, "web", "connect.js")], capture_output=True, text=True)
+    assert ran.returncode == 0, ran.stderr or ran.stdout
+
+
+def test_signup_rate_accepts_a_dollar_sign_and_errors_stay_readable():
+    connect = open(os.path.join(os.path.dirname(__file__), "..", "web", "connect.js"), encoding="utf-8").read()
+    assert "parseFloat(String($('#regRate').value).replace(/[^0-9.]/g, ''))" in connect
+    assert "dollars < 0.3 || dollars > 5" in connect
+    assert "for example 1.50" in connect and "जैसे 1.50" in connect
+    assert "function detailText" in connect and "item.loc[item.loc.length - 1]" in connect
+    script = r"""
+const fs = require('fs');
+const src = fs.readFileSync(process.argv[1], 'utf8');
+const start = src.indexOf('function detailText');
+const end = src.indexOf('function api(');
+eval(src.slice(start, end));
+const arr = [
+  {loc: ['body', 'rate_cents'], msg: 'Input should be a valid integer'},
+  {loc: ['body', 'email'], msg: 'Field required'},
+];
+if (detailText(arr) !== 'rate_cents: Input should be a valid integer; email: Field required') process.exit(2);
+if (detailText('unauthorized') !== 'unauthorized') process.exit(3);
+if (detailText({message: 'Voice is not configured on the server.'}) !== 'Voice is not configured on the server.') process.exit(4);
+const obj = detailText({error: 'plan_required', hold_cents: 500});
+if (!obj || obj === '[object Object]' || obj.indexOf('plan_required') < 0) process.exit(5);
+const dollars = raw => parseFloat(String(raw).replace(/[^0-9.]/g, ''));
+if (dollars('$1') !== 1 || dollars('$1.50') !== 1.5 || dollars('1') !== 1) process.exit(6);
+if (isFinite(dollars('')) || isFinite(dollars('abc'))) process.exit(7);
+"""
+    ran = subprocess.run(["node", "-e", script, os.path.join(os.path.dirname(__file__), "..", "web", "connect.js")], capture_output=True, text=True)
+    assert ran.returncode == 0, ran.stderr or ran.stdout
+
+
+def test_short_wallet_points_at_a_pack_and_disabled_buttons_look_disabled():
+    root = os.path.join(os.path.dirname(__file__), "..")
+    html = open(os.path.join(root, "web", "index.html"), encoding="utf-8").read()
+    connect = open(os.path.join(root, "web", "connect.js"), encoding="utf-8").read()
+    assert "button:disabled,.btn:disabled{opacity:.45;cursor:not-allowed}" in html
+    assert "connect-packs" in html and ".btn.pack" in html and ".btn.pack.suggest" in html
+    assert "Add money to start" in connect and "शुरू करने के लिए पैसे जोड़ें" in connect
+    assert "Tap an amount above." in connect and "ऊपर कोई राशि चुनें।" in connect
+    assert "function coverPack" in connect
+    assert 'id="connectStart" ${short ? \'disabled\' : \'\'}' not in connect
+    script = r"""
+const fs = require('fs');
+const src = fs.readFileSync(process.argv[1], 'utf8');
+const start = src.indexOf('function coverPack');
+const end = src.indexOf('function dollars');
+eval(src.slice(start, end));
+if (coverPack(150) !== 'wallet_5') process.exit(2);
+if (coverPack(500) !== 'wallet_5') process.exit(3);
+if (coverPack(501) !== 'wallet_10') process.exit(4);
+if (coverPack(1500) !== 'wallet_20') process.exit(5);
+if (coverPack(2500) !== 'wallet_20') process.exit(6);
+if (coverPack(0) !== 'wallet_5') process.exit(7);
+"""
+    ran = subprocess.run(["node", "-e", script, os.path.join(root, "web", "connect.js")], capture_output=True, text=True)
+    assert ran.returncode == 0, ran.stderr or ran.stdout
 
 
 def test_planet_detail_opens_in_a_sheet():
@@ -275,7 +485,7 @@ def test_planet_detail_opens_in_a_sheet():
     assert "max-height:58px" not in html
     assert "body.app-fit .info .m{display:-webkit-box" not in html
     assert "if (o) openReading(o, src)" in html
-    assert "drishti-v18" in open(os.path.join(root, "web", "sw.js"), encoding="utf-8").read()
+    assert "drishti-v56" in open(os.path.join(root, "web", "sw.js"), encoding="utf-8").read()
 
 
 def test_panchang_and_pdf_endpoints(client):
@@ -353,6 +563,32 @@ SUDHANSHU = {"name": "sudhanshu singh", "gender": "male", "date": "1981-05-10", 
              "place": {"name": "Along, Arunachal Pradesh, India", "lat": 28.16951, "lon": 94.8006, "tz": "Asia/Kolkata"}}
 
 
+def test_payout_account_request_drops_the_legacy_type_field():
+    source = open(os.path.join(os.path.dirname(__file__), "..", "server", "connect_stripe.py"), encoding="utf-8").read()
+    api = open(os.path.join(os.path.dirname(__file__), "..", "server", "connect_api.py"), encoding="utf-8").read()
+    body = source.split("def connected_account_body", 1)[1].split("def account_link_body", 1)[0]
+    assert '"type": "express"' not in body
+    assert '"losses_collector": "stripe"' in body
+    assert '"fees_collector": "application"' in body
+    assert '"dashboard": "express"' in body
+    assert '"country": "US"' in body
+    assert "stripe_transfers" in body and '"requested": True' in body
+    link = source.split("def account_link_body", 1)[1].split("def transfers_active", 1)[0]
+    assert "configurations" not in link
+    assert '"refresh_url": refresh_url' in link and '"return_url": return_url' in link
+    assert '"fields": "currently_due"' in link
+    assert "eventually_due" not in link
+    assert "v2/core/accounts" in source and "v2/core/account_links" in source
+    assert "application/json" in source
+    assert "account_onboarding" in source
+    assert 'ACCOUNT_API_VERSION = "2026-10-28.preview"' in source
+    onboard = api.split("def api_stripe_onboard", 1)[1].split("def api_quote", 1)[0]
+    assert '"acct-astro-v2-" + astro_id' in onboard
+    assert '"acct-" + astro_id' not in onboard
+    transfer = source.split("def create_transfer", 1)[1]
+    assert '"destination": destination' in transfer and '"currency": "usd"' in transfer
+
+
 def test_chart_endpoint_stays_lahiri_even_if_the_caller_thread_is_fagan(client):
     import swisseph as swe
     swe.set_sid_mode(swe.SIDM_FAGAN_BRADLEY, 0, 0)
@@ -366,3 +602,38 @@ def test_chart_endpoint_stays_lahiri_even_if_the_caller_thread_is_fagan(client):
     assert body["lagna"]["sign"] == "Scorpio" and body["lagna"]["degree"] > 18
     assert body["dasha"]["current"]["mahadasha"]["start"] == "2024-06-29"
     assert body["dasha"]["current"]["antardasha"]["lord"] == "Rahu"
+
+
+def test_script_urls_match_the_service_worker_and_are_not_cached(client):
+    root = os.path.join(os.path.dirname(__file__), "..")
+    sw = open(os.path.join(root, "web", "sw.js"), encoding="utf-8").read()
+    html = open(os.path.join(root, "web", "index.html"), encoding="utf-8").read()
+    connect = open(os.path.join(root, "web", "connect.js"), encoding="utf-8").read()
+    cache = sw.split("const CACHE = '", 1)[1].split("'", 1)[0]
+    assert cache == "drishti-v56"
+    assert 'src="birthpicker.js?v=' + cache + '"' in html
+    assert 'src="connect.js?v=' + cache + '"' in html
+    assert "cache: 'no-store'" in sw
+    for path in ("/", "/index.html", "/connect.js", "/birthpicker.js", "/sw.js", "/privacy.html", "/terms.html", "/support.html"):
+        assert "'" + path + "'" in sw.split("const FRESH", 1)[1].split("]", 1)[0]
+    vercel = json.load(open(os.path.join(root, "vercel.json"), encoding="utf-8"))
+    headers = {item["source"]: {h["key"]: h["value"] for h in item["headers"]} for item in vercel["headers"]}
+    for path in ("/", "/index.html", "/connect.js", "/birthpicker.js", "/sw.js", "/privacy.html", "/terms.html", "/support.html"):
+        assert headers[path]["Cache-Control"] == "no-cache"
+        assert client.get(path).headers["cache-control"] == "no-cache"
+    assert "function requireVoiceRoom" in connect
+    assert "The voice room is not connected yet." in connect and "वॉइस रूम अभी जुड़ा नहीं है।" in connect
+    mute = connect.split("function bindMute", 1)[1].split("function bindSpeaker", 1)[0]
+    assert mute.find("requireVoiceRoom") < mute.find("setAttribute")
+    speaker = connect.split("function bindSpeaker", 1)[1].split("function setVoiceNote", 1)[0]
+    assert speaker.find("requireVoiceRoom") < speaker.find("setAttribute")
+    assert '.call-controls .btn.quiet[aria-pressed="true"]' in html
+    assert "function primeCallAudio" in connect and "AudioPlaybackStatusChanged" in connect
+    assert "function paintVoiceDebug" in connect and "canPlaybackAudio" in connect
+    assert "room ' + ((room && room.state) || 'none')" in connect
+    ios = json.load(open(os.path.join(root, "ios", "capacitor.config.json"), encoding="utf-8"))
+    assert ios["ios"]["allowsInlineMediaPlayback"] is True
+    assert ios["ios"]["mediaTypesRequiringUserActionForPlayback"] == []
+    bridge = open(os.path.join(root, "ios", "plugins", "DrishtiNative", "DrishtiBridgeViewController.swift"), encoding="utf-8").read()
+    assert "allowsInlineMediaPlayback = true" in bridge
+    assert "mediaTypesRequiringUserActionForPlayback = []" in bridge

@@ -90,6 +90,10 @@ A desktop browser cannot open Play Billing. The page says so, and it does not se
 9. Add your own Google account under License testing and install the app from an internal testing track. Those test purchases are accepted. They are not a free question for everyone else.
 10. Buy one question, confirm an answer, then ask a second question and confirm Play asks for $0.99 again.
 
+## Personal astrologers
+
+Off until `ASTROLOGER_CONNECT_ENABLED=1` and `DATABASE_URL` point at Postgres. Setup, LiveKit, Stripe Connect, App Store wallet products, and the weekly payout cron are in [docs/ASTROLOGER_CONNECT.md](docs/ASTROLOGER_CONNECT.md). The iOS shell is in [ios/README.md](ios/README.md). Android is unchanged.
+
 ## Stubbed
 * Phone OTP: interface only (`OtpProvider`). Email magic link works without a provider key, and sends mail only when `SMTP_HOST` is set.
 * Birth profiles and Acharya chats are stored for the account once `DATABASE_URL` is set.
