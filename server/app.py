@@ -83,7 +83,7 @@ app = FastAPI(title=APP_NAME)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 
-_FRESH_PAGES = {"/", "/index.html", "/connect.js", "/birthpicker.js", "/sw.js"}
+_FRESH_PAGES = {"/", "/index.html", "/connect.js", "/birthpicker.js", "/sw.js", "/privacy.html", "/terms.html", "/support.html", "/privacy", "/terms", "/support"}
 
 
 @app.middleware("http")
@@ -1103,6 +1103,11 @@ def privacy():
 @app.get("/terms")
 def terms():
     return FileResponse(os.path.join(WEB, "terms.html"))
+
+
+@app.get("/support")
+def support():
+    return FileResponse(os.path.join(WEB, "support.html"))
 
 
 app.mount("/", StaticFiles(directory=WEB), name="web")

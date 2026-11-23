@@ -130,7 +130,7 @@ def test_background_music_never_starts():
         assert gone not in html
     assert "drishtiMusicHold" not in connect and "drishtiMusicRelease" not in connect
     assert "does not play background music" in credits and "no third-party music license" in credits
-    assert "drishti-v55" in open(os.path.join(root, "web", "sw.js"), encoding="utf-8").read()
+    assert "drishti-v56" in open(os.path.join(root, "web", "sw.js"), encoding="utf-8").read()
 
 
 def test_home_asks_for_the_device_date():
@@ -157,7 +157,7 @@ def test_home_periods_card_and_local_clock():
     assert "Good evening" in greet and "clock.getHours() < 5" in greet
     assert "function glanceTitle" in html and "function horoGlanceSentence" in html
     assert "glanceHoroLine" not in html
-    assert "drishti-v55" in open(os.path.join(os.path.dirname(__file__), "..", "web", "sw.js"), encoding="utf-8").read()
+    assert "drishti-v56" in open(os.path.join(os.path.dirname(__file__), "..", "web", "sw.js"), encoding="utf-8").read()
 
 
 def test_profile_screen_drops_invite_and_sign_in():
@@ -218,7 +218,7 @@ def test_owned_play_question_is_sent_again_instead_of_bought():
     assert "buyPlayQuestion" in ask and "buyFreshPlayQuestion" in ask
     assert "payment_invalid" in ask and "keepPlayToken(purchaseToken)" in ask
     assert "response.complete('success')" in html
-    assert "drishti-v55" in open(os.path.join(root, "web", "sw.js"), encoding="utf-8").read()
+    assert "drishti-v56" in open(os.path.join(root, "web", "sw.js"), encoding="utf-8").read()
 
 
 def test_answer_opens_in_a_reading_sheet():
@@ -232,7 +232,7 @@ def test_answer_opens_in_a_reading_sheet():
     assert "openAnswerSheet(aiEl, true)" in ask
     assert "openAnswerSheet(painted, true)" in ask
     assert "id=\"askSend\"" in html and "priceLabel()" in html
-    assert "drishti-v55" in open(os.path.join(os.path.dirname(__file__), "..", "web", "sw.js"), encoding="utf-8").read()
+    assert "drishti-v56" in open(os.path.join(os.path.dirname(__file__), "..", "web", "sw.js"), encoding="utf-8").read()
 
 
 def test_rate_prompt_is_quiet_and_remembers_a_dismissal():
@@ -252,7 +252,7 @@ def test_rate_prompt_is_quiet_and_remembers_a_dismissal():
     assert "closeSheet({skipRate: true})" in ask
     closed = html.split("function closeSheet", 1)[1].split("function bindSheetSwipe", 1)[0]
     assert "answer-read" in closed and "v.read = true" in closed
-    assert "drishti-v55" in open(os.path.join(os.path.dirname(__file__), "..", "web", "sw.js"), encoding="utf-8").read()
+    assert "drishti-v56" in open(os.path.join(os.path.dirname(__file__), "..", "web", "sw.js"), encoding="utf-8").read()
     assert "Rate on the App Store" in rate and "App Store पर रेट करें" in rate
     assert "apps.apple.com" in rate and "if (inIosApp())" in rate
 
@@ -296,6 +296,31 @@ def test_store_copy_follows_the_ios_shell():
     assert "Apple ID password" in privacy
     assert "आचार्य का हर प्रश्न" in privacy and "App Store से" in privacy and "भुगतान Apple करता है" in privacy
     assert "platform === 'ios'" in privacy
+    assert "function useIosCopy()" in privacy and "drishti-ios" in privacy and "androidApp" in privacy
+    assert "Ikshana Solutions LLC" in privacy and "273 Lewis Fisher Dr" in privacy
+    assert "ikshanasolution123@gmail.com" in privacy and "LiveKit" in privacy and "PayPal" in privacy
+    support = open(os.path.join(root, "web", "support.html"), encoding="utf-8").read()
+    assert "ikshanasolution123@gmail.com" in support and "privacy.html" in support and "terms.html" in support
+    assert "$0.99" in support and "Delete account" in support and "five-minute hold" in support
+    script_privacy = r"""
+const fs = require('fs');
+const html = fs.readFileSync(process.argv[1], 'utf8');
+const src = html.split('function inIosApp()')[1].split('document.documentElement', 1)[0];
+eval('function inIosApp()' + src);
+function check(host, win) {
+  global.location = {hostname: host};
+  global.window = win;
+  return useIosCopy();
+}
+if (!check('drishti-ios.vercel.app', {})) process.exit(2);
+if (!check('example.com', {})) process.exit(3);
+if (check('play.example', {DrishtiPlay: {}})) process.exit(4);
+if (check('play.example', {Capacitor: {getPlatform() { return 'android'; }, isNativePlatform() { return true; }}})) process.exit(5);
+if (!check('drishti-ios.vercel.app', {DrishtiPlay: {}})) process.exit(6);
+if (!check('example.com', {Capacitor: {getPlatform() { return 'ios'; }, isNativePlatform() { return true; }}})) process.exit(7);
+"""
+    ran_privacy = subprocess.run(["node", "-e", script_privacy, os.path.join(root, "web", "privacy.html")], capture_output=True, text=True)
+    assert ran_privacy.returncode == 0, ran_privacy.stderr or ran_privacy.stdout
     script = r"""
 const fs = require('fs');
 const html = fs.readFileSync(process.argv[1], 'utf8');
@@ -460,7 +485,7 @@ def test_planet_detail_opens_in_a_sheet():
     assert "max-height:58px" not in html
     assert "body.app-fit .info .m{display:-webkit-box" not in html
     assert "if (o) openReading(o, src)" in html
-    assert "drishti-v55" in open(os.path.join(root, "web", "sw.js"), encoding="utf-8").read()
+    assert "drishti-v56" in open(os.path.join(root, "web", "sw.js"), encoding="utf-8").read()
 
 
 def test_panchang_and_pdf_endpoints(client):
@@ -585,15 +610,15 @@ def test_script_urls_match_the_service_worker_and_are_not_cached(client):
     html = open(os.path.join(root, "web", "index.html"), encoding="utf-8").read()
     connect = open(os.path.join(root, "web", "connect.js"), encoding="utf-8").read()
     cache = sw.split("const CACHE = '", 1)[1].split("'", 1)[0]
-    assert cache == "drishti-v55"
+    assert cache == "drishti-v56"
     assert 'src="birthpicker.js?v=' + cache + '"' in html
     assert 'src="connect.js?v=' + cache + '"' in html
     assert "cache: 'no-store'" in sw
-    for path in ("/", "/index.html", "/connect.js", "/birthpicker.js", "/sw.js"):
+    for path in ("/", "/index.html", "/connect.js", "/birthpicker.js", "/sw.js", "/privacy.html", "/terms.html", "/support.html"):
         assert "'" + path + "'" in sw.split("const FRESH", 1)[1].split("]", 1)[0]
     vercel = json.load(open(os.path.join(root, "vercel.json"), encoding="utf-8"))
     headers = {item["source"]: {h["key"]: h["value"] for h in item["headers"]} for item in vercel["headers"]}
-    for path in ("/", "/index.html", "/connect.js", "/birthpicker.js", "/sw.js"):
+    for path in ("/", "/index.html", "/connect.js", "/birthpicker.js", "/sw.js", "/privacy.html", "/terms.html", "/support.html"):
         assert headers[path]["Cache-Control"] == "no-cache"
         assert client.get(path).headers["cache-control"] == "no-cache"
     assert "function requireVoiceRoom" in connect

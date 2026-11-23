@@ -4,7 +4,10 @@
     {"source": "/index.html", "headers": [{"key": "Cache-Control", "value": "no-cache"}]},
     {"source": "/connect.js", "headers": [{"key": "Cache-Control", "value": "no-cache"}]},
     {"source": "/birthpicker.js", "headers": [{"key": "Cache-Control", "value": "no-cache"}]},
-    {"source": "/sw.js", "headers": [{"key": "Cache-Control", "value": "no-cache"}]}
+    {"source": "/sw.js", "headers": [{"key": "Cache-Control", "value": "no-cache"}]},
+    {"source": "/privacy.html", "headers": [{"key": "Cache-Control", "value": "no-cache"}]},
+    {"source": "/terms.html", "headers": [{"key": "Cache-Control", "value": "no-cache"}]},
+    {"source": "/support.html", "headers": [{"key": "Cache-Control", "value": "no-cache"}]}
   ],
   "crons": [
     {
