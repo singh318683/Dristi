@@ -1738,3 +1738,229 @@ def test_apple_key_normalizes_a_collapsed_pem(monkeypatch):
         assert connect_storekit.key_parses() is True
         assert connect_storekit.jwt_ok() is True
         assert "\\n" not in connect_storekit.apple_private_key()
+
+
+# ---------------------------------------------------------------- Android app ----
+ANDROID = {"X-Drishti-Shell": "android"}
+IOS = {"X-Drishti-Shell": "ios"}
+
+
+def test_platforms_unset_keeps_every_client_like_drishti_ios_today(client, monkeypatch):
+    monkeypatch.delenv("ASTROLOGER_CONNECT_PLATFORMS", raising=False)
+    monkeypatch.setenv("STRIPE_PUBLISHABLE_KEY", "pk_test_any")
+    for headers in ({}, IOS, ANDROID):
+        status = client.get("/api/status", headers=headers).json()
+        assert status["astrologer_connect"] is True
+        assert status["stripe_publishable_key"] == "pk_test_any"
+        assert client.get("/api/connect/astrologers", params={"device": "d"}, headers=headers).status_code == 200
+    assert "stripe_google_pay" not in client.get("/api/status", headers=IOS).json()
+    assert "stripe_google_pay" not in client.get("/api/status").json()
+
+
+def test_platforms_limit_live_astrologers_to_the_apps(client, monkeypatch):
+    monkeypatch.setenv("ASTROLOGER_CONNECT_PLATFORMS", "ios,android")
+    monkeypatch.setenv("STRIPE_PUBLISHABLE_KEY", "pk_test_any")
+    web = client.get("/api/status").json()
+    assert web["astrologer_connect"] is False
+    assert web["stripe_publishable_key"] == ""
+    assert "provider_monthly_label" not in web and "rate_min_cents" not in web
+    assert client.get("/api/status", headers={"X-Drishti-Shell": "something-else"}).json()["astrologer_connect"] is False
+    for headers in (IOS, ANDROID):
+        on = client.get("/api/status", headers=headers).json()
+        assert on["astrologer_connect"] is True and on["stripe_publishable_key"] == "pk_test_any"
+        assert client.get("/api/connect/astrologers", params={"device": "d"}, headers=headers).status_code == 200
+    blocked = client.get("/api/connect/astrologers", params={"device": "d"})
+    assert blocked.status_code == 404 and blocked.json()["detail"] == "connect_disabled"
+    assert client.get("/api/connect/wallet", params={"device": "d"}).status_code == 404
+    # Webhooks and the admin page carry no app header and are never limited.
+    assert client.get("/api/connect/admin/astrologers", headers=auth("admin-test-token")).status_code == 200
+    hook = client.post("/api/connect/stripe/webhook", content=b"{}")
+    assert hook.status_code != 404
+    live = client.post("/api/connect/livekit/webhook", content=b"{}")
+    assert live.status_code != 404
+    monkeypatch.setenv("ASTROLOGER_CONNECT_PLATFORMS", "android")
+    assert client.get("/api/status", headers=IOS).json()["astrologer_connect"] is False
+    assert client.get("/api/status", headers=ANDROID).json()["astrologer_connect"] is True
+    monkeypatch.setenv("ASTROLOGER_CONNECT_PLATFORMS", "web,ios")
+    assert client.get("/api/status").json()["astrologer_connect"] is True
+    assert client.get("/api/status", headers=ANDROID).json()["astrologer_connect"] is False
+
+
+def test_platforms_do_not_turn_on_a_disabled_feature(client, monkeypatch):
+    monkeypatch.setenv("ASTROLOGER_CONNECT_PLATFORMS", "ios,android")
+    monkeypatch.delenv("ASTROLOGER_CONNECT_ENABLED", raising=False)
+    assert client.get("/api/status", headers=ANDROID).json()["astrologer_connect"] is False
+    assert client.get("/api/connect/astrologers", params={"device": "d"}, headers=ANDROID).status_code == 404
+
+
+def test_android_app_is_sign_in_only_and_never_sells_the_listing_plan(client, monkeypatch):
+    refused = client.post("/api/connect/apply", headers=ANDROID, json={
+        "email": "droid@example.com", "password": "correct-horse", "name": "Droid Rao",
+        "specialties": ["career"], "languages": ["English"], "years": 4, "bio": "Timing.", "rate_cents": 100,
+    })
+    assert refused.status_code == 403 and refused.json()["detail"] == "signup_not_in_app"
+    # The website (and iOS, unchanged) can still register.
+    created = client.post("/api/connect/apply", headers=IOS, json={
+        "email": "droid@example.com", "password": "correct-horse", "name": "Droid Rao",
+        "specialties": ["career"], "languages": ["English"], "years": 4, "bio": "Timing.", "rate_cents": 100,
+    })
+    assert created.status_code == 200
+    login = client.post("/api/connect/astro/login", headers=ANDROID, json={"email": "droid@example.com", "password": "correct-horse"})
+    assert login.status_code == 200
+    token = login.json()["token"]
+    shell = {**auth(token), **ANDROID}
+    monkeypatch.setenv("STRIPE_SECRET_KEY", "sk_test_android")
+    monkeypatch.setenv("STRIPE_PRICE_PROVIDER_MONTHLY", "price_month")
+
+    def explode(*_args, **_kwargs):
+        raise AssertionError("stripe checkout")
+
+    monkeypatch.setattr(connect_stripe, "create_customer", lambda *a, **k: {"id": "cus_android"})
+    monkeypatch.setattr(connect_stripe, "create_checkout", explode)
+    monkeypatch.setattr(connect_stripe, "create_portal", explode)
+    for path, body in (("/api/connect/astro/trial", None), ("/api/connect/astro/plan", {"interval": "month"}), ("/api/connect/astro/portal", None)):
+        res = client.post(path, headers=shell, json=body) if body else client.post(path, headers=shell)
+        assert res.status_code == 403 and res.json()["detail"] == "plan_not_in_app", path
+        assert "http" not in res.text
+
+
+def _ended_chat(client):
+    astro_id, token = seed(client, rate=100)
+    fund("phone-droid", "wallet_5", "pi_droid_lock")
+    started = client.post("/api/connect/sessions", headers=ANDROID, json={
+        "device": "phone-droid", "astrologer_id": astro_id, "mode": "chat", "question": "Career this year?",
+        "profile": {"name": "Asha", "date": "1990-05-15", "place": {"name": "Delhi"}},
+        "idempotency_key": "droid-lock",
+    }).json()
+    sid = started["id"]
+    assert client.post("/api/connect/sessions/" + sid + "/accept", headers=auth(token)).status_code == 200
+    assert client.post("/api/connect/sessions/" + sid + "/messages", headers=ANDROID, json={
+        "sender": "user", "body": "Is spring better?", "device": "phone-droid"}).status_code == 200
+    during = client.get("/api/connect/sessions/" + sid + "/messages", headers=ANDROID, params={"device": "phone-droid", "after": 0})
+    assert during.status_code == 200 and [m["body"] for m in during.json()["messages"]] == ["Is spring better?"]
+    ended = client.post("/api/connect/sessions/" + sid + "/end", headers=ANDROID, json={"device": "phone-droid"})
+    assert ended.status_code == 200 and ended.json()["status"] == "ended"
+    return sid, token
+
+
+def test_android_chat_cannot_be_opened_again_after_the_session_ends(client, monkeypatch):
+    monkeypatch.delenv("CONNECT_LOCK_ENDED_CHATS", raising=False)
+    sid, token = _ended_chat(client)
+    url = "/api/connect/sessions/" + sid + "/messages"
+    user = client.get(url, headers=ANDROID, params={"device": "phone-droid", "after": 0})
+    assert user.status_code == 410 and user.json()["detail"] == "session_ended"
+    astro = client.get(url, headers={**auth(token), **ANDROID}, params={"after": 0})
+    assert astro.status_code == 410
+    # iOS and the website keep today's behaviour.
+    for headers in ({}, IOS):
+        kept = client.get(url, headers=headers, params={"device": "phone-droid", "after": 0})
+        assert kept.status_code == 200 and [m["body"] for m in kept.json()["messages"]] == ["Is spring better?"]
+    # The rows stay on the server for reports and disputes.
+    assert store.list_messages(sid, 0, "phone-droid", None)[0]["body"] == "Is spring better?"
+    with pytest.raises(store.ConnectError):
+        store.list_messages(sid, 0, "phone-droid", None, lock_after_end=True)
+    monkeypatch.setenv("CONNECT_LOCK_ENDED_CHATS", "1")
+    assert client.get(url, params={"device": "phone-droid", "after": 0}).status_code == 410
+
+
+def test_google_pay_is_android_only_and_off_by_default(client, monkeypatch):
+    monkeypatch.delenv("ANDROID_GOOGLE_PAY_ENABLED", raising=False)
+    assert client.get("/api/status", headers=ANDROID).json()["stripe_google_pay"] is False
+    monkeypatch.setenv("ANDROID_GOOGLE_PAY_ENABLED", "1")
+    assert client.get("/api/status", headers=ANDROID).json()["stripe_google_pay"] is True
+    assert "stripe_google_pay" not in client.get("/api/status", headers=IOS).json()
+    assert "stripe_google_pay" not in client.get("/api/status").json()
+    monkeypatch.setenv("ASTROLOGER_CONNECT_PLATFORMS", "ios")
+    assert "stripe_google_pay" not in client.get("/api/status", headers=ANDROID).json()
+
+
+def test_android_web_copy_wallet_scope_wake_lock_and_google_pay():
+    root = os.path.join(os.path.dirname(__file__), "..")
+    connect = open(os.path.join(root, "web", "connect.js"), encoding="utf-8").read()
+    html = open(os.path.join(root, "web", "index.html"), encoding="utf-8").read()
+    assert "function appShellName()" in connect and "headers['X-Drishti-Shell'] = shell" in connect
+    native = connect.split("function nativeShell()", 1)[1].split("function androidShell()", 1)[0]
+    assert "inIosApp()" in native and "inAndroidApp()" in native
+    assert "navigator.wakeLock.request('screen')" in connect
+    stop = connect.split("function stop() {", 1)[1].split("function ", 1)[0]
+    assert "releaseScreen()" in stop
+    attach = connect.split("async function attachVoice(info)", 1)[1].split("async function ", 1)[0]
+    assert "holdScreenOn()" in attach
+    hold = connect.split("async function holdScreenOn()", 1)[1].split("function releaseScreen", 1)[0]
+    assert "if (!androidShell()) return;" in hold
+    scope = connect.split("function walletScopeNote()", 1)[1].split("function keepOpenNote", 1)[0]
+    assert "if (!androidShell()) return '';" in scope
+    assert "US dollars" in scope and "only for live chat or voice sessions" in scope and "Google Play" in scope
+    assert connect.count("${walletScopeNote()}") == 2
+    assert connect.count("${keepOpenNote()}") == 2
+    assert "const wallets = {applePay: 'never', googlePay: 'never'};" in connect
+    assert "if (androidShell() && !!(S.status && S.status.stripe_google_pay)) wallets.googlePay = 'auto';" in connect
+    assert "applePay = " not in connect
+    assert "App access notes in Play Console" in connect and "Enter the code from App Store Connect." in connect
+    assert "function inAndroidApp()" in html and "sessionStorage.setItem('dr-shell', 'android')" in html
+    assert "headers['X-Drishti-Shell'] = shell" in html
+    me = html.split("function pageMe()", 1)[1].split("function peopleHtml", 1)[0]
+    assert "(inIosApp() || inAndroidApp()) ? tr('Sign in'" in me
+
+
+def test_android_shell_detection_in_the_page():
+    root = os.path.join(os.path.dirname(__file__), "..")
+    script = r"""
+const fs = require('fs');
+const html = fs.readFileSync(process.argv[1], 'utf8');
+const src = html.split('function inIosApp()')[1].split('function onboarding()')[0];
+eval('function inIosApp()' + src);
+function tr(en) { return en; }
+function storage() { const m = {}; return {getItem: k => (k in m ? m[k] : null), setItem: (k, v) => { m[k] = String(v); }}; }
+global.window = {};
+global.document = {referrer: ''};
+global.sessionStorage = storage();
+global.location = {search: ''};
+if (appShell() !== '') process.exit(2);
+global.location = {search: '?shell=android'};
+if (appShell() !== 'android') process.exit(3);
+global.location = {search: '#wallet'};
+if (appShell() !== 'android') process.exit(4);
+global.sessionStorage = storage();
+if (appShell() !== '') process.exit(5);
+global.document = {referrer: 'android-app://com.ikshana.drishti/'};
+if (appShell() !== 'android') process.exit(6);
+if (storeLine('play', 'play', 'ios', 'ios') !== 'play') process.exit(7);
+global.window = {Capacitor: {getPlatform() { return 'ios'; }, isNativePlatform() { return true; }}};
+global.location = {search: '?shell=android'};
+if (appShell() !== 'ios') process.exit(8);
+if (inAndroidApp()) process.exit(9);
+"""
+    ran = subprocess.run(["node", "-e", script, os.path.join(root, "web", "index.html")], capture_output=True, text=True)
+    assert ran.returncode == 0, (ran.returncode, ran.stderr or ran.stdout)
+
+
+def test_privacy_and_support_show_google_play_copy_in_the_android_app():
+    root = os.path.join(os.path.dirname(__file__), "..")
+    privacy = open(os.path.join(root, "web", "privacy.html"), encoding="utf-8").read()
+    support = open(os.path.join(root, "web", "support.html"), encoding="utf-8").read()
+    terms = open(os.path.join(root, "web", "terms.html"), encoding="utf-8").read()
+    assert "a live chat cannot be opened again after the session ends" in privacy
+    assert "Google Play purchase" in support and "not inside the Android app" in support
+    assert "not inside the iPhone app" in support and "Apple In-App Purchase" in support
+    assert "US dollars" in terms and "cannot buy Acharya questions" in terms
+    for page in ("privacy.html", "support.html"):
+        script = r"""
+const fs = require('fs');
+const html = fs.readFileSync(process.argv[1], 'utf8');
+const src = html.split('function inIosApp()')[1].split('document.documentElement', 1)[0];
+eval('function inIosApp()' + src);
+function check(host, search, win) {
+  global.location = {hostname: host, search: search};
+  global.window = win;
+  return useIosCopy();
+}
+if (!check('drishti-ios.vercel.app', '', {})) process.exit(2);
+if (check('dristi-six.vercel.app', '', {})) process.exit(3);
+if (check('drishti-android-staging.vercel.app', '', {})) process.exit(4);
+if (check('example.com', '?shell=android', {})) process.exit(5);
+if (!check('example.com', '', {})) process.exit(6);
+if (!check('example.com', '', {Capacitor: {getPlatform() { return 'ios'; }, isNativePlatform() { return true; }}})) process.exit(7);
+"""
+        ran = subprocess.run(["node", "-e", script, os.path.join(root, "web", page)], capture_output=True, text=True)
+        assert ran.returncode == 0, (page, ran.returncode, ran.stderr or ran.stdout)

@@ -1,6 +1,6 @@
 # Drishti for Android
 
-This folder is an Android Studio project. It wraps https://dristi-six.vercel.app as a Trusted Web Activity. The package name is `com.ikshana.drishti`. The app name on the phone is Drishti.
+This folder is an Android Studio project. It wraps https://dristi-six.vercel.app as a Trusted Web Activity. From 1.1.0 (versionCode 5) it opens `https://dristi-six.vercel.app/?shell=android`, which turns on live astrologers inside the app only. See [PLAY_REVIEW_NOTES.md](PLAY_REVIEW_NOTES.md). The package name is `com.ikshana.drishti`. The app name on the phone is Drishti.
 
 An Acharya question is the Play consumable `acharya_question` at $0.99. Chrome shows the Play purchase sheet through the Digital Goods API (`https://play.google.com/billing`). The purchase token goes to the website, and the server checks it with Google. This app does not acknowledge or consume the purchase. The server consumes it after an answer has started, so a failed answer can be tried again with the same purchase.
 
@@ -19,6 +19,16 @@ No keystore and no password belong in this folder. `local.properties` is created
 5. If Drishti from an older build is already on the phone, uninstall it first, then press Run. The app opens the live site. With no network, it shows an offline screen and a Try again button. A build from before the site-settings activity was declared crashed on open on Android 12; uninstalling clears that install.
 
 A debug build can show the site. A $0.99 purchase works only after the app is installed from a Play testing track, the product exists, and you are a license tester. That is a Play rule, not something the debug button can skip.
+
+## A test build that opens the staging site
+
+Release builds always open https://dristi-six.vercel.app. To test against the staging Vercel project, add this line to `android/gradle.properties` on your machine and sync Gradle:
+
+```text
+drishtiHost=drishti-android-staging.vercel.app
+```
+
+Run or build as usual. Remove the line (and sync again) before you build the bundle you upload for production. Do not commit it.
 
 ## Create the upload key and build a signed bundle
 

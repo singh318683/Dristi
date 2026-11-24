@@ -1202,11 +1202,20 @@ def post_message(session_id: str, sender: str, body: str, device: str | None, as
     return {"ok": True, "id": msg_id, "sender": sender, "body": body}
 
 
-def list_messages(session_id: str, after: int, device: str | None, astrologer_id: str | None) -> list[dict]:
+def list_messages(session_id: str, after: int, device: str | None, astrologer_id: str | None,
+                  *, lock_after_end: bool = False) -> list[dict]:
+    """Messages for one of the two people in the session.
+
+    With lock_after_end the thread cannot be read again once the session has ended,
+    which is what Google Play's 1:1 live service exception asks for. The rows stay on
+    the server for reports and disputes until the account is deleted.
+    """
     with db.connect() as con:
         ensure(con)
         item = _as_dict(con, _session_row(con, session_id) or (_ for _ in ()).throw(ConnectError("not_found", 404)))
         _require_party(con, item, device, astrologer_id)
+        if lock_after_end and item["status"] == "ended":
+            raise ConnectError("session_ended", 410)
         if item["astrologer_id"] == connect_demo.DEMO_ID and item["status"] == "active" and item["mode"] == "chat":
             _demo_script(con, item)
         rows = con.execute(

@@ -1,14 +1,21 @@
 package com.ikshana.drishti
 
+import android.Manifest
 import android.annotation.SuppressLint
+import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Bundle
 import android.webkit.JavascriptInterface
+import android.webkit.PermissionRequest
+import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.activity.OnBackPressedCallback
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import com.android.billingclient.api.BillingClient
 import com.android.billingclient.api.BillingClientStateListener
 import com.android.billingclient.api.BillingFlowParams
@@ -35,6 +42,15 @@ class SiteActivity : AppCompatActivity(), PurchasesUpdatedListener {
     private lateinit var billing: BillingClient
     private var billingReady = false
     private var pendingPurchase: PendingPurchase? = null
+
+    // A voice consultation asked for the microphone before Android granted it.
+    private var pendingMic: PermissionRequest? = null
+    private val askMic = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        val request = pendingMic
+        pendingMic = null
+        if (request == null) return@registerForActivityResult
+        if (granted) request.grant(arrayOf(PermissionRequest.RESOURCE_AUDIO_CAPTURE)) else request.deny()
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -72,7 +88,7 @@ class SiteActivity : AppCompatActivity(), PurchasesUpdatedListener {
             android.util.Log.e("Drishti", "Play Billing unavailable", error)
             billingReady = false
         }
-        web.loadUrl(ORIGIN)
+        web.loadUrl(START_URL)
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
                 if (web.canGoBack()) web.goBack() else finish()
@@ -84,6 +100,17 @@ class SiteActivity : AppCompatActivity(), PurchasesUpdatedListener {
     private fun configureWeb() {
         web.settings.javaScriptEnabled = true
         web.settings.domStorageEnabled = true
+        // The remote voice of a live call plays without an extra tap.
+        web.settings.mediaPlaybackRequiresUserGesture = false
+        web.webChromeClient = object : WebChromeClient() {
+            override fun onPermissionRequest(request: PermissionRequest) {
+                runOnUiThread { answerMic(request) }
+            }
+
+            override fun onPermissionRequestCanceled(request: PermissionRequest) {
+                if (pendingMic == request) pendingMic = null
+            }
+        }
         web.addJavascriptInterface(Bridge(), "DrishtiPlayNative")
         web.webViewClient = object : WebViewClient() {
             override fun onPageFinished(view: WebView?, url: String?) {
@@ -101,6 +128,28 @@ class SiteActivity : AppCompatActivity(), PurchasesUpdatedListener {
                 }
             }
         }
+    }
+
+    /**
+     * Only the microphone, and only for the Drishti site. Camera and other
+     * resources are always refused. Android's own dialog asks the person first.
+     */
+    private fun answerMic(request: PermissionRequest) {
+        val fromDrishti = request.origin?.host == Uri.parse(ORIGIN).host
+        val wantsMic = request.resources.contains(PermissionRequest.RESOURCE_AUDIO_CAPTURE)
+        if (!fromDrishti || !wantsMic) {
+            request.deny()
+            return
+        }
+        val held = ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) ==
+            PackageManager.PERMISSION_GRANTED
+        if (held) {
+            request.grant(arrayOf(PermissionRequest.RESOURCE_AUDIO_CAPTURE))
+            return
+        }
+        pendingMic?.deny()
+        pendingMic = request
+        askMic.launch(Manifest.permission.RECORD_AUDIO)
     }
 
     override fun onPurchasesUpdated(result: BillingResult, purchases: MutableList<Purchase>?) {
@@ -237,7 +286,10 @@ class SiteActivity : AppCompatActivity(), PurchasesUpdatedListener {
     private data class PendingPurchase(val requestId: String, val productId: String)
 
     companion object {
-        private const val ORIGIN = "https://dristi-six.vercel.app/"
+        // https://dristi-six.vercel.app/ unless a staging build sets drishtiHost.
+        private const val ORIGIN = BuildConfig.SITE_ORIGIN
+        // Same mark as the Trusted Web Activity launch URL in AndroidManifest.xml.
+        private const val START_URL = ORIGIN + "?shell=android"
         private val BRIDGE_JS = """
             (function () {
               if (window.DrishtiPlay && window.DrishtiPlay.__native) return;

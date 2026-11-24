@@ -493,13 +493,19 @@ def api_match(m: MatchReq):
 
 # ------------------------------------------------------------- status -----
 @app.get("/api/status")
-def status():
+def status(request: Request = None):
     c = llm.config()
-    return {"app": APP_NAME, "ai_configured": llm.configured(), "model": c["model"] if llm.configured() else None,
-            "referral_bonus": 0, "astrologer_connect": connect_api.store_ready(),
-            "stripe_publishable_key": connect_api.publishable_key(),
-            **connect_api.public_plans(),
-            **connect_storekit.apple_status()} | billing_public()
+    # ASTROLOGER_CONNECT_PLATFORMS limits live astrologers to the apps that send
+    # X-Drishti-Shell. Unset, every client sees it, which is how drishti-ios runs today.
+    connect_on = connect_api.enabled_for(request)
+    out = {"app": APP_NAME, "ai_configured": llm.configured(), "model": c["model"] if llm.configured() else None,
+           "referral_bonus": 0, "astrologer_connect": connect_on,
+           "stripe_publishable_key": connect_api.publishable_key() if connect_on else "",
+           **(connect_api.public_plans() if connect_on else {}),
+           **connect_storekit.apple_status()} | billing_public()
+    if connect_on and connect_api.app_shell(request) == "android":
+        out["stripe_google_pay"] = connect_api.google_pay_enabled(request)
+    return out
 
 
 @app.get("/api/apple/diagnostics")
