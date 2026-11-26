@@ -72,7 +72,12 @@ def test_homepage_inlines_the_verse_list(client):
     assert '"ref":"2.47"' in html
     assert "window.__GITA_INJECTED__" not in html
     assert "Date.UTC(2020, 0, 1)" in html
-    assert "sessionStorage" not in html
+    # Every full load shows the splash: the splash script never remembers a dismissal.
+    splash_js = html.split("window.GITA_VERSES =", 1)[1].split("</script>", 1)[0]
+    assert "sessionStorage" not in splash_js
+    # The only per-tab value on the page is the Android app mark.
+    import re
+    assert set(re.findall(r"sessionStorage\.\w+\('([^']+)'", html)) == {"dr-shell"}
     assert "dr-gita-splash" not in html
     assert "dr-gita-day" not in html
     assert "openGitaSplash(window.gitaVerseForToday(), true)" in html

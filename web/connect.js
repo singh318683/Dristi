@@ -18,6 +18,8 @@
   let generation = 0;
   let greetingCtx = null;
   const seenIncoming = {};
+  let wakeLock = null;
+  let wakeWanted = false;
 
   function on() {
     return !!(typeof S !== 'undefined' && S.status && S.status.astrologer_connect);
@@ -43,7 +45,8 @@
   function api(path, body, auth) {
     const headers = {'Content-Type': 'application/json'};
     if (auth) headers.Authorization = 'Bearer ' + auth;
-    if (nativeShell()) headers['X-Drishti-Shell'] = 'ios';
+    const shell = appShellName();
+    if (shell) headers['X-Drishti-Shell'] = shell;
     return fetch((window.API || '') + path, {
       method: body ? 'POST' : 'GET',
       cache: 'no-store',
@@ -70,6 +73,7 @@
     clock = 0;
     generation += 1;
     if (live && live.room && live.room.disconnect) live.room.disconnect();
+    releaseScreen();
     if (!keepCallMusic) {
       const audio = document.getElementById('connectRemoteAudio');
       if (audio) audio.remove();
@@ -174,7 +178,7 @@
     sheet(`<div class="sheet connect" role="dialog" aria-modal="true" aria-labelledby="demoCodeTitle">
       <button type="button" class="sheet-handle" aria-label="${tr('Drag down to close', 'बंद करने के लिए नीचे खींचें')}"><i></i></button>
       <h3 id="demoCodeTitle">${tr('App Review code', 'ऐप समीक्षा कोड')}</h3>
-      <p class="sub">${tr('Enter the code from App Store Connect. This shows the demo astrologer on this phone only.', 'ऐप स्टोर कनेक्ट का कोड डालें। इससे डेमो ज्योतिषी केवल इस फ़ोन पर दिखते हैं।')}</p>
+      <p class="sub">${androidShell() ? tr('Enter the review code from the App access notes in Play Console. This shows the demo astrologer on this phone only.', 'Play Console के ऐप एक्सेस नोट्स का समीक्षा कोड डालें। इससे डेमो ज्योतिषी केवल इस फ़ोन पर दिखेगा।') : tr('Enter the code from App Store Connect. This shows the demo astrologer on this phone only.', 'ऐप स्टोर कनेक्ट का कोड डालें। इससे डेमो ज्योतिषी केवल इस फ़ोन पर दिखते हैं।')}</p>
       <input class="input" id="demoCodeWord" autocomplete="off" aria-label="${tr('App Review code', 'ऐप समीक्षा कोड')}">
       <button type="button" class="btn block" id="demoCodeGo">${tr('Continue', 'जारी रखें')}</button>
     </div>`);
@@ -243,6 +247,7 @@
       <p>${esc(q.rate_label)} · ${tr('the same rate for chat and call', 'चैट और कॉल दोनों का एक ही शुल्क')}</p>
       <p>${tr('A 5-minute hold', '5 मिनट की होल्ड')} · ${esc(q.hold_label)}. ${tr('Wallet balance', 'वॉलेट')} ${esc(q.balance_label)}.</p>
       <p class="sub">${tr('Your question and birth chart are shared with the astrologer. Billed per minute. End anytime. Unused hold returns to your wallet.', 'आपका प्रश्न और जन्म कुंडली ज्योतिषी के साथ साझा होती है। शुल्क प्रति मिनट। कभी भी समाप्त करें। बची होल्ड वॉलेट में लौटती है।')}</p>
+      ${walletScopeNote()}
       <p class="sub">${tr('Guidance for reflection, not medical, legal or financial advice.', 'यह चिंतन हेतु मार्गदर्शन है, चिकित्सा, कानूनी या वित्तीय सलाह नहीं।')}</p>
       ${q.demo ? `<p class="sub">${tr('This is the App Review demo. Review credit is used. No card is charged.', 'यह ऐप समीक्षा डेमो है। समीक्षा क्रेडिट लगता है। कार्ड नहीं कटता।')}</p>` : ''}
       ${short && q.demo ? `<p class="sub" id="needMore">${tr('Add review credit to start. No card is needed.', 'शुरू करने के लिए समीक्षा क्रेडिट जोड़ें। कार्ड की ज़रूरत नहीं।')}</p>` : ''}
@@ -354,7 +359,10 @@
       box.id = 'stripePay';
       const host = document.querySelector('#sheet .sheet');
       host.appendChild(box);
-      elements.create('payment', {wallets: {applePay: 'never', googlePay: 'never'}}).mount('#stripePay');
+      const wallets = {applePay: 'never', googlePay: 'never'};
+      // Google Pay only in the Android app, and only when the server flag is on.
+      if (androidShell() && !!(S.status && S.status.stripe_google_pay)) wallets.googlePay = 'auto';
+      elements.create('payment', {wallets: wallets}).mount('#stripePay');
       const pay = document.createElement('button');
       pay.type = 'button';
       pay.id = 'stripePayBtn';
@@ -950,6 +958,7 @@
     watchPlayback(room, mod);
     if (room.state !== 'connected') await room.connect(info.url, info.token);
     if (live) live.room = room;
+    holdScreenOn();
     if (live && live.session && live.session.demo) {
       try { await startDemoVoice(live.session); }
       catch (err) { setVoiceNote(tr('The demo greeting could not start.', 'डेमो अभिवादन शुरू नहीं हो सका।')); }
@@ -1022,6 +1031,7 @@
         <b>${esc(session.astrologer_name)}</b>
         <span class="connect-meter"><span id="connectClock">00:00</span> · <span id="connectCost">${esc(session.cost_label)}</span></span>
         <p class="sub" id="connectVoice">${tr('Waiting for the call to start.', 'कॉल शुरू होने की प्रतीक्षा।')}</p>
+        ${keepOpenNote()}
         <div class="call-controls">
           <button type="button" class="btn quiet" id="connectMute" aria-pressed="false">${tr('Mute', 'म्यूट')}</button>
           <button type="button" class="btn quiet" id="connectSpeaker" aria-pressed="false">${tr('Speaker', 'स्पीकर')}</button>
@@ -1100,9 +1110,48 @@
     if (back) back.onclick = () => { if (location.hash) location.hash = ''; };
     return $('#portalBody');
   }
+  // Inside the iOS or the Android app: sign-in only for astrologers, and no listing plan.
   function nativeShell() {
-    try { return typeof inIosApp === 'function' && inIosApp(); } catch (e) { return false; }
+    return appShellName() !== '';
   }
+  function appShellName() {
+    try { if (typeof inIosApp === 'function' && inIosApp()) return 'ios'; } catch (e) { /* not iOS */ }
+    try { if (typeof inAndroidApp === 'function' && inAndroidApp()) return 'android'; } catch (e) { /* not Android */ }
+    return '';
+  }
+  function androidShell() {
+    return appShellName() === 'android';
+  }
+  // Google Play: the wallet is US dollars for live sessions only. Acharya stays on Play billing.
+  function walletScopeNote() {
+    if (!androidShell()) return '';
+    return `<p class="sub" id="walletScope">${tr('Your wallet is in US dollars and pays only for live chat or voice sessions with an astrologer. Acharya questions are paid separately through Google Play.', 'आपका वॉलेट US डॉलर में है और केवल ज्योतिषी के साथ लाइव चैट या वॉइस सत्र के लिए है। आचार्य प्रश्न का भुगतान अलग से Google Play से होता है।')}</p>`;
+  }
+  function keepOpenNote() {
+    if (!androidShell()) return '';
+    return `<p class="sub" id="keepOpen">${tr('Keep Drishti open and the screen on during the call. Android may pause the microphone if you switch apps or lock the phone.', 'कॉल के दौरान दृष्टि खुला और स्क्रीन चालू रखें। ऐप बदलने या फ़ोन लॉक करने पर Android माइक्रोफ़ोन रोक सकता है।')}</p>`;
+  }
+  // Screen Wake Lock during a voice call in the Android app, so the screen does not
+  // turn off and Chrome does not mute the microphone.
+  async function holdScreenOn() {
+    if (!androidShell()) return;
+    wakeWanted = true;
+    try {
+      if (!wakeLock && navigator.wakeLock && navigator.wakeLock.request && document.visibilityState === 'visible') {
+        wakeLock = await navigator.wakeLock.request('screen');
+        wakeLock.addEventListener('release', () => { wakeLock = null; });
+      }
+    } catch (e) { wakeLock = null; }
+  }
+  function releaseScreen() {
+    wakeWanted = false;
+    const held = wakeLock;
+    wakeLock = null;
+    if (held && held.release) { try { held.release(); } catch (e) { /* already released */ } }
+  }
+  document.addEventListener('visibilitychange', () => {
+    if (wakeWanted && document.visibilityState === 'visible') holdScreenOn();
+  });
   function listingInactive(money) {
     const status = String((money && money.plan_status) || 'none');
     return status === 'none' || status === 'canceled' || status === '';
@@ -1273,7 +1322,7 @@
       </div>
       <p>${esc(asked)}</p>
       ${born ? `<p class="sub">${esc(born)}</p>` : ''}
-      ${call ? `<p class="sub" id="connectVoice"></p><div class="call-controls"><button type="button" class="btn quiet" id="connectMute" aria-pressed="false">${tr('Mute', 'म्यूट')}</button><button type="button" class="btn" id="connectEnd">${tr('End session', 'सत्र समाप्त')}</button></div>` : `<button type="button" class="btn" id="connectEnd">${tr('End session', 'सत्र समाप्त')}</button>`}
+      ${call ? `<p class="sub" id="connectVoice"></p>${keepOpenNote()}<div class="call-controls"><button type="button" class="btn quiet" id="connectMute" aria-pressed="false">${tr('Mute', 'म्यूट')}</button><button type="button" class="btn" id="connectEnd">${tr('End session', 'सत्र समाप्त')}</button></div>` : `<button type="button" class="btn" id="connectEnd">${tr('End session', 'सत्र समाप्त')}</button>`}
       <div class="connect-log" id="connectLog"></div>
       <form id="connectForm" class="ask-bar"><textarea id="connectInput" rows="1" maxlength="2000" aria-label="${tr('Message', 'संदेश')}"></textarea><button type="submit" class="btn" id="connectSend">${tr('Send', 'भेजें')}</button></form>
       <button type="button" class="btn quiet" id="connectReport">${tr('Report', 'रिपोर्ट')}</button>
@@ -1929,6 +1978,7 @@
       <button type="button" class="sheet-handle" aria-label="${tr('Drag down to close', 'बंद करने के लिए नीचे खींचें')}"><i></i></button>
       <h3 id="walletTitle">${tr('Add money', 'पैसे जोड़ें')}</h3>
       <p class="sub">${tr('Choose an amount. It is added to your wallet.', 'राशि चुनें। यह आपके वॉलेट में जुड़ जाएगी।')}</p>
+      ${walletScopeNote()}
       <div class="connect-packs"><button type="button" class="btn pack" data-pack="wallet_5">$5</button><button type="button" class="btn pack" data-pack="wallet_10">$10</button><button type="button" class="btn pack" data-pack="wallet_20">$20</button></div>
       <p class="legal">${tr('By continuing you agree to the', 'जारी रखकर आप मानते हैं')} <a href="terms.html">${tr('Terms of Service', 'सेवा की शर्तें')}</a> ${tr('and', 'और')} <a href="privacy.html">${tr('Privacy Policy', 'गोपनीयता नीति')}</a>.</p>
     </div>`);

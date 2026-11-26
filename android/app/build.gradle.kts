@@ -14,8 +14,17 @@ android {
         minSdk = 24
         // Google Play requires new apps to target Android 16 (API 36) from 31 August 2026.
         targetSdk = 36
-        versionCode = 3
-        versionName = "1.0.2"
+        versionCode = 5
+        versionName = "1.1.0"
+
+        // The site this app opens. Release builds use the production site.
+        // For a staging test build, add `drishtiHost=drishti-android-staging.vercel.app`
+        // to android/gradle.properties on your machine (do not commit it), or pass
+        // -PdrishtiHost=... to Gradle. That host must serve its own assetlinks.json.
+        val siteHost = (project.findProperty("drishtiHost") as String?)?.trim().takeUnless { it.isNullOrEmpty() }
+            ?: "dristi-six.vercel.app"
+        manifestPlaceholders["siteHost"] = siteHost
+        buildConfigField("String", "SITE_ORIGIN", "\"https://$siteHost/\"")
     }
 
     buildTypes {
@@ -32,6 +41,7 @@ android {
 
     buildFeatures {
         viewBinding = true
+        buildConfig = true
     }
 
     compileOptions {

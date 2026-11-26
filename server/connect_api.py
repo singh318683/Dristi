@@ -6,7 +6,7 @@ import os
 import secrets
 from typing import Literal
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
 
 import connect_livekit
@@ -15,7 +15,14 @@ import connect_store as store
 import connect_stripe
 import db
 
-router = APIRouter()
+APP_SHELLS = ("ios", "android")
+# Server-to-server and admin calls carry no app shell header. They are never
+# limited by ASTROLOGER_CONNECT_PLATFORMS.
+_PLATFORM_EXEMPT = (
+    "/api/connect/stripe/webhook",
+    "/api/connect/livekit/webhook",
+    "/api/connect/admin/",
+)
 
 
 def _flag(name: str) -> bool:
@@ -24,6 +31,66 @@ def _flag(name: str) -> bool:
 
 def feature_on() -> bool:
     return _flag("ASTROLOGER_CONNECT_ENABLED")
+
+
+def app_shell(request: Request | None) -> str:
+    """'ios' or 'android' when the request comes from one of the apps, else ''.
+
+    The iOS app and the Android app send X-Drishti-Shell. A plain browser does not.
+    """
+    if request is None:
+        return ""
+    raw = (request.headers.get("x-drishti-shell") or "").strip().lower()
+    return raw if raw in APP_SHELLS else ""
+
+
+def allowed_platforms() -> tuple[str, ...] | None:
+    """ASTROLOGER_CONNECT_PLATFORMS, e.g. "ios,android". None when unset: every client.
+
+    "web" may be listed to keep the feature on in a plain browser as well.
+    """
+    raw = (os.environ.get("ASTROLOGER_CONNECT_PLATFORMS") or "").strip().lower()
+    if not raw:
+        return None
+    return tuple(part.strip() for part in raw.split(",") if part.strip())
+
+
+def platform_allowed(request: Request | None) -> bool:
+    allowed = allowed_platforms()
+    if allowed is None:
+        return True
+    return (app_shell(request) or "web") in allowed
+
+
+def enabled_for(request: Request | None) -> bool:
+    """The feature is on, the store is ready, and this client may see it."""
+    return store_ready() and platform_allowed(request)
+
+
+def google_pay_enabled(request: Request | None) -> bool:
+    """Google Pay in the Stripe wallet sheet. Android app only, and only when the flag is on."""
+    return enabled_for(request) and app_shell(request) == "android" and _flag("ANDROID_GOOGLE_PAY_ENABLED")
+
+
+def chat_locked_after_end(request: Request | None) -> bool:
+    """Google Play's 1:1 service exception needs the session not to be available afterwards.
+
+    On by default for the Android app. CONNECT_LOCK_ENDED_CHATS=1 locks every client.
+    """
+    return app_shell(request) == "android" or _flag("CONNECT_LOCK_ENDED_CHATS")
+
+
+def _platform_gate(request: Request) -> None:
+    path = request.url.path
+    if not path.startswith("/api/connect/"):
+        return
+    if any(path.startswith(prefix) for prefix in _PLATFORM_EXEMPT):
+        return
+    if feature_on() and not platform_allowed(request):
+        raise HTTPException(404, "connect_disabled")
+
+
+router = APIRouter(dependencies=[Depends(_platform_gate)])
 
 
 def public_plans() -> dict:
@@ -93,12 +160,19 @@ def _astro_id(request: Request, *, allow_password_change: bool = False) -> str:
 
 def _ios_shell(request: Request) -> bool:
     """True when the iOS app marks the request. Safari does not send this."""
-    return (request.headers.get("x-drishti-shell") or "").strip().lower() == "ios"
+    return app_shell(request) == "ios"
 
 
 def _refuse_native_plan(request: Request) -> None:
-    if _ios_shell(request):
+    """The listing plan is sold on the website only, never inside the iOS or Android app."""
+    if app_shell(request):
         raise HTTPException(403, "plan_not_in_app")
+
+
+def _refuse_android_signup(request: Request) -> None:
+    """Astrologers register on the website. The Android app offers sign-in only."""
+    if app_shell(request) == "android":
+        raise HTTPException(403, "signup_not_in_app")
 
 
 def _run(fn):
@@ -250,8 +324,9 @@ def api_demo_credit(body: DeviceIn):
 
 
 @router.post("/api/connect/apply")
-def api_apply(body: ApplyIn):
+def api_apply(body: ApplyIn, request: Request):
     _gate()
+    _refuse_android_signup(request)
     return _run(lambda: store.apply_astrologer(body.email, body.password, body.name, body.specialties, body.languages, body.years, body.bio, body.rate_cents, body.photo))
 
 
@@ -588,7 +663,8 @@ def api_messages(session_id: str, request: Request, device: str = "", after: int
     astro_id = None
     if request and request.headers.get("authorization"):
         astro_id = _astro_id(request)
-    return {"messages": _run(lambda: store.list_messages(session_id, after, device, astro_id))}
+    locked = chat_locked_after_end(request)
+    return {"messages": _run(lambda: store.list_messages(session_id, after, device, astro_id, lock_after_end=locked))}
 
 
 @router.post("/api/connect/sessions/{session_id}/call-token")

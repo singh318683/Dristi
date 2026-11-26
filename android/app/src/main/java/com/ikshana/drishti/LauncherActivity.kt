@@ -7,7 +7,7 @@ import android.util.Log
 import com.google.androidbrowserhelper.trusted.TwaLauncher
 
 /**
- * Opens https://dristi-six.vercel.app as a Trusted Web Activity.
+ * Opens https://dristi-six.vercel.app/?shell=android as a Trusted Web Activity.
  * Play Billing is the Digital Goods API inside that activity. This class does not
  * acknowledge or consume a purchase; the server does that after an answer starts.
  */

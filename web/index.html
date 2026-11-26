@@ -844,7 +844,7 @@ window.GITA_VERSES = window.__GITA_INJECTED__ || null;
 <div id="root"></div>
 <div id="sheet" class="sheet-bg" hidden></div>
 <div id="toast" class="toast" role="status" hidden></div>
-<script src="birthpicker.js?v=drishti-v56"></script>
+<script src="birthpicker.js?v=drishti-v57"></script>
 <script>
 'use strict';
 // ------------------------------------------------------------------ config
@@ -907,7 +907,10 @@ const ord = n => hi() ? 'वें' : ((n % 100 >= 11 && n % 100 <= 13) ? 'th' :
 const fmtTime = t => { if (!t) return tr('time unknown', 'समय अज्ञात'); const [h, m] = t.split(':').map(Number); return new Date(2000, 0, 1, h, m).toLocaleTimeString(loc(), {hour: 'numeric', minute: '2-digit'}); };
 function toast(m) { const e = $('#toast'); e.textContent = m; e.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => e.hidden = true, 2600); }
 async function api(path, body) {
-  const r = await fetch(API + path, body ? {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)} : {});
+  const headers = body ? {'Content-Type': 'application/json'} : {};
+  const shell = appShell();
+  if (shell) headers['X-Drishti-Shell'] = shell;
+  const r = await fetch(API + path, body ? {method: 'POST', headers: headers, body: JSON.stringify(body)} : {headers: headers});
   if (!r.ok) throw new Error((await r.text()).slice(0, 200) || ('HTTP ' + r.status));
   return r.json();
 }
@@ -1199,6 +1202,26 @@ function inIosApp() {
 }
 function storeLine(playEn, playHi, iosEn, iosHi) {
   return inIosApp() ? tr(iosEn, iosHi) : tr(playEn, playHi);
+}
+// The Android app opens https://dristi-six.vercel.app/?shell=android. The mark is kept
+// for this tab only, so the same site opened later in Chrome stays the plain website.
+function inAndroidApp() {
+  try {
+    if (inIosApp()) return false;
+    let mark = '';
+    try { mark = new URLSearchParams(location.search || '').get('shell') || ''; } catch (e) { mark = ''; }
+    if (mark === 'android') { try { sessionStorage.setItem('dr-shell', 'android'); } catch (e) { /* private mode */ } return true; }
+    if (sessionStorage.getItem('dr-shell') === 'android') return true;
+    if (String(document.referrer || '').indexOf('android-app://com.ikshana.drishti') === 0) {
+      sessionStorage.setItem('dr-shell', 'android');
+      return true;
+    }
+  } catch (e) { /* no storage */ }
+  return false;
+}
+function appShell() {
+  if (inIosApp()) return 'ios';
+  return inAndroidApp() ? 'android' : '';
 }
 function onboarding() {
   const o = S.onb || (S.onb = {step: 0, relation: 'Self', unknown: false});
@@ -3048,7 +3071,7 @@ function pageMe() {
     ${(S.status && S.status.astrologer_connect) ? '<section class="card wallet-card" id="walletCard" aria-live="polite"></section>' : ''}
     <section class="card"><div class="spread"><div><b id="credN">${esc(price)}</b> <span class="muted">${tr('per Acharya question', 'प्रति आचार्य प्रश्न')}</span></div></div>
       <p class="small muted">${storeLine('Paid on Google Play, one question at a time. There is no free question and no credit pack. The chart, periods, dosha, panchang, matching, horoscope and kundli PDF stay free.', 'Google Play पर भुगतान, एक बार में एक प्रश्न। कोई मुफ़्त प्रश्न नहीं और कोई क्रेडिट पैक नहीं। कुंडली, दशा, दोष, पंचांग, मिलान, राशिफल और कुंडली PDF मुफ़्त हैं।', 'Paid on the App Store, one question at a time. There is no free question and no credit pack. The chart, periods, dosha, panchang, matching, horoscope and kundli PDF stay free.', 'App Store पर भुगतान, एक बार में एक प्रश्न। कोई मुफ़्त प्रश्न नहीं और कोई क्रेडिट पैक नहीं। कुंडली, दशा, दोष, पंचांग, मिलान, राशिफल और कुंडली PDF मुफ़्त हैं।')}</p></section>
-    ${(S.status && S.status.astrologer_connect) ? `<button type="button" class="card link" id="astroJoin"><div class="minirow"><span class="grow"><b>${tr('Are you an astrologer?', 'क्या आप ज्योतिषी हैं?')}</b><span class="small muted" style="display:block">${inIosApp() ? tr('Sign in', 'साइन इन') : tr('Register as a live astrologer', 'लाइव ज्योतिषी बनें')}</span></span>${I.chev()}</div></button>` : ''}
+    ${(S.status && S.status.astrologer_connect) ? `<button type="button" class="card link" id="astroJoin"><div class="minirow"><span class="grow"><b>${tr('Are you an astrologer?', 'क्या आप ज्योतिषी हैं?')}</b><span class="small muted" style="display:block">${(inIosApp() || inAndroidApp()) ? tr('Sign in', 'साइन इन') : tr('Register as a live astrologer', 'लाइव ज्योतिषी बनें')}</span></span>${I.chev()}</div></button>` : ''}
     <section class="card" id="prefs"><div class="setrow"><span>${tr('Language', 'भाषा')}</span><div class="seg" id="setLang"><button data-v="en" aria-pressed="${!hi()}">EN</button><button data-v="hi" aria-pressed="${hi()}">हि</button></div></div>
       <div class="setrow"><span>${tr('Chart', 'कुंडली')}</span><div class="seg" id="setSty"><button data-v="north" aria-pressed="${S.style === 'north'}">${tr('North', 'उत्तर')}</button><button data-v="south" aria-pressed="${S.style === 'south'}">${tr('South', 'दक्षिण')}</button></div></div></section>
     <div class="chips wrap"><button class="chip" id="aboutBtn">${tr('About', 'जानकारी')}</button><button class="chip" id="clr">${tr('Clear chat', 'चैट मिटाएँ')}</button></div>
@@ -3065,7 +3088,7 @@ function pageMe() {
   if (window.DrishtiConnect && DrishtiConnect.paintWallet) DrishtiConnect.paintWallet();
   const del = $('#deleteAccount');
   if (del && window.DrishtiConnect && DrishtiConnect.openDelete) del.onclick = () => DrishtiConnect.openDelete();
-  $('#aboutBtn').onclick = () => openDetail(tr('About', 'जानकारी'), `<p class="small">${tr('Charts use the Swiss Ephemeris, Lahiri ayanamsa, whole-sign houses and Vimshottari dasha. Acharya is an AI astrologer, not a person.', 'कुंडली स्विस एफेमेरिस, लाहिरी, पूर्ण राशि भाव और विंशोत्तरी दशा से बनती है। आचार्य AI ज्योतिषी हैं, व्यक्ति नहीं।')}</p><p class="small muted">${tr('Guidance for reflection, not medical, legal or financial advice. Remedies are optional and free.', 'यह चिंतन हेतु मार्गदर्शन है, चिकित्सा, कानूनी या वित्तीय सलाह नहीं। उपाय वैकल्पिक और मुफ़्त हैं।')}</p>${(S.status && S.status.astrologer_connect) ? `<p><a href="#astro">${inIosApp() ? tr('Sign in', 'साइन इन') : tr('Register as a live astrologer', 'लाइव ज्योतिषी बनें')}</a></p>` : ''}<p class="small muted">${tr('Device ID', 'डिवाइस आईडी')}: <code style="font-size:11px;word-break:break-all">${esc(DEVICE)}</code></p><p class="legal"><a href="terms.html">${tr('Terms of Service', 'सेवा की शर्तें')}</a> · <a href="privacy.html">${tr('Privacy Policy', 'गोपनीयता नीति')}</a></p>`);
+  $('#aboutBtn').onclick = () => openDetail(tr('About', 'जानकारी'), `<p class="small">${tr('Charts use the Swiss Ephemeris, Lahiri ayanamsa, whole-sign houses and Vimshottari dasha. Acharya is an AI astrologer, not a person.', 'कुंडली स्विस एफेमेरिस, लाहिरी, पूर्ण राशि भाव और विंशोत्तरी दशा से बनती है। आचार्य AI ज्योतिषी हैं, व्यक्ति नहीं।')}</p><p class="small muted">${tr('Guidance for reflection, not medical, legal or financial advice. Remedies are optional and free.', 'यह चिंतन हेतु मार्गदर्शन है, चिकित्सा, कानूनी या वित्तीय सलाह नहीं। उपाय वैकल्पिक और मुफ़्त हैं।')}</p>${(S.status && S.status.astrologer_connect) ? `<p><a href="#astro">${(inIosApp() || inAndroidApp()) ? tr('Sign in', 'साइन इन') : tr('Register as a live astrologer', 'लाइव ज्योतिषी बनें')}</a></p>` : ''}<p class="small muted">${tr('Device ID', 'डिवाइस आईडी')}: <code style="font-size:11px;word-break:break-all">${esc(DEVICE)}</code></p><p class="legal"><a href="terms.html">${tr('Terms of Service', 'सेवा की शर्तें')}</a> · <a href="privacy.html">${tr('Privacy Policy', 'गोपनीयता नीति')}</a></p>`);
   if (S.pendingSheet === 'people') { S.pendingSheet = null; openPeople(); }
 }
 // ------------------------------------------------------------------ rate
@@ -3197,6 +3220,6 @@ window.shareGitaCard = () => shareCard('gita');
   maybeShowRate();
 })();
 </script>
-<script src="connect.js?v=drishti-v56"></script>
+<script src="connect.js?v=drishti-v57"></script>
 </body>
 </html>

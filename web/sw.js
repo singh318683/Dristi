@@ -1,4 +1,4 @@
-const CACHE = 'drishti-v56';
+const CACHE = 'drishti-v57';
 const FRESH = ['/', '/index.html', '/connect.js', '/birthpicker.js', '/sw.js', '/privacy.html', '/terms.html', '/support.html'];
 const FILES = ['/', '/index.html', '/birthpicker.js', '/connect.js', '/manifest.json', '/icon-192.png', '/icon-512.png', '/privacy.html', '/terms.html', '/support.html', '/demo-greeting.wav'];
 function freshRequest(url) {

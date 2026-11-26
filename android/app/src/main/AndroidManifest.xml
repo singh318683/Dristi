@@ -5,6 +5,10 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="com.android.vending.BILLING" />
+    <!-- Live voice consultations (LiveKit, WebRTC). Chrome asks for the microphone in the
+         Trusted Web Activity; the WebView fallback (SiteActivity) asks for it at runtime. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
 
     <queries>
         <intent>
@@ -32,9 +36,11 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
+            <!-- ?shell=android tells the site it is inside the Play app: live astrologers,
+                 sign-in only for astrologers, and Google Play wording. -->
             <meta-data
                 android:name="android.support.customtabs.trusted.DEFAULT_URL"
-                android:value="https://dristi-six.vercel.app/" />
+                android:value="https://${siteHost}/?shell=android" />
             <meta-data
                 android:name="android.support.customtabs.trusted.DISPLAY_MODE"
                 android:value="immersive" />
@@ -94,7 +100,7 @@
             </intent-filter>
             <meta-data
                 android:name="android.support.customtabs.trusted.MANAGE_SPACE_URL"
-                android:value="https://dristi-six.vercel.app/" />
+                android:value="https://${siteHost}/" />
         </activity>
 
         <!-- Digital Goods / Payment Request. Chrome calls these; the purchase token

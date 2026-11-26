@@ -20,6 +20,11 @@ function inIosApp() {
 function androidApp() {
   try {
     if (window.DrishtiPlay) return true;
+    try {
+      if (/(?:\?|&)shell=android(?:&|$)/.test(location.search || '')) return true;
+      if (window.sessionStorage && sessionStorage.getItem('dr-shell') === 'android') return true;
+      if (String(document.referrer || '').indexOf('android-app://com.ikshana.drishti') === 0) return true;
+    } catch (e) {}
     var cap = window.Capacitor;
     if (!cap) return false;
     var native = typeof cap.isNativePlatform !== 'function' || cap.isNativePlatform();
@@ -31,6 +36,8 @@ function useIosCopy() {
   try {
     var host = (location.hostname || '').toLowerCase();
     if (host.indexOf('drishti-ios') !== -1) return true;
+    // The Android app's own sites show the Google Play wording.
+    if (host.indexOf('dristi-six') !== -1 || host.indexOf('drishti-android') !== -1) return false;
   } catch (e) {}
   return !androidApp();
 }
@@ -44,7 +51,7 @@ document.documentElement.setAttribute('data-client', useIosCopy() ? 'ios' : 'pla
 <p>This policy describes the Drishti app and website operated by Ikshana Solutions LLC. We collect as little as we can, we do not sell personal information, and we do not use it for advertising. See also the <a href="terms.html">Terms of Service</a> and <a href="support.html">Support</a>.</p>
 
 <h2>Who this covers</h2>
-<p>People who use the chart, matching, horoscope, and Acharya question features, and astrologers who sign in to offer live chat or voice. On this iOS site, Acharya questions are Apple In-App Purchases. Live-session wallet top-ups are Stripe. Astrologer payouts are PayPal or Stripe. The Android app uses Google Play for Acharya questions; that wording is shown only inside the Android app.</p>
+<p>People who use the chart, matching, horoscope, and Acharya question features, and astrologers who sign in to offer live chat or voice.<span data-store="ios"> On this iOS site, Acharya questions are Apple In-App Purchases. Live-session wallet top-ups are Stripe. Astrologer payouts are PayPal or Stripe. The Android app uses Google Play for Acharya questions; that wording is shown only inside the Android app.</span><span data-store="play" hidden> In the Android app, Acharya questions are Google Play purchases. Live-session wallet top-ups are Stripe card payments in US dollars, and the wallet pays only for live sessions. Astrologer payouts are PayPal or Stripe. Astrologers sign in inside the app; registration and the listing plan are on the website.</span></p>
 
 <h2>Information we collect</h2>
 <ul>
@@ -95,6 +102,7 @@ document.documentElement.setAttribute('data-client', useIosCopy() ? 'ios' : 'pla
 
 <h2>AI answers</h2>
 <p>Acharya questions and answers are not stored on our server after the reply is sent. Live-session messages are stored, because both people need the thread.</p>
+<p data-store="play" hidden>In the Android app, a live chat cannot be opened again after the session ends, and calls are never recorded. The messages stay on our server only for reports, disputes, and account deletion.</p>
 <p class="note">AI answers and live sessions are astrological guidance for reflection and entertainment. They are not medical, legal, financial or psychological advice.</p>
 
 <h2>How long we keep it</h2>
